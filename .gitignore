@@ -1,0 +1,10 @@
+node_modules/
+.local/
+out/
+test-results/
+playwright-report/
+*.log
+finSeed.pod/res/web/seed/assets/
+finSeed.pod/res/web/seed/index.html
+finSeed.pod/res/web/seed/modules/
+finSeed.pod/ts/validation-logs/

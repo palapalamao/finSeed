@@ -1,0 +1,30 @@
+#! /usr/bin/env fan
+using finBuild
+
+class Args : BuildFinArgs
+{
+  new make() : super(Build#make) {}
+}
+
+class Build : BuildFinPod
+{
+  new make(Args args) : super(args)
+  {
+    podName = "finSeed"
+    summary = "FIN Seed - authenticated energy configuration and analysis"
+    version = Version("0.2.6")
+    meta = ["proj.name":podName, "org.name":"FIN Seed", "license.name":"Commercial"]
+    depends = [
+      "sys 1.0+", "concurrent 1.0+", "web 1.0+", "util 1.0+",
+      "haystack 3.1.5.1+", "axon 3.1.5+", "folio 3.1.5+",
+      "hx 3.1.5+", "skyarc 3.1.5+", "skyarcd 3.1.5+", "legacy 3.1.5+",
+      "hisExt 3.1.5+", "finStackCoreExt 5.3.0.2761+",
+    ]
+    // BuildFinPod has no testDirs. Source and resource directories are not recursive.
+    srcDirs = [`fan/`, `fan/engine/`, `test/`]
+    resDirs = [`lib/`, `locale/`, `res/`, `res/web/`, `res/web/seed/`,
+               `res/web/seed/modules/`]
+    nodeDirs = Env.cur.vars["FINSEED_UI_BUILT"] == "true" ? Uri[,] : [`ts/`]
+    index = ["skyarc.ext":"finSeed::SeedExt", "skyarc.lib":"finSeed::SeedLib", "fin.lang":"finSeed"]
+  }
+}

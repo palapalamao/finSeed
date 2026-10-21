@@ -1,0 +1,12 @@
+import {describe,it,expect} from 'vitest';
+import {inferPointCategory,newMeterDefaults,suggestPointName} from './pointSuggestions';
+import type {FinPoint,SeedRecord} from './types';
+const categories:SeedRecord[]=[{id:'water',kind:'category',name:'水',unit:'m³'},{id:'electric',kind:'category',name:'电',unit:'kWh'}];
+const point=(fields:Partial<FinPoint>={}):FinPoint=>({id:'p',name:'3F右边水表',unit:'m³',his:true,...fields});
+describe('conservative point suggestions',()=>{
+ it('uses a unique normalized unit match for real water readings',()=>{expect(inferPointCategory(categories,[point()])).toBe('water');expect(inferPointCategory(categories,[point({unit:'m3'})])).toBe('water');});
+ it('leaves ambiguous or conflicting evidence blank',()=>{const ambiguous=[...categories,{id:'gas',kind:'category',name:'天然气',unit:'m³'}]as SeedRecord[];expect(inferPointCategory(ambiguous,[point()])).toBeUndefined();expect(inferPointCategory(categories,[point(),point({id:'electric-point',unit:'kWh'})])).toBeUndefined();expect(inferPointCategory(categories,[point({energyTags:['elec']})])).toBeUndefined();expect(inferPointCategory(ambiguous,[point({energyTags:['water']})])).toBe('water');});
+ it('suggests a physical short name only from explicit equipment and place metadata',()=>{expect(suggestPointName(point({name:'医院 一号楼 3F 右侧水表 累计量',siteName:'医院',floorName:'3F',equipName:'医院 3F 右侧水表'}))).toBe('右侧水表');expect(suggestPointName(point())).toBe('3F右边水表');expect(suggestPointName(point({name:'医院水表',siteName:'医院'}))).toBe('水表');});
+ it('retains explicit measurement names for sensors sharing one equipment',()=>{expect(suggestPointName(point({equipName:'总电表',navName:'电流',unit:'A'}),'sensor')).toBe('总电表 电流');expect(suggestPointName(point({equipName:'总电表',navName:'电压',unit:'V'}),'sensor')).toBe('总电表 电压');expect(suggestPointName(point({equipNavName:'右侧水表',navName:'累计用量',unit:'m³'}),'meter')).toBe('右侧水表');});
+ it('inherits category and upstream id when adding under an actual meter',()=>{const parent:SeedRecord={id:'master',kind:'totalMeter',name:'总水表',categoryId:'water',spaceId:'floor',organizationId:'dept'};expect(newMeterDefaults(parent,'metering','meter')).toMatchObject({meterParentId:'master',categoryId:'water',spaceId:'floor',organizationId:'dept'});expect(newMeterDefaults(parent,'metering','sensor')).not.toHaveProperty('categoryId');expect(newMeterDefaults({id:'space',kind:'space',name:'楼层'},'space','meter')).toEqual({spaceId:'space'});});
+});

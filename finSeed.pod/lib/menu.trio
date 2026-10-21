@@ -1,0 +1,24 @@
+// One entry in FIN's native application launcher. Authentication stays in FIN.
+---
+name: finSeedApp
+finStackMobileMenu
+func
+overridable
+doc: "FIN Seed energy workspace"
+src:
+  () => do
+    rootUri: seedAppUri()
+    [{
+      displayName: "FIN Seed",
+      appId: "finSeedApp",
+      link: "",
+      icon: "icon-leaf",
+      iconType: "class",
+      ui: "mobile",
+      minUiTarget: "phone",
+      order: -1,
+      action: "top.app.LoadApplication('" + rootUri + "', null, null, {app: '_finSeed'});top.app.ToggleCollapse(true);",
+      keepOpen: true
+    }].toGrid
+  end
+---

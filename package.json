@@ -1,0 +1,14 @@
+{
+  "name": "fin-seed",
+  "version": "0.2.6",
+  "private": true,
+  "description": "FIN Seed hybrid Pod",
+  "scripts": {
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "acceptance": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance.ps1",
+    "ui:dev": "npm --prefix finSeed.pod/ts run dev",
+    "ui:build": "npm --prefix finSeed.pod/ts run build",
+    "ui:test": "npm --prefix finSeed.pod/ts test"
+  }
+}
