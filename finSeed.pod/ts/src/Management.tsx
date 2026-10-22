@@ -12,7 +12,7 @@ import {names,nodeKinds,type Catalog,type FinPoint,type Kind,type SeedRecord} fr
 import {MeterManager} from './MeterManager';
 export type ManageView='tree'|'categories'|'tariffs'|'calendars'|'expressions'|'copConfig'|'templates'|'settings'|'bindings'|'tasks';
 export const manageKinds:Record<ManageView,Kind[]>={tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],bindings:['binding'],tasks:['job']};
-export const manageTitles:Record<ManageView,string>={tree:'计量对象管理',categories:'能源分类与用途',tariffs:'费率管理',calendars:'日历与时段',expressions:'计算公式',copConfig:'COP 配置',templates:'报表模板',settings:'概览设置',bindings:'参考点绑定',tasks:'计算与报警任务'};
+export const manageTitles:Record<ManageView,string>={tree:'计量对象管理',categories:'能源分类与分项',tariffs:'费率管理',calendars:'日历与时段',expressions:'计算公式',copConfig:'COP 配置',templates:'报表模板',settings:'概览设置',bindings:'参考点绑定',tasks:'计算与报警任务'};
 export function treeData(records:SeedRecord[],query=''):DataNode[]{
  const nodes=records.filter(record=>nodeKinds.includes(record.kind));
  const build=(parentId:string|undefined,path:Set<string>):DataNode[]=>nodes.filter(record=>(record.parentId||undefined)===parentId).filter(record=>!path.has(record.id!)).map(record=>{const children=build(record.id,new Set([...path,record.id!]));return {key:record.id!,title:<span><span>{record.name}</span><span className="tree-kind">{names[record.kind]}</span></span>,children,isLeaf:!children.length};});

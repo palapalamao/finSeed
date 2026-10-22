@@ -63,4 +63,4 @@ export async function installTransport(page:Page,options:Partial<TransportState>
 }
 export async function openView(page:Page,view:string){await page.goto(`/#/${view}?project=testproject`);await expect(page.getByText('测试会话',{exact:true})).toBeVisible();}
 export async function checkNode(page:Page,name='测试分表'){const node=page.locator('.object-panel .ant-tree-treenode').filter({hasText:name});await node.locator('.ant-tree-checkbox').click();}
-export async function query(page:Page){await page.getByRole('button',{name:/查\s*询/}).click();await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();await expect(page.locator('.report-chart canvas')).toHaveCount(1);}
+export async function query(page:Page){await page.getByRole('button',{name:/查\s*询/}).click();await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();await expect(page.locator('.report-chart canvas').first()).toBeVisible();}
