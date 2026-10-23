@@ -14,6 +14,7 @@ internal class SeedHistoryData
     mode = data["mode"]?.toStr ?: "sampled"
     quality = data["quality"]?.toStr ?: "ok"
     rawQuality = data["rawQuality"]?.toStr ?: quality
+    simulated = data["simulated"] == true
     samples = parse(data["samples"])
     rawSamples = data["rawSamples"] == null ? samples : parse(data["rawSamples"])
   }
@@ -22,6 +23,7 @@ internal class SeedHistoryData
   Str mode
   Str quality
   Str rawQuality
+  Bool simulated
   SeedSample[] samples
   SeedSample[] rawSamples
 

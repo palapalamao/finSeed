@@ -10,10 +10,10 @@ class Build : BuildFinPod
 {
   new make(Args args) : super(args)
   {
-    podName = "finSeed"
-    summary = "FIN Seed - authenticated energy configuration and analysis"
-    version = Version("0.2.6")
-    meta = ["proj.name":podName, "org.name":"FIN Seed", "license.name":"Commercial"]
+    podName = "enerCubix"
+    summary = "EnerCubix - multidimensional energy analytics"
+    version = Version("0.7.0")
+    meta = ["proj.name":podName, "org.name":"EnerCubix", "license.name":"Commercial"]
     depends = [
       "sys 1.0+", "concurrent 1.0+", "web 1.0+", "util 1.0+",
       "haystack 3.1.5.1+", "axon 3.1.5+", "folio 3.1.5+",
@@ -25,6 +25,6 @@ class Build : BuildFinPod
     resDirs = [`lib/`, `locale/`, `res/`, `res/web/`, `res/web/seed/`,
                `res/web/seed/modules/`]
     nodeDirs = Env.cur.vars["FINSEED_UI_BUILT"] == "true" ? Uri[,] : [`ts/`]
-    index = ["skyarc.ext":"finSeed::SeedExt", "skyarc.lib":"finSeed::SeedLib", "fin.lang":"finSeed"]
+    index = ["skyarc.ext":"enerCubix::SeedExt", "skyarc.lib":"enerCubix::SeedLib", "fin.lang":"enerCubix"]
   }
 }

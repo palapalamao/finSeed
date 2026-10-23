@@ -18,7 +18,7 @@ internal class SeedReport
   {
     r:=ctx.byId[id]
     name:=r?.get("name")?.toStr ?: id
-    if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定用途"))
+    if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定分项"))
     out:=SeedLine("$id|$category"+(utility == null ? "" : "|$utility"),id,name,category,ctx.unit(id,category,metric))
     out.gauge=r?.get("kind") == "sensor"
     out.ratio=kind == "cop" || r?.get("kind") == "cop"
@@ -30,7 +30,7 @@ internal class SeedReport
     cursor:=start
     while (cursor < end)
     {
-      next:=SeedMath.floorHour(cursor)+1hr
+      next:=kind == "comparison" && request["comparisonAlignment"] == "duration" ? cursor+1hr : SeedMath.floorHour(cursor)+1hr
       if (next > end) next=end
       SeedValue value := SeedValue()
       SeedValue? numerator:=null; SeedValue? denominator:=null
@@ -91,6 +91,60 @@ internal class SeedReport
     return out
   }
 
+  Str:Obj? forecast(SeedLine[] lines)
+  {
+    forecasts:=[Str:Obj?][,]; backtests:=[Str:Obj?][,]; scores:=[Str:Obj?][,]
+    horizon:=(SeedMath.num(request["forecastDays"]) ?: 7f).toInt
+    lines.each |line| {
+      dates:=DateTime[,]; values:=Float?[,]; historyPoints:=[Str:Obj?][,]; sources:=Str[,]
+      cursor:=from
+      while (cursor < to)
+      {
+        end:=SeedMath.nextBucket(cursor,"day")
+        value:=line.total(line.ticks.findAll |t| { t.ts >= cursor && t.ts < end })
+        if (value.value != null && value.value < 0f) value=SeedValue(null,"negative",value.sources)
+        dates.add(cursor); values.add(value.value); sources.addAll(value.sources)
+        point:=value.point(cursor); historyPoints.add(point)
+        rows.add(point.dup.setAll(["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"phase":"history"]))
+        cursor=end
+      }
+      fit:=SeedForecast.fit(values,horizon)
+      simulated:=sources.unique.any |id| { ctx.byPoint[id]?.simulated == true }
+      meta:=fit.dup
+      ["predictions","backtests","modelScores"].each |key| { meta.remove(key) }
+      meta.setAll(["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"forecastDays":horizon,"trainingEnd":to.toIso,"simulated":simulated])
+      series.add(["id":line.id+"|history","nodeId":line.nodeId,"name":line.name+" · 历史","categoryId":line.category,"unit":line.unit,"role":"history","points":historyPoints])
+      if (simulated) ctx.warn("${line.name}：数据来源包含模拟历史，回测误差不能代表真实运行预测能力")
+      if (fit["status"] != "ok")
+      {
+        meta["predictedTotal"]=null
+        status:=fit["status"]
+        reason:=["insufficientHistory":"有效历史不足","insufficientBacktest":"回测范围不足","invalidForecast":"预测计算异常"][status?.toStr ?: ""] ?: "暂不能预测"
+        ctx.warn("${line.name}：$reason，至少需要 28 个有效日、80% 完整率和最近 7 天完整数据；长周期预测还需要足够的历史回测范围")
+      }
+      else
+      {
+        predictions:=(Float[])fit["predictions"]; spread:=(Float)fit["errorRange"]
+        futurePoints:=[Str:Obj?][,]; total:=0f; future:=to
+        predictions.each |value| {
+          point:=[Str:Obj?]["ts":future.toIso,"value":value,"quality":"predicted","sourceIds":sources.unique,"lower":(value-spread).max(0f),"upper":value+spread]
+          futurePoints.add(point)
+          rows.add(point.dup.setAll(["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"phase":"forecast","model":fit["model"]]))
+          total+=value; future=SeedMath.nextBucket(future,"day")
+        }
+        meta["predictedTotal"]=total
+        series.add(["id":line.id+"|forecast","nodeId":line.nodeId,"name":line.name+" · 预测","categoryId":line.category,"unit":line.unit,"role":"forecast","points":futurePoints])
+        SeedMath.maps(fit["backtests"]).each |pair| { backtests.add(pair.dup.setAll(["id":line.id,"categoryId":line.category,"unit":line.unit,"name":line.name,"ts":dates[(Int)pair["index"]].toIso,"trainingEnd":dates[(Int)pair["origin"]].toIso])) }
+        SeedMath.maps(fit["modelScores"]).each |score| { scores.add(score.dup.setAll(["id":line.id,"categoryId":line.category,"unit":line.unit,"name":line.name])) }
+      }
+      forecasts.add(meta)
+    }
+    extra["forecasts"]=forecasts; extra["backtests"]=backtests; extra["modelScores"]=scores
+    extra["forecastFrom"]=to.toIso
+    extra["algorithm"]="weekly-selection-v1"
+    return result
+  }
+
   SeedLine referenceLine(Str id, Bool raw := false)
   {
     record:=ctx.byId[id]
@@ -127,6 +181,7 @@ internal class SeedReport
       value:=l.total
       return ["id":l.id,"name":l.name,"categoryId":l.category,"value":value.value,"quality":value.quality,"unit":l.unit,"sourceIds":value.sources]
     }
+    if (kind == "leak") leakTotals(lines)
     if (ctx.dimension != null) dimensionDetails(lines)
     return result
   }
@@ -145,7 +200,9 @@ internal class SeedReport
         members=ctx.dimension.directChildren(l.nodeId).dup
         if (own != null) members.insert(0,own)
       }
-      counted:=(kind == "utility" ? ctx.dimension.usageFrontier(members) : ctx.dimension.frontier(members)).map |m->Str| { m["id"].toStr }
+      countedMembers:=members
+      if (kind != "leak") countedMembers=kind == "utility" ? ctx.dimension.usageFrontier(members) : ctx.dimension.frontier(members)
+      counted:=countedMembers.map |m->Str| { m["id"].toStr }
       members.each |m|
       {
         id:=m["id"].toStr; key:="${l.nodeId}|$id"
@@ -214,7 +271,14 @@ internal class SeedReport
     grouped:=Str:SeedTick[][:]; order:=Str[,]; timestamps:=Str:DateTime[:]
     l.ticks.each |t|
     {
-      at:=SeedMath.bucket(t.ts,gran); key:=at.toIso
+      at:=SeedMath.bucket(t.ts,gran)
+      if (kind == "comparison" && request["comparisonAlignment"] == "duration")
+      {
+        start:=l.ticks.first.ts
+        step:=gran == "hour" ? 1hr.ticks : (gran == "week" ? 7day.ticks : 1day.ticks)
+        at=start+Duration((t.ts-start).ticks/step*step)
+      }
+      key:=at.toIso
       if (!grouped.containsKey(key)) { grouped[key]=SeedTick[,]; order.add(key); timestamps[key]=at }
       grouped[key].add(t)
     }
@@ -230,10 +294,44 @@ internal class SeedReport
         sub:=SeedValue.sum(ticks.map |t->SeedValue| { t.denominator ?: SeedValue() })
         row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=v.value
         row["percentage"]=SeedValue.divide(v,total).scale(100f).value
+        if (v.value != null && v.value < 0f) ctx.warn("${l.name}: 分表合计大于总表，差额为负，请核对计量关系与数据")
+        branchRows:=extra["leakBranches"] as List
+        if (branchRows == null) { branchRows=[Str:Obj?][,]; extra["leakBranches"]=branchRows }
+        leakMembers(l.nodeId,l.category).each |branch|
+        {
+          branchId:=branch["id"].toStr
+          branchValue:=SeedValue.sum(ticks.map |t->SeedValue| { ctx.node(branchId,l.category,t.ts,t.end,metric) })
+          if (request["perArea"] == true)
+          {
+            area:=SeedMath.num(ctx.byId[l.nodeId]?.get("area"))
+            branchValue=area == null || area <= 0f ? SeedValue(null,"missingArea",branchValue.sources) : branchValue.scale(1f/area)
+          }
+          branchRows.add(["nodeId":l.nodeId,"branchId":branchId,"name":ctx.displayName(branchId),"categoryId":l.category,"unit":l.unit,"ts":key,"value":branchValue.value,"quality":branchValue.quality,"sourceIds":branchValue.sources])
+        }
       }
       rows.add(row)
     }
     series.add(seriesMap(l,points))
+  }
+
+  private [Str:Obj?][] leakMembers(Str id, Str category)
+  {
+    if (ctx.dimension != null) return ctx.dimension.directChildren(id).findAll |m| { (m["categoryId"]?.toStr ?: "") == category }
+    return (ctx.children[id] ?: [Str:Obj?][,]).findAll |m| { ctx.included(m) && m["kind"] != "totalMeter" && ctx.categories(m["id"].toStr).contains(category) }
+  }
+
+  private Void leakTotals(SeedLine[] lines)
+  {
+    extra["leakTotals"]=lines.map |l->[Str:Obj?]|
+    {
+      total:=SeedValue.sum(l.ticks.map |t->SeedValue| { t.numerator ?: SeedValue() })
+      sub:=SeedValue.sum(l.ticks.map |t->SeedValue| { t.denominator ?: SeedValue() })
+      difference:=l.total
+      row:=baseRow(l,"summary",difference)
+      row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=difference.value
+      row["percentage"]=SeedValue.divide(difference,total).scale(100f).value
+      return row
+    }
   }
 
   private Void totals(SeedLine[] lines)
@@ -332,14 +430,27 @@ internal class SeedReport
     if (otherFrom == null && otherTo == null)
     {
       comparisons:=[Str:Obj?][,]
+      baselineId:=request["baselineId"]?.toStr
+      if (baselineId != null && !SeedMath.strings(request["nodeIds"]).contains(baselineId)) throw ArgErr("基准对象必须在已选对比对象中")
+      bases:=baselineId == null ? (lines.isEmpty ? SeedLine[,] : [lines.first]) : lines.findAll |l| { l.nodeId == baselineId }
+      if (baselineId != null && bases.isEmpty) throw ArgErr("基准对象不存在或没有可分析的数据来源")
+      if (baselineId != null) { extra["comparisonBaselineId"]=baselineId; extra["comparisonBaselineName"]=ctx.displayName(baselineId) }
       if (!lines.isEmpty)
       {
-        base:=lines.first
-        lines.each |l,i|
+        lines.each |l|
         {
-          if (i == 0 || l.unit != base.unit || l.category != base.category) return
+          if (bases.contains(l)) return
+          base:=bases.find |b| { b.unit == l.unit && b.category == l.category }
+          if (base == null)
+          {
+            if (baselineId == null) return
+            ctx.warn("${l.name}: 与基准 ${ctx.displayName(baselineId)} 的能源类型或单位不一致，保留柱图，不计算差值及变化率")
+            comparisons.add(["id":l.id,"name":l.name,"categoryId":l.category,"referenceId":baselineId,"referenceName":ctx.displayName(baselineId),"current":l.total.value,"reference":null,"difference":null,"percentage":null,"quality":"incompatibleBaseline","unit":l.unit])
+            return
+          }
           current:=l.total; previous:=base.total; diff:=SeedValue.sum([current,previous.scale(-1f)])
-          comparisons.add(["id":l.id,"name":l.name,"referenceName":base.name,"current":current.value,"reference":previous.value,"difference":diff.value,"percentage":SeedValue.divide(diff,previous).scale(100f).value,"quality":diff.quality,"unit":l.unit])
+          percentage:=SeedValue.divide(diff,previous).scale(100f)
+          comparisons.add(["id":l.id,"name":l.name,"categoryId":l.category,"referenceId":base.nodeId,"referenceName":base.name,"current":current.value,"reference":previous.value,"difference":diff.value,"percentage":percentage.value,"quality":diff.quality,"percentageQuality":percentage.quality,"unit":l.unit])
         }
       }
       extra["comparisons"]=comparisons

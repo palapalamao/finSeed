@@ -22,8 +22,8 @@ test('FIN admission selects historical leaves in the native tree and preserves c
  const drawer=page.locator('.ant-drawer:visible'),tree=drawer.getByRole('tree',{name:'FIN 历史点树'});
  await expect(tree).toBeVisible();await expect(tree).toContainText('园区');await expect(tree).toContainText('一层');await expect(tree).toContainText('配电柜');await expect(tree).not.toContainText('实时功率');
  const node=(name:string)=>tree.locator('.ant-tree-treenode').filter({has:page.getByText(name,{exact:true})});
- await node('累计电量').locator('.ant-tree-checkbox').click();await expect(drawer).toContainText('已选 1 个');await expect(drawer).toContainText('复用：测试分表');
- await drawer.getByPlaceholder('搜索 FIN 点名称或标识').fill('分支电量');await expect(tree).toContainText('嵌套电表');await expect(tree).not.toContainText('累计电量');await node('分支电量').locator('.ant-tree-checkbox').click();await expect(drawer).toContainText('已选 2 个');
+ await node('累计电量').locator('.ant-tree-checkbox').click();await expect(drawer).toContainText(/已选\s*1\s*个/);await expect(drawer).toContainText('复用：测试分表');
+ await drawer.getByPlaceholder('搜索 FIN 点名称或标识').fill('分支电量');await expect(tree).toContainText('嵌套电表');await expect(tree).not.toContainText('累计电量');await node('分支电量').locator('.ant-tree-checkbox').click();await expect(drawer).toContainText(/已选\s*2\s*个/);
  await drawer.getByPlaceholder('搜索 FIN 点名称或标识').clear();await expect(node('累计电量').locator('.ant-tree-checkbox')).toHaveClass(/checked/);await page.screenshot({path:testInfo.outputPath('fin-point-tree-desktop.png'),fullPage:true});
  await drawer.getByRole('button',{name:'下一步',exact:true}).click();await drawer.getByRole('button',{name:'下一步',exact:true}).click();await drawer.getByRole('button',{name:'确认加入 (2)',exact:true}).click();
  await expect.poll(()=>state.requests.filter(row=>row.path==='tree/manage'&&row.body.action==='save').length).toBe(1);
@@ -42,7 +42,7 @@ test('point tree loads later pages and remains usable on mobile',async({page},te
  await page.route('**/v1/points?**',route=>{const offset=Number(new URL(route.request().url()).searchParams.get('offset'));offsets.push(offset);return route.fulfill({json:{ok:true,data:{items:paged.slice(offset,offset+100),total:paged.length,offset,limit:100}}});});
  await page.setViewportSize({width:390,height:844});await openView(page,'tree');await page.getByRole('button',{name:'从 FIN 点新增',exact:true}).click();const drawer=page.locator('.ant-drawer:visible');
  await drawer.getByPlaceholder('搜索 FIN 点名称或标识').fill('paged-101');const tree=drawer.getByRole('tree',{name:'FIN 历史点树'});await expect(tree).toContainText('分页点 101');expect(offsets).toEqual([0,100]);await expect(tree).toContainText('测试站点');await expect(tree).toContainText('测试设备');
- await tree.locator('.ant-tree-treenode').filter({has:page.getByText('分页点 101',{exact:true})}).locator('.ant-tree-checkbox').click();await expect(drawer).toContainText('已选 1 个');await expect(drawer.getByRole('button',{name:'下一步',exact:true})).toBeEnabled();
+ await tree.locator('.ant-tree-treenode').filter({has:page.getByText('分页点 101',{exact:true})}).locator('.ant-tree-checkbox').click();await expect(drawer).toContainText(/已选\s*1\s*个/);await expect(drawer.getByRole('button',{name:'下一步',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('fin-point-tree-mobile.png'),fullPage:true});
- await drawer.getByPlaceholder('搜索 FIN 点名称或标识').fill('paged-0');await expect(drawer).toContainText('没有匹配的历史点');await expect(drawer).toContainText('已选 1 个');
+ await drawer.getByPlaceholder('搜索 FIN 点名称或标识').fill('paged-0');await expect(drawer).toContainText('没有匹配的历史点');await expect(drawer).toContainText(/已选\s*1\s*个/);
 });

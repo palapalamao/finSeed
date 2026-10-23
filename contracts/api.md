@@ -1,7 +1,17 @@
-# finSeed application contract 0.2.6
+# EnerCubix application contract 0.7.0
 
-FIN 5.3.0.2761. Same-origin authenticated JSON API at `/api/{project}/ext/finSeed/v1`.
+FIN 5.3.0.2761. Same-origin authenticated JSON API at `/api/{project}/ext/enerCubix/v1`.
 Success `{ok:true,data:...}`; failure `{ok:false,error:{code,msg}}` and non-2xx HTTP status. Never fall back to demo data. FIN native identity; admin-only mutations. Use `finCsrfFetch` from haystack-nclient for requests.
+
+## Native equipment storage (0.4.0)
+
+After the explicit native-equipment migration, `catalog.storageModel` is `nativeEquip`. Physical meter/sensor `id` and report `nodeIds` are FIN equipment IDs; `pointId` and report `sourceIds` remain native history point IDs. Three views use the same equipment record. `seedAlias` preserves the short name without changing native `dis`/`navName`. References use the existing `seed*Ref` tags on equipment; scalar properties use `SeedNativeEquip.scalars` (`seedArea`, `seedMaximum`, `seedHistoryMode`, `seedIncludeInTotals`, etc.). Shared tariffs, calendars, expressions, organizations and templates retain their independent configuration records. The older archive description below applies before migration and to retained compatibility data only.
+
+Enrollment writes an existing equipment ID plus its observed `mod`, kind, category and explicit own historized compatible `pointId`. Batch saves are atomic and reject multiple records for one equipment. `tree/manage copy` requires `targetId`, `targetMod`, and the target equipment's `pointId`; it creates no physical archive. `records/delete` and `tree/manage delete` unenroll equipment by removing owned energy tags, preserving equipment, native hierarchy, points and histories. Native virtual equipment is created with `createVirtual:true`, `expressionId`, `siteId`, and a `floorId` belonging to that site; it is excluded from totals by default.
+
+Native navigation supplies `nativeTreeParentId`; it never writes FIN location references. `spaceId` means coverage, inferred from installation location when absent. Invalid native tag types, point ownership, history, energy, references and topology appear as `configurationError` and produce `invalidConfiguration` quality instead of an energy value. Refresh reads native edits directly.
+
+`migration/preview` now previews `target:nativeEquip`: old IDs, native IDs, primary points, upstream equipment, per-tag `tagChanges`, conflicts, configuration `revision`, and relevant-source `sourceRevision`. Apply checks both revisions and atomically writes owned tags, dependency rewrites, compatibility aliases, recovery snapshots, and the reading mode. Old physical archives are ignored after apply. `migration {action:finalize,jobId,mod}` removes those archives only after report verification; `rollback` restores old IDs/read mode and only migration-owned changes, stopping on conflicting later edits. Historical alarm source records remain immutable; old report IDs resolve via the compatibility aliases. Use `target:threeTree` only for the previous migration protocol.
 
 ## Configuration
 
@@ -69,7 +79,7 @@ Applied migrations retain a `job` with `action:'treeMigration',status:'applied',
 ## Reports
 
 POST `report` body ReportRequest -> ReportResult.
-ReportRequest `{kind,nodeIds:string[],dimension?:'space'|'metering'|'organization'|'legacy',from:string,to:string,period:'hour'|'day'|'month'|'year',metric:'energy'|'cost'|'coal'|'co2'|'rawcoal'|'oil',perArea:boolean,referenceIds?:string[],otherFrom?:string,otherTo?:string,xId?:string,yId?:string,workHours?:number[]}`. Dates are ISO 8601 with timezone, intervals [from,to), buckets in project timezone. kind=profile|ranking|proportion|utility|daily|comparison|primary|cop|leak|workingHours|workingDays|regression|trend|dashboard. Empty selections do not imply all records except dashboard. Normal values match legacy business meaning, anomalies stay null + quality.
+ReportRequest `{kind,nodeIds:string[],dimension?:'space'|'metering'|'organization'|'legacy',from:string,to:string,period:'hour'|'day'|'week'|'month'|'year',metric:'energy'|'cost'|'coal'|'co2'|'rawcoal'|'oil',perArea:boolean,referenceIds?:string[],otherFrom?:string,otherTo?:string,xId?:string,yId?:string,workHours?:number[]}`. Dates are ISO 8601 with timezone, intervals [from,to), buckets in project timezone. kind=profile|ranking|proportion|utility|daily|comparison|primary|cop|leak|workingHours|workingDays|regression|trend|dashboard. Empty selections do not imply all records except dashboard. Normal values match legacy business meaning, anomalies stay null + quality.
 ReportResult `{kind,from,to,period,series:Series[],rows:object[],warnings:string[],summary:object,extra:object}`.
 Series `{id,nodeId?,name,categoryId?,unit,points:[{ts:string,value:number|null,quality:string,sourceIds:string[],band?:string,x?:number,label?:string}]}`. Ordinary table rows include `{key,nodeId,name,categoryId,unit,value,quality,sourceIds}` plus report-specific fields. `summary.totals`, when present, contains `{id,name,categoryId,value,quality,unit,sourceIds}` for non-reference series. All aggregates are calculated by the engine, not the client.
 
@@ -85,6 +95,8 @@ New-dimension utility analysis accepts only root and first-level space/organizat
 
 Report-specific fields:
 
+- leak: each period row retains `total`, `submeter`, `difference` (= total minus submeter) and `percentage` (= difference / total × 100). Additive `extra.leakBranches:[{nodeId,branchId,name,categoryId,unit,ts,value,quality,sourceIds}]` contains each eligible direct branch in the same period and unit; per-area values use the selected master's area for both bars. `extra.leakTotals` contains the corresponding interval aggregates with ordinary row identity/quality/source fields. The chart shows the master beside a stack of individual branches; the difference is separate and negative values remain visible with a warning. If a branch is missing, the complete submeter aggregate remains null and the chart leaves the whole stack blank. Existing difference series remain compatible. Weekly buckets begin Monday in the project timezone; partial first/last buckets include only data inside `[from,to)`.
+
 - dashboard: `extra.overview:[{key,value,quality,sourceIds}]`, with `key=categoryId|unit`; `extra.grandTotals:[{key,name,unit,value,quality,sourceIds}]`, with `key=metric|unit`. Grand totals combine only matching units, so incompatible energy units remain separate. Optional comparison ranges also produce `extra.comparisons`.
 - utility: `extra.utilityShares:[{id,name,nodeId,categoryId,unit,value,percentage,quality,sourceIds}]`. Each percentage uses the utilities within the same node/category/unit as its denominator; this differs from the proportion report's selected-object percentages.
 - daily: points add `band:'peak'|'valley'|'flat'|'unknown'`; rows add `hour:number,ts:string,samples:number,band:string`. Energy points show the mean for each hour of day across the requested interval, described by `extra.aggregation='mean energy for each hour of day'`. `extra.loadBands` contains ordinary rows plus `band`, with interval energy totals by band, and `extra.loadBandsAggregation='intervalTotal'`; these are not sums of the daily-average points. Missing calendars use `unknown` and a warning. Nonempty gauge/ratio bands return null with `invalidMetric`.
@@ -98,9 +110,27 @@ Report-specific fields:
 
 ## Tasks and alerts
 
+FIN's extension housekeeping runs every 30 seconds. Only canonical native `meter`/`totalMeter` equipment explicitly configured with `autoSum:true` (`seedAutoSum:true` on the equipment) receives its direct children's sum on its own `seedPointRef`. The flag defaults off; `seedKind:totalMeter` and a parent relationship alone never authorize overwriting a measured point. A point carrying any `*ConnRef` collection tag is always protected, including when the flag was manually enabled; normal configuration rejects this combination. A measured intermediate meter contributes its own current reading to upstream calculations rather than the sum of its descendants. Calculated levels are evaluated bottom-up in the same snapshot. Compatible units are converted to the parent's point unit; sensors and aliases are excluded. Report-only `includeInTotals` does not change this physical sum. Missing/non-finite/faulted calculation inputs, incompatible units/categories and cycles fault only affected calculated targets. `seedRollupRef`, `seedRollupAt` and `seedRollupStatus` identify transient ownership, time and quality. Opting out removes those metadata tags without changing the point's current reading or status. Detaching/rebinding a still-enabled calculated parent releases its old computed value. Updates send no device commands and do not directly write histories. Historical reports, measured total/submeter difference analysis and hourly derived-history tasks retain their source-history behavior.
+
 POST `tasks` body `{action:'recalculate'|'setCalculationEnabled'|'setAlarmEnabled'|'scanAlarms',from?,to?,enabled?}` -> job SeedRecord; task status is persisted in Folio. Derived hourly series written only to dedicated finSeed-owned computed points, never originals. Native source-history sync and derived recomputation remain distinct.
 GET `alarms` -> SeedRecord[] alarm records. POST `alarms/ack` `{id,mod,note}` -> acknowledged SeedRecord, actor from FIN session only.
 
 ## Presentation
 
 Desktop sidebar + selectable analysis tree + filters + report workspace, collapsed navigation on mobile. No custom login, user admin, theme picker or hardcoded sample data. All existing business configuration kinds have usable forms; complex tariff/calendar rules get structured editors. Keep FIN project in hash query `#/profile?project=...` because pod resource serving rejects search query on some FIN builds.
+
+### 对比区间对齐（0.2.9）
+
+`comparison` 可选 `comparisonAlignment: "duration" | "calendarMonth"`。`duration` 要求两期时长严格相等，仅支持 hour/day/week，并从各自区间起点生成等长汇总桶；`calendarMonth` 要求两期均为完整自然月且 period=month，保留月份实际天数。未传参数的旧请求继续使用原自然时间桶与区间。`comparisonPreset` 由前端模板解析，后端以已解析的 from/to/otherFrom/otherTo 为准；日期控件包含结束日，传输仍使用左闭右开区间。图表按桶序配对，不移动或改写原时间戳。
+
+### 对象对比基准（0.2.10）
+
+同一时段的 comparison 请求可指定 `baselineId`，它必须属于 `nodeIds`；三维请求按同样规则规范化该引用。后端按对象及能源分类、单位匹配基准，返回 comparisonBaselineId/Name，以及 comparisons 中的 referenceId/Name、current/reference、difference、percentage 和 percentageQuality。缺失或不兼容时保留系列并提示，差值及变化率为空；零基准变化率为空。未提供 baselineId 的旧请求继续按首对象比较。模板将该引用保存为 Folio 依赖 Ref。新页面统一使用 nodeIds 选择对象，旧模板可继续带 referenceIds。
+
+### 能耗预测（0.3.0）
+
+`kind: "forecast"` 使用 `metric: "energy"`、`period: "day"`，`from/to` 为项目时区中 28–180 个完整日的训练区间（结束不含），截止不得晚于今天零点。选择 1–10 个表计或统计范围，`forecastDays` 取 7（默认）、14、30。`trainingDays`、`forecastRolling` 保存前端模板意图，服务端以解析后的日期为准。源历史只读，计算前剔除训练截止后的样本；累计读数在截止时的精确边界可以使用。
+
+至少需要 28 个有效日、80% 完整率、每星期位置三个有效日及最近七天完整数据。按预测长度最多留出四个不重叠的滚动回测区间，每次仅用此前历史训练；比较上周同期、近期同星期加权均值、周周期加权衰减趋势，以 MAE 选择，复杂模型须改善超过 2%。30 天预测需要至少 44 个日历日才能形成一次回测。WAPE 在实际用量合计为零时返回空值。模型选择与评估共用这些历史留出区间，回测误差不是独立测试集或未来准确率保证。
+
+系列增加 `role: "history" | "forecast"`；预测点质量为 `predicted`，包含 `lower/upper`；明细增加 `phase/model`。`extra.forecasts` 返回各对象预测合计、模型、MAE、WAPE、基准 MAE、样本覆盖、状态及模拟来源标记；`extra.backtests/modelScores` 保留回测证据。每日参考范围采用所选模型回测绝对误差第 90 百分位，不保证未来覆盖率。数据不足时保留历史、无预测系列并给出原因。模型不使用天气或运行计划，各对象独立预测，不能重复合计总分表。图表、表格及导出使用同一结果。旧 `regression` 接口、链接和模板仍保留兼容。

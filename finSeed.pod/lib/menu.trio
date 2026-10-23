@@ -1,23 +1,23 @@
 // One entry in FIN's native application launcher. Authentication stays in FIN.
 ---
-name: finSeedApp
+name: enerCubixApp
 finStackMobileMenu
 func
 overridable
-doc: "FIN Seed energy workspace"
+doc: "EnerCubix energy workspace"
 src:
   () => do
-    rootUri: seedAppUri()
+    rootUri: enerCubixAppUri()
     [{
-      displayName: "FIN Seed",
-      appId: "finSeedApp",
+      displayName: "能源魔方 / EnerCubix",
+      appId: "enerCubixApp",
       link: "",
-      icon: "icon-leaf",
+      icon: "icon-graph-line",
       iconType: "class",
       ui: "mobile",
       minUiTarget: "phone",
       order: -1,
-      action: "top.app.LoadApplication('" + rootUri + "', null, null, {app: '_finSeed'});top.app.ToggleCollapse(true);",
+      action: "top.app.LoadApplication('" + rootUri + "', null, null, {app: '_enerCubix'});top.app.ToggleCollapse(true);",
       keepOpen: true
     }].toGrid
   end

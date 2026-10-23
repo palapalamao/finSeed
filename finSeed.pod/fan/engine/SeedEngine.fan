@@ -4,6 +4,7 @@ class SeedEngine
 {
   static Str:Obj? report(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
   {
+    SeedForecast.validate(request)
     from:=DateTime.fromIso(request["from"]?.toStr ?: "")
     to:=DateTime.fromIso(request["to"]?.toStr ?: "")
     tzName:=request["tz"]?.toStr
@@ -14,9 +15,24 @@ class SeedEngine
     kind:=request["kind"]?.toStr ?: "profile"
     period:=request["period"]?.toStr ?: "day"
     metric:=request["metric"]?.toStr ?: "energy"
-    if (!["hour","day","month","year"].contains(period)) throw ArgErr("Invalid period")
+    if (!["hour","day","week","month","year"].contains(period)) throw ArgErr("Invalid period")
     if (!["energy","cost","coal","co2","rawcoal","oil"].contains(metric)) throw ArgErr("Invalid metric")
-    if (!["profile","ranking","proportion","utility","daily","comparison","primary","cop","leak","workingHours","workingDays","regression","trend","dashboard"].contains(kind)) throw ArgErr("Invalid report kind")
+    if (!["profile","ranking","proportion","utility","daily","comparison","primary","cop","leak","workingHours","workingDays","regression","forecast","trend","dashboard"].contains(kind)) throw ArgErr("Invalid report kind")
+    if (kind == "forecast") histories=SeedForecast.clip(histories,to)
+    if (kind == "comparison" && request["comparisonAlignment"] != null)
+    {
+      alignment:=request["comparisonAlignment"].toStr
+      if (!["duration","calendarMonth"].contains(alignment)) throw ArgErr("Invalid comparison alignment")
+      otherFrom:=DateTime.fromIso(request["otherFrom"]?.toStr ?: "").toTimeZone(tz)
+      otherTo:=DateTime.fromIso(request["otherTo"]?.toStr ?: "").toTimeZone(tz)
+      if (otherTo <= otherFrom || (otherTo-otherFrom).ticks/1hr.ticks > 100000) throw ArgErr("Invalid comparison range")
+      if (alignment == "duration")
+      {
+        if (to-from != otherTo-otherFrom) throw ArgErr("两期必须等长，请重新选择对比开始日期")
+        if (!["hour","day","week"].contains(period)) throw ArgErr("等长区间请选择小时、日或周汇总；按月请使用整月对比")
+      }
+      else if (period != "month" || from != SeedMath.bucket(from,"month") || otherFrom != SeedMath.bucket(otherFrom,"month") || to != SeedMath.nextBucket(from,"month") || otherTo != SeedMath.nextBucket(otherFrom,"month")) throw ArgErr("整月对比必须选择两个完整月份，并按月汇总")
+    }
     SeedDimension? dimension:=null
     if (SeedDimension.active(request))
     {
@@ -46,6 +62,7 @@ class SeedEngine
         return
       }
       if (record["kind"] == "nativePoint") throw ArgErr("FIN 原生点位仅用于空间浏览，请先绑定计量档案")
+      if (kind == "forecast" && ["sensor","cop","binding"].contains(record["kind"]?.toStr ?: "")) throw ArgErr("请选择能耗表计或空间、组织范围进行预测")
       if (dimension != null && ["space","organization","group"].contains(record["kind"]?.toStr ?: "") && !dimension.scope(id)) throw ArgErr("Selected node does not belong to the report dimension")
       if (kind == "utility")
       {
@@ -74,6 +91,7 @@ class SeedEngine
       }
     }
     if (kind == "profile") SeedMath.strings(request["referenceIds"]).unique.each |id| { lines.add(report.referenceLine(id,true)) }
+    if (kind == "forecast") return report.forecast(lines)
     return report.finish(lines)
   }
 }

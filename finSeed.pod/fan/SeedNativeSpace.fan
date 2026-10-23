@@ -24,7 +24,7 @@ class SeedNativeSpace
   private Void walk(Context cx, NavTree tree, NavPath navPath, Dict? base, Str? parent, Int depth, Str:Bool seen)
   {
     if (depth > 128) throw ArgErr("FIN navigation tree exceeds 128 levels")
-    children:=tree.children(cx,base).findAll |rec| { cx.canRead(rec) && NavTree.canAccess(cx,navPath,rec) }
+    children:=tree.children(cx,base).findAll |rec| { cx.canRead(rec) && NavTree.canAccess(cx,navPath,rec) && (!rec.has("point") || rec.has("his")) }
     // A path level includes indented equips as well as their parents. Defer
     // those equips until their own parent is expanded, regardless of sorting.
     childRoots(children) |rec->Ref?| { tree.isIndentable(cx,rec) ? tree.indentParentRef(cx,rec) : null }.each |rec|
@@ -34,7 +34,7 @@ class SeedNativeSpace
       if (nodes.size >= 50000) throw ArgErr("FIN navigation tree exceeds 50000 nodes")
       seen[id]=true
       sourceKind:=rec.has("point") ? "point" : (navPath.segForRec(rec)?.tag ?: "equip")
-      node:=Str:Obj?["id":id,"name":rec["navName"] as Str ?: rec.dis,"parentId":parent,"sourceKind":sourceKind,"nativeDis":rec.dis]
+      node:=Str:Obj?["id":id,"name":rec["navName"] as Str ?: rec.dis,"parentId":parent,"sourceKind":sourceKind,"nativeDis":rec.dis,"mod":SeedRepo.iso(rec["mod"])]
       area:=rec["area"]
       if (area is Number) node["area"]=((Number)area).toFloat
       if (sourceKind == "point")
@@ -80,7 +80,20 @@ class SeedNativeSpace
       r["name"]=n["name"]; r["parentId"]=ids[n["parentId"]?.toStr ?: ""]
       r["nativeReadonly"]=true; r["nativeSourceId"]=source; r["nativeSourceKind"]=n["sourceKind"]
       r["nativeDis"]=n["nativeDis"] ?: n["name"]
-      if (n["area"] != null) r["area"]=n["area"]
+      r["mod"]=n["mod"]
+      if (n["sourceKind"] == "equip")
+      {
+        business:=stored.find |s| { s["id"] == source && s["nativeEquip"] == true }
+        if (business != null)
+        {
+          business.each |v,k| { r[k]=v }
+          r["parentId"]=business["parentId"]
+          r["nativeReadonly"]=false
+          r["nativeTreeParentId"]=ids[n["parentId"]?.toStr ?: ""]
+          r["nativeSpaceId"]=r["spaceId"] ?: source
+        }
+      }
+      if (n["area"] != null && r["area"] == null) r["area"]=n["area"]
       if (isPoint)
       {
         ["unit","his","pointKind","hisMode","energyTags"].each |key| { if (n[key] != null) r[key]=n[key] }
@@ -93,6 +106,13 @@ class SeedNativeSpace
     {
       if (nativeIds.contains(old["id"])) return
       r:=clean(old)
+      if (old["nativeEquip"] == true)
+      {
+        r["nativeEquip"]=true
+        r["nativeDis"]=old["nativeDis"]
+        r["nativeSourceKind"]="equip"
+        r["nativeSpaceId"]=r["spaceId"] ?: r["id"]
+      }
       if (r["kind"] == "space") r["nativeHidden"]=true
       if (SeedRelations.meterKinds.contains(r["kind"]) && r["pointId"] != null && r["expressionId"] == null)
       {
@@ -110,7 +130,7 @@ class SeedNativeSpace
   static [Str:Obj?] clean([Str:Obj?] record)
   {
     out:=record.dup
-    out.keys.findAll |key| { key.startsWith("native") }.each |key| { out.remove(key) }
+    out.keys.findAll |key| { key.startsWith("native") || ["configurationError","legacyId","legacyParentId"].contains(key) }.each |key| { out.remove(key) }
     return out
   }
 

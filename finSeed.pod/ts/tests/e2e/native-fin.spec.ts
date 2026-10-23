@@ -34,7 +34,7 @@ async function connectBrowser(page:Page,request:APIRequestContext,connection_id=
  // This key satisfies the local application's transport wrapper only. It is not a FIN
  // credential, cookie, SCRAM token, or evidence of native browser-session authentication.
  await page.route('**/finStackAuth',route=>route.fulfill({status:200,headers:{'fin-stack-auth':'local-audited-bridge-only'},body:''}));
- await page.route('**/api/*/ext/finSeed/v1/**',async route=>{
+ await page.route('**/api/*/ext/enerCubix/v1/**',async route=>{
   const url=new URL(route.request().url());expect(url.origin).toBe('http://127.0.0.1:4178');
   const path=`${url.pathname.split('/v1/')[1]}${url.search}`;
   const body=route.request().method()==='POST'?route.request().postDataJSON():undefined;
@@ -55,10 +55,11 @@ test.describe('registered FIN business acceptance through audited proxy',()=>{
   test.setTimeout(120000);const catalog=await actualCatalog(request);expect(catalog.user.canWrite).toBe(true);
   const building=catalog.records.find(record=>record.kind==='group'&&record.name==='验收楼宇');expect(building?.id).toBeTruthy();
   const calls=await connectBrowser(page,request);await page.goto(`/#/profile?project=${project}`);
+  await page.locator('.object-select-button').click();
   const rootNode=page.locator('.object-panel .ant-tree-treenode').filter({has:page.getByText('验收楼宇',{exact:true})});await expect(rootNode).toBeVisible();
   await rootNode.locator('.ant-tree-checkbox').click();
   const inputs=page.locator('.filter-period input');await inputs.nth(0).fill('2026-10-19 00:00');await inputs.nth(0).press('Enter');await inputs.nth(1).fill('2026-10-20 00:00');await inputs.nth(1).press('Enter');
-  await page.getByRole('heading',{name:'能耗概况',exact:true}).click();await page.getByRole('button',{name:/查\s*询/}).click();
+  await page.locator('.object-selector-drawer .ant-drawer-footer .ant-btn').click();await expect(page.locator('.object-panel')).toBeHidden();await page.getByRole('button',{name:/查\s*询/}).click();
   await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();
   const reportCall=calls.filter(call=>call.path==='report').at(-1)!;expect(reportCall).toBeTruthy();
   const submitted=reportCall.request as ReportRequest;expect(submitted.from).toBe(from);expect(submitted.to).toBe(to);expect(submitted.nodeIds).toEqual([building!.id]);
@@ -97,7 +98,7 @@ test.describe('registered FIN business acceptance through audited proxy',()=>{
   test.setTimeout(120000);const catalog=await actualCatalog(request,reader);expect(catalog.user.canWrite).toBe(false);const calls=await connectBrowser(page,request,reader);
   await page.goto(`/#/tree?project=${project}`);await expect(page.getByRole('button',{name:'新增分组'})).toBeDisabled();
   const name=`只读拒绝验收-${randomUUID().slice(0,12)}`;
-  const response=await page.evaluate(async({project,name})=>{const response=await fetch(`/api/${project}/ext/finSeed/v1/records`,{method:'POST',headers:{'Content-Type':'application/json','skyarc-attest-key':'local-audited-bridge-only'},body:JSON.stringify({record:{kind:'group',name,area:321}})});return {status:response.status,body:await response.json()};},{project,name});
+  const response=await page.evaluate(async({project,name})=>{const response=await fetch(`/api/${project}/ext/enerCubix/v1/records`,{method:'POST',headers:{'Content-Type':'application/json','skyarc-attest-key':'local-audited-bridge-only'},body:JSON.stringify({record:{kind:'group',name,area:321}})});return {status:response.status,body:await response.json()};},{project,name});
   expect(response.status).toBe(403);expect(response.body.ok).toBe(false);expect((await actualCatalog(request,reader)).records.some(record=>record.name===name)).toBe(false);
   expect(calls.find(call=>call.path==='records')?.connection_id).toBe(reader);await evidence(testInfo,calls,page);
  });

@@ -19,8 +19,8 @@ try {
         try { Invoke-SeedCommand (Join-Path $seedSdk 'bin\fan.bat') @('build.fan') -FailurePattern '(?m)^BUILD FAILED' }
         finally { Pop-Location }
         New-Item -ItemType Directory -Force -Path 'out' | Out-Null
-        Copy-Item -LiteralPath (Join-Path $seedSdk 'lib\fan\finSeed.pod') -Destination 'out\finSeed.pod' -Force
-        Write-Host "Built $seedRoot\out\finSeed.pod against isolated SDK $seedSdk"
+        Copy-Item -LiteralPath (Join-Path $seedSdk 'lib\fan\enerCubix.pod') -Destination 'out\enerCubix.pod' -Force
+        Write-Host "Built $seedRoot\out\enerCubix.pod against isolated SDK $seedSdk"
     }
     finally { Pop-Location }
 }

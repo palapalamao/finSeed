@@ -1,0 +1,6 @@
+import {t} from './i18n';
+import {Checkbox,DatePicker,Select,Typography} from 'antd';
+import dayjs,{type Dayjs} from 'dayjs';
+export function ForecastControls({days,onDays,horizon,onHorizon,rolling,onRolling,cutoff,onCutoff}:{days:number;onDays:(v:number)=>void;horizon:number;onHorizon:(v:number)=>void;rolling:boolean;onRolling:(v:boolean)=>void;cutoff:Dayjs;onCutoff:(v:Dayjs)=>void}){
+ return <div className="filter-row"><div className="filter-field"><label>{t("训练历史")}</label><Select aria-label={t("训练历史")} value={days} onChange={onDays} options={[28,56,90].map(value=>({value,label:t("最近 {0} 天",value)}))} style={{width:140}}/></div><div className="filter-field"><label>{t("预测范围")}</label><Select aria-label={t("预测范围")} value={horizon} onChange={onHorizon} options={[7,14,30].map(value=>({value,label:t("未来 {0} 天",value)}))} style={{width:140}}/></div><Checkbox checked={rolling} onChange={e=>onRolling(e.target.checked)}>{t("每次使用截至昨日的历史")}</Checkbox>{!rolling&&<div className="filter-field"><label>{t("预测起始日（训练截止，不含）")}</label><DatePicker aria-label={t("预测起始日")} allowClear={false} value={cutoff} onChange={v=>{if(v)onCutoff(v.startOf('day'));}} disabledDate={v=>v.isAfter(dayjs(),'day')}/></div>}<Typography.Text type="secondary">{t("仅使用完整日；缺测不按零处理。28 天历史不支持未来 30 天的回测，请增加训练范围。")}</Typography.Text></div>;
+}

@@ -89,6 +89,29 @@ class SeedAcceptance
     value("working-day whole interval",workRow,240f,[masterPoint.id.id])
     check("Monday working day",workRow["working"],240f); check("Monday nonworking day",workRow["nonworking"],0f)
     q["kind"]="comparison"; q["otherFrom"]=from.toIso; q["otherTo"]=to.toIso
+    aligned:=q.dup
+    aligned["from"]=(from+8hr).toIso; aligned["to"]=(from+14hr).toIso
+    aligned["otherFrom"]=(from+14hr).toIso; aligned["otherTo"]=(from+20hr).toIso
+    aligned["period"]="week"; aligned["comparisonAlignment"]="duration"
+    paired:=SeedMath.maps(report(aligned)["series"])
+    if (paired.size != 2) throw Err("Aligned comparison expected two series")
+    paired.each |line,i|
+    {
+      pp:=SeedMath.maps(line["points"])
+      if (pp.size != 1 || pp.first["ts"] != (i == 0 ? aligned["from"] : aligned["otherFrom"])) throw Err("Comparison bucket origin mismatch")
+      value("native aligned comparison period $i",pp.first,60f,[masterPoint.id.id])
+    }
+    objectQuery:=q.dup; objectQuery.remove("otherFrom"); objectQuery.remove("otherTo")
+    objectQuery["nodeIds"]=[branch["id"],childMaster["id"]]; objectQuery["baselineId"]=childMaster["id"]
+    objectRows:=SeedMath.maps(((Map)report(objectQuery)["extra"])["comparisons"])
+    check("explicit second-object baseline difference",objectRows.first["difference"],72f)
+    check("explicit second-object baseline percentage",objectRows.first["percentage"],100f)
+    templateSaved:=save(["kind":"template","name":"验收指定基准模板","request":objectQuery])
+    templateStored:=repo.records.find |r| { r["id"] == templateSaved["id"] }
+    if (((Map)templateStored["request"])["baselineId"] != childMaster["id"]) throw Err("Baseline template persistence failed")
+    nativeTemplate:=cx.db.readById(Ref(templateSaved["id"].toStr))
+    if (!((List)nativeTemplate["seedDependencyRefs"]).contains(Ref(childMaster["id"].toStr))) throw Err("Missing Folio baseline dependency Ref")
+    checks["explicit baseline Folio template roundtrip"]=[true]
     comparison:=report(q); same:=SeedMath.maps(((Map)comparison["extra"])["comparisons"]).first
     check("same-range comparison current",same["current"],240f); check("same-range comparison reference",same["reference"],240f)
     check("same-range difference",same["difference"],0f); check("same-range percentage",same["percentage"],0f)

@@ -57,7 +57,7 @@ class SeedDimension
   {
     out:=source.dup
     ["nodeIds","referenceIds"].each |key| { if (source[key] != null) out[key]=SeedMath.strings(source[key]).map |id->Str| { canonical(id) }.unique }
-    ["xId","yId"].each |key| { id:=source[key]?.toStr; if (id != null) out[key]=canonical(id) }
+    ["xId","yId","baselineId"].each |key| { id:=source[key]?.toStr; if (id != null) out[key]=canonical(id) }
     return out
   }
 
@@ -208,10 +208,10 @@ class SeedDimension
     while (cursor != null && !seen.contains(cursor))
     {
       r:=byId[cursor]
-      if (r == null || r["kind"] != kind) return false
+      if (r == null || (r["kind"] != kind && !(nativeSpace && kind == "space" && r["nativeEquip"] == true))) return false
       if (nativeSpace && kind == "space" && r["nativeHidden"] == true) return false
       if (cursor == root) return true
-      seen.add(cursor); cursor=r["parentId"]?.toStr
+      seen.add(cursor); cursor=(nativeSpace && kind == "space" && r["nativeEquip"] == true) ? r["nativeTreeParentId"]?.toStr : r["parentId"]?.toStr
     }
     return false
   }
@@ -260,6 +260,7 @@ class SeedDimension
 
   private Str? spaceMembership(Str:Obj? r)
   {
+    if (r["nativeEquip"] == true) return (r["spaceId"] as Str) ?: (r["id"] as Str)
     if (nativeSpace && r["pointId"] != null && r["expressionId"] == null) return r["nativeSpaceId"]?.toStr
     return r["spaceId"]?.toStr
   }

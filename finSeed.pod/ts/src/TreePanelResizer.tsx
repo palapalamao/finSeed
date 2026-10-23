@@ -1,3 +1,4 @@
+import {t} from './i18n';
 import {useLayoutEffect,useRef,useState,type PointerEvent} from 'react';
 
 const minWidth=180;
@@ -26,7 +27,7 @@ export function TreePanelResizer({scope,label}:{scope:'analysis'|'metering';labe
  const clamp=(value:number)=>Math.round(Math.min(limits.max,Math.max(minWidth,value)));
  const save=(value:number)=>{setPreferred(value);try{localStorage.setItem(storageKey,String(value));}catch{/* Resizing remains usable when browser storage is disabled. */}};
  const finish=(event:PointerEvent<HTMLDivElement>)=>{if(!drag.current)return;save(drag.current.current);drag.current=undefined;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);};
- return <div ref={handle} className="tree-panel-resizer" role="separator" aria-label={label} aria-orientation="vertical" aria-valuemin={minWidth} aria-valuemax={limits.max} aria-valuenow={Math.round(width)} tabIndex={0} title="拖动调整树面板宽度，也可使用左右方向键"
+ return <div ref={handle} className="tree-panel-resizer" role="separator" aria-label={label} aria-orientation="vertical" aria-valuemin={minWidth} aria-valuemax={limits.max} aria-valuenow={Math.round(width)} tabIndex={0} title={t("拖动调整树面板宽度，也可使用左右方向键")}
   onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current={x:event.clientX,width,current:width};event.currentTarget.setPointerCapture(event.pointerId);}}
   onPointerMove={event=>{if(!drag.current)return;const next=clamp(drag.current.width+event.clientX-drag.current.x);drag.current.current=next;setPreferred(next);}}
   onPointerUp={finish} onPointerCancel={finish}

@@ -56,7 +56,7 @@ class SeedJobs
       {
         currentJob["status"]="failed"; currentJob["message"]=e.msg; currentJob["lastRun"]=DateTime.now.toIso
         try { currentJob=repo.save(currentJob,true) }
-        catch (Err saveErr) { Log.get("finSeed").err("Cannot persist failed task status",saveErr) }
+        catch (Err saveErr) { Log.get("enerCubix").err("Cannot persist failed task status",saveErr) }
         throw e
       }
     }

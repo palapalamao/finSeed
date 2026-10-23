@@ -7,9 +7,10 @@ $seedRuntimeSdk = Join-Path $seedRoot '.local\runtime-sdk'
 $seedVar = Join-Path $seedRoot '.local\runtime-var'
 $seedLauncher = Join-Path $seedRoot '.local\run-native.ps1'
 if (-not (Test-Path -LiteralPath $seedLauncher)) { throw 'Isolated runtime launcher is missing.' }
-$seedPodSource = Join-Path $seedSdk 'lib\fan\finSeed.pod'
-$seedPodTarget = Join-Path $seedRuntimeSdk 'lib\fan\finSeed.pod'
+$seedPodSource = Join-Path $seedSdk 'lib\fan\enerCubix.pod'
+$seedPodTarget = Join-Path $seedRuntimeSdk 'lib\fan\enerCubix.pod'
 if (-not (Test-Path -LiteralPath (Join-Path $seedRuntimeSdk 'bin\fan.bat'))) { throw 'Prepare the separate runtime SDK before restarting.' }
+if (Test-Path -LiteralPath (Join-Path $seedRuntimeSdk 'lib\fan\finSeed.pod')) { throw 'Legacy finSeed Pod remains in the isolated runtime; migrate the extension and archive the old Pod before restarting.' }
 $seedSourceHash = (Get-FileHash -LiteralPath $seedPodSource -Algorithm SHA256).Hash
 if ($ExpectedSha256 -and $seedSourceHash -ne $ExpectedSha256) { throw 'Candidate Pod hash differs from the requested stable artifact.' }
 $seedListeners = @(Get-NetTCPConnection -State Listen -LocalPort 38085 -ErrorAction SilentlyContinue)
@@ -35,6 +36,6 @@ foreach ($seedLog in @('native-out.log', 'native-err.log')) {
     $seedLogPath = Join-Path $seedRoot ".local\$seedLog"
     if (Test-Path -LiteralPath $seedLogPath) { Copy-Item -LiteralPath $seedLogPath -Destination "$seedLogPath.$seedStamp" }
 }
-$seedChild = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $seedLauncher) -WorkingDirectory $seedRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $seedRoot '.local\native-out.log') -RedirectStandardError (Join-Path $seedRoot '.local\native-err.log') -PassThru
+$seedChild = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-File', $seedLauncher) -WorkingDirectory $seedRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $seedRoot '.local\native-out.log') -RedirectStandardError (Join-Path $seedRoot '.local\native-err.log') -PassThru
 [IO.File]::WriteAllText((Join-Path $seedRoot '.local\runtime-host.pid'), $seedChild.Id.ToString())
 Write-Output "Restarted isolated FIN only; stopped Java PID $seedProcessId; new launcher PID $($seedChild.Id); runtime Pod SHA256=$seedSourceHash."

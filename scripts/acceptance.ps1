@@ -1,8 +1,16 @@
-param([string]$PodPath = (Join-Path $PSScriptRoot '..\out\finSeed.pod'))
+param([string]$PodPath = (Join-Path $PSScriptRoot '..\out\enerCubix.pod'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $seedArtifact = (Resolve-Path -LiteralPath $PodPath).Path
+$seedRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$seedVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $seedRoot 'finSeed.pod\build.fan')), 'version\s*=\s*Version\("([^"]+)"\)').Groups[1].Value
+if (-not $seedVersion) { throw 'Build version is missing.' }
+foreach ($seedManifest in @('package.json', 'finSeed.pod\ts\package.json', 'finSeed.pod\ts\package-lock.json')) {
+    # Windows PowerShell 5 cannot decode npm's empty packages[""] key.
+    $seedManifestVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $seedRoot $seedManifest)), '(?m)^  "version":\s*"([^"]+)"').Groups[1].Value
+    if ($seedManifestVersion -ne $seedVersion) { throw "Version mismatch in $seedManifest : expected $seedVersion, got $seedManifestVersion." }
+}
 $seedZip = [IO.Compression.ZipFile]::OpenRead($seedArtifact)
 try {
     $seedEntries = @($seedZip.Entries | ForEach-Object FullName)
@@ -12,14 +20,15 @@ try {
     }
     $seedReader = [IO.StreamReader]::new($seedZip.GetEntry('meta.props').Open())
     try { $seedMeta = $seedReader.ReadToEnd() } finally { $seedReader.Dispose() }
-    if ($seedMeta -notmatch '(?m)^pod.name=finSeed\s*$' -or $seedMeta -notmatch '(?m)^pod.version=0\.2\.6\s*$') { throw 'Pod name/version mismatch.' }
+    if ($seedMeta -notmatch '(?m)^pod.name=enerCubix\s*$' -or $seedMeta -notmatch ('(?m)^pod.version=' + [regex]::Escape($seedVersion) + '\s*$')) { throw 'Pod name/version mismatch.' }
     $seedReader = [IO.StreamReader]::new($seedZip.GetEntry('index.props').Open())
     try { $seedIndex = $seedReader.ReadToEnd() } finally { $seedReader.Dispose() }
-    foreach ($seedRegistration in @('skyarc.ext=finSeed::SeedExt', 'skyarc.lib=finSeed::SeedLib', 'fin.lang=finSeed')) {
+    foreach ($seedRegistration in @('skyarc.ext=enerCubix::SeedExt', 'skyarc.lib=enerCubix::SeedLib', 'fin.lang=enerCubix')) {
         if (-not $seedIndex.Contains($seedRegistration)) { throw "Missing registration: $seedRegistration" }
     }
     $seedResult = [ordered]@{
         artifact = $seedArtifact
+        version = $seedVersion
         sha256 = (Get-FileHash -LiteralPath $seedArtifact -Algorithm SHA256).Hash.ToLowerInvariant()
         checkedAt = [DateTime]::UtcNow.ToString('o')
         targetFin = '5.3.0.2761'

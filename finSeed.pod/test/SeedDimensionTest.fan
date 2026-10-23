@@ -84,7 +84,7 @@ class SeedDimensionTest : Test
     req:=request("space",["floor"]); req["kind"]="utility"
     r:=SeedEngine.report(req,rs,histories)
     near(value(r),30f)
-    verify(((Str)(([Str:Obj?][])r["series"]).first["name"]).contains("未指定用途"))
+    verify(((Str)(([Str:Obj?][])r["series"]).first["name"]).contains("未指定分项"))
     room:=[Str:Obj?]["id":"room","kind":"space","name":"room","parentId":"floor"]
     rs.add(room); req["nodeIds"]=["room"]
     verifyErr(ArgErr#) { SeedEngine.report(req,rs,histories) }

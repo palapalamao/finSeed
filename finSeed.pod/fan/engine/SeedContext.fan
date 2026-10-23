@@ -107,6 +107,11 @@ internal class SeedContext
     if (path.isEmpty && cache.containsKey(key)) return cache[key]
     r := byId[id]
     if (r == null) return SeedValue(null,"unknownNode")
+    if (r["configurationError"] != null)
+    {
+      warn(r["name"].toStr+"："+r["configurationError"])
+      return SeedValue(null,"invalidConfiguration")
+    }
     nextPath := path.dup.add(id)
     SeedValue result := SeedValue()
     if (dimension?.scope(id) == true)

@@ -1,8 +1,8 @@
 {
-  "name": "fin-seed",
-  "version": "0.2.6",
+  "name": "enercubix",
+  "version": "0.7.0",
   "private": true,
-  "description": "FIN Seed hybrid Pod",
+  "description": "EnerCubix multidimensional energy analytics",
   "scripts": {
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",

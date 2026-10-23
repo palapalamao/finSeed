@@ -20,20 +20,25 @@ export function testRecords():SeedRecord[]{return [
  {id:'settings1',mod:'m1',kind:'settings',name:'概览设置',rotationSeconds:20,visibleMetrics:['energy','cost','coal','co2']}
 ];}
 export function resultFor(request:ReportRequest,missing=false):ReportResult{
+ if(request.kind==='forecast'){
+  const history={ts:request.from,value:12,quality:'ok',sourceIds:['point1']};const count=request.forecastDays||7;
+  const points=Array.from({length:count},(_,i)=>({ts:new Date(Date.parse(request.to)+i*86400000).toISOString(),value:missing?null:10,lower:8,upper:12,quality:'predicted',sourceIds:['point1']}));
+  return {kind:'forecast',from:request.from,to:request.to,period:'day',series:[{id:'meter1|history',nodeId:'meter1',name:'测试分表 · 历史',categoryId:'cat1',unit:'kWh',role:'history',points:[history]},...(!missing?[{id:'meter1|forecast',nodeId:'meter1',name:'测试分表 · 预测',categoryId:'cat1',unit:'kWh',role:'forecast' as const,points}]:[])],rows:[{...history,name:'测试分表',categoryId:'cat1',phase:'history',unit:'kWh'},...(!missing?points.map(p=>({...p,name:'测试分表',categoryId:'cat1',phase:'forecast',unit:'kWh'})):[])],summary:{},warnings:['测试模拟历史，不能代表真实运行预测能力'],extra:{forecasts:[{id:'meter1',nodeId:'meter1',name:'测试分表',categoryId:'cat1',unit:'kWh',status:missing?'insufficientHistory':'ok',predictedTotal:missing?null:count*10,model:'weekdayMean',mae:1,wape:5,baselineMae:2,validDays:50,trainingDays:56,backtestDays:28,simulated:true}],modelScores:[],backtests:[]}};
+ }
  const value=missing?null:12;const point={ts:request.from,value,quality:missing?'missing':'ok',sourceIds:['point1']};
  const row={key:'fixture-row',name:'测试分表',categoryId:'cat1',value,unit:'kWh',quality:point.quality,sourceIds:['point1'],...(request.kind==='regression'?{x:2,y:12}:{}),...(['workingHours','workingDays'].includes(request.kind)?{working:8,nonworking:4}:{}),...(['proportion','ranking'].includes(request.kind)?{rank:1,percentage:100}:{})};
  return {kind:request.kind,from:request.from,to:request.to,period:request.period,series:[{id:'meter1',name:'测试分表',unit:'kWh',categoryId:'cat1',points:[point]}],rows:[row],summary:{totals:[{id:'meter1',name:'测试分表',categoryId:'cat1',value,unit:'kWh',quality:point.quality}]},warnings:missing?['测试源点历史读取失败，结果保持缺测']:[],extra:request.kind==='regression'?{slope:6,intercept:0,r2:1}:request.kind==='dashboard'||request.kind==='comparison'?{comparisons:[{id:'meter1',name:'测试分表',current:12,reference:10,difference:2,percentage:20}]}:{}};
 }
-export interface TransportState {records:SeedRecord[];requests:{path:string;body:Record<string,unknown>}[];canWrite:boolean;status:number;missing:boolean;alarms:SeedRecord[];migrationPreview?:MigrationPreview;spaceSource?:'fin'}
+export interface TransportState {records:SeedRecord[];requests:{path:string;body:Record<string,unknown>}[];canWrite:boolean;status:number;missing:boolean;alarms:SeedRecord[];migrationPreview?:MigrationPreview;spaceSource?:'fin';storageModel?:'nativeEquip'}
 export async function installTransport(page:Page,options:Partial<TransportState>={}){
  const state:TransportState={records:testRecords(),requests:[],canWrite:true,status:200,missing:false,alarms:[{id:'alarm1',mod:'m1',kind:'alarm',name:'测试超限',nodeId:'meter1',categoryId:'cat1',ts:'2026-10-20T00:00:00+08:00',value:20,limit:10,state:'open'}],...options};
  await page.route('**/finStackAuth',route=>route.fulfill({status:200,headers:{'fin-stack-auth':'test-only-attest'},body:''}));
- await page.route('**/api/testproject/ext/finSeed/v1/**',async route=>{
+ await page.route('**/api/testproject/ext/enerCubix/v1/**',async route=>{
   const request=route.request();const path=new URL(request.url()).pathname.split('/v1/')[1];const body=request.method()==='POST'?request.postDataJSON():{};state.requests.push({path,body});
   const reply=(data:unknown)=>route.fulfill({status:200,json:{ok:true,data}});const fail=(status:number,msg:string)=>route.fulfill({status,json:{ok:false,error:{code:status===401?'unauthorized':'forbidden',msg}}});
   if(state.status!==200)return fail(state.status,state.status===401?'FIN 会话已过期，请在 FIN 中重新登录。':'当前 FIN 用户没有项目管理权限');
   if(request.method()==='POST'&&!state.canWrite&&path!=='report')return fail(403,'当前 FIN 用户没有项目管理权限');
-  if(path==='catalog')return reply({version:'0.1-test-transport',project:'testproject',...(state.spaceSource?{spaceSource:state.spaceSource}:{}),user:{name:'测试会话',canWrite:state.canWrite},records:state.records});
+  if(path==='catalog')return reply({version:'0.1-test-transport',project:'testproject',storageModel:state.storageModel,...(state.spaceSource?{spaceSource:state.spaceSource}:{}),user:{name:'测试会话',canWrite:state.canWrite},records:state.records});
   if(path==='migration/preview')return reply(state.migrationPreview||{version:1,revision:JSON.stringify(state.records),sourceRevision:'native1',records:[],suggestions:[],warnings:[],counts:{added:0,updated:0,canonicalAliases:0,spaces:0,suggestions:0,unboundMeters:0}});
   if(path==='migration'){const preview=state.migrationPreview;if(body.action==='apply'&&preview){const accepted=(body.acceptedSuggestionIds||[])as string[];const added=[...preview.records,...preview.suggestions.filter(row=>accepted.includes(row.id)).flatMap(row=>row.records)].map(row=>({...row,mod:'migrated'}));state.records=state.records.filter(row=>!added.some(item=>item.id===row.id)).concat(added);const placements=body.placements as Record<string,string>||{};for(const suggestion of preview.suggestions)if(accepted.includes(suggestion.id)&&placements[suggestion.id])state.records=state.records.map(row=>suggestion.recordIds.includes(row.id!)?{...row,spaceId:placements[suggestion.id]}:row);const job:SeedRecord={id:'migrationJob',mod:'jobmod',kind:'job',name:'三树迁移',action:'treeMigration',status:'applied'};state.records.push(job);return reply({job,applied:added.length});}return reply({job:null,applied:0});}
   if(path==='report')return reply(resultFor(body as ReportRequest,state.missing));
@@ -61,6 +66,10 @@ export async function installTransport(page:Page,options:Partial<TransportState>
  });
  return state;
 }
-export async function openView(page:Page,view:string){await page.goto(`/#/${view}?project=testproject`);await expect(page.getByText('测试会话',{exact:true})).toBeVisible();}
-export async function checkNode(page:Page,name='测试分表'){const node=page.locator('.object-panel .ant-tree-treenode').filter({hasText:name});await node.locator('.ant-tree-checkbox').click();}
-export async function query(page:Page){await page.getByRole('button',{name:/查\s*询/}).click();await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();await expect(page.locator('.report-chart canvas').first()).toBeVisible();}
+export async function openView(page:Page,view:string){await page.goto(`/#/${view}?project=testproject`);await expect(page.locator('.content-frame')).toBeVisible();}
+export async function openObjects(page:Page){if(!await page.locator('.object-panel').isVisible())await page.locator('.object-select-button').click();await expect(page.locator('.object-panel')).toBeVisible();}
+export async function closeObjects(page:Page){if(await page.locator('.object-selector-drawer.ant-drawer-open').count())await page.locator('.object-selector-drawer .ant-drawer-footer .ant-btn').click();await expect(page.locator('.object-panel')).toBeHidden();}
+export async function openMoreFilters(page:Page){if(!await page.locator('.advanced-query-fields').isVisible())await page.locator('.filter-actions .ant-btn').last().click();await expect(page.locator('.advanced-query-fields')).toBeVisible();}
+export async function closeMoreFilters(page:Page){if(await page.locator('.advanced-query-drawer.ant-drawer-open').count())await page.locator('.advanced-query-drawer .ant-drawer-footer .ant-btn').click();await expect(page.locator('.advanced-query-fields')).toBeHidden();}
+export async function checkNode(page:Page,name='测试分表'){await openObjects(page);const node=page.locator('.object-panel .ant-tree-treenode').filter({hasText:name});await node.locator('.ant-tree-checkbox').click();await closeObjects(page);}
+export async function query(page:Page){await closeObjects(page);await closeMoreFilters(page);await page.getByRole('button',{name:/查\s*询/}).click();await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();await expect(page.locator('.report-chart canvas').first()).toBeVisible();}

@@ -30,7 +30,7 @@ function Get-SeedSdk {
         }
         # SDK Pod and JVM archives are static code only; compiled finSeed is local.
         Get-ChildItem -LiteralPath (Join-Path $seedSource 'lib\fan') -Filter '*.pod' -File |
-            Where-Object Name -ne 'finSeed.pod' | ForEach-Object {
+            Where-Object { $_.Name -notin @('finSeed.pod', 'enerCubix.pod') } | ForEach-Object {
                 $seedTarget = Join-Path $seedDestination "lib\fan\$($_.Name)"
                 if (-not (Test-Path -LiteralPath $seedTarget)) { Copy-Item -LiteralPath $_.FullName -Destination $seedTarget }
             }

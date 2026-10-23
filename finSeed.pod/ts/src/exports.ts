@@ -1,5 +1,7 @@
+import {serverMessage,t} from './i18n';
+import {productName} from './brand';
 import type {FinPoint,ReportRequest,ReportResult,ReportSnapshot,SeedRecord} from './types';
-import {buildReportDisplay,readableReportValue,reportCellText,reportLabels} from './reportDisplay';
+import {displaySeriesName,buildReportDisplay,readableReportValue,reportCellText,reportLabel} from './reportDisplay';
 export function makeSnapshot(request:ReportRequest,result:ReportResult,title:string,project:string,now=new Date(),records:SeedRecord[]=[],points:FinPoint[]=[]):ReportSnapshot {
  return structuredClone({request,result,title,project,generatedAt:now.toISOString(),display:buildReportDisplay(records,points)});
 }
@@ -15,20 +17,20 @@ export function cellText(value:unknown):string {if(value===null||value===undefin
 export function reportTables(snapshot:ReportSnapshot){
  const rows=snapshot.result.rows;
  const keys=Array.from(new Set(rows.flatMap(row=>Object.keys(row)))).filter(key=>key!=='key'&&key!=='id');
- return {headers:keys.map(key=>reportLabels[key]||key),rows:rows.map(row=>keys.map(key=>reportCellText(snapshot,key,row[key],true))),series:[['对象','单位','时间','值','质量','源点'],...snapshot.result.series.flatMap(series=>series.points.map(point=>[series.name,series.unit,point.ts,point.value===null?'—':String(point.value),point.quality,reportCellText(snapshot,'sourceIds',point.sourceIds)]))]};
+ return {headers:keys.map(key=>reportLabel(snapshot,key)),rows:rows.map(row=>keys.map(key=>reportCellText(snapshot,key,row[key],true))),series:[[t("对象"),t("单位"),t("时间"),t("值"),t("质量"),t("源点")],...snapshot.result.series.flatMap(series=>series.points.map(point=>[displaySeriesName(series),t(series.unit),point.ts,point.value===null?'—':String(point.value),point.quality,reportCellText(snapshot,'sourceIds',point.sourceIds)]))]};
 }
 function download(blob:Blob,name:string){const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function filename(snapshot:ReportSnapshot,extension:string){return `${snapshot.title}_${snapshot.project}_${snapshot.generatedAt.slice(0,10)}.${extension}`.replace(/[\\/:*?"<>|]/g,'_');}
-const meta=(s:ReportSnapshot)=>[['项目',s.project],['报表',s.title],['分类筛选',s.categoryNames?.join('、')||'全部能源类型'],['区间起始（含）',s.result.from],['区间结束（不含）',s.result.to],['生成时间',s.generatedAt],['查询条件',JSON.stringify(readableReportValue(s,'',s.request))],['汇总',JSON.stringify(readableReportValue(s,'',s.result.summary))],['分析结果',JSON.stringify(readableReportValue(s,'',s.result.extra||{}))],['提示',s.result.warnings.join('\n')]];
+const meta=(s:ReportSnapshot)=>[[t("产品"),productName],[t("项目"),s.project],[t("报表"),s.title],[t("分类筛选"),s.categoryNames?.join('、')||t("全部能源类型")],[t("区间起始（含）"),s.result.from],[t("区间结束（不含）"),s.result.to],[t("生成时间"),s.generatedAt],[t("查询条件"),JSON.stringify(readableReportValue(s,'',s.request))],[t("汇总"),JSON.stringify(readableReportValue(s,'',s.result.summary))],[t("分析结果"),JSON.stringify(readableReportValue(s,'',s.result.extra||{}))],[t("提示"),s.result.warnings.map(serverMessage).join('\n')]];
 export async function exportXlsx(snapshot:ReportSnapshot){
- const {Workbook}=await import('exceljs');const book=new Workbook();book.creator='FIN Seed';book.created=new Date(snapshot.generatedAt);const tables=reportTables(snapshot);
- for(const [name,data]of [['报表信息',meta(snapshot)],['统计明细',[tables.headers,...tables.rows]],['时序与质量',tables.series]] as [string,string[][]][]){const sheet=book.addWorksheet(name);sheet.addRows(data);sheet.views=[{state:'frozen',ySplit:1}];sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF155C88'}};sheet.columns.forEach(column=>column.width=24);sheet.eachRow(row=>row.alignment={vertical:'top',wrapText:true});}
+ const {Workbook}=await import('exceljs');const book=new Workbook();book.creator=productName;book.created=new Date(snapshot.generatedAt);const tables=reportTables(snapshot);
+ for(const [name,data]of [[t("报表信息"),meta(snapshot)],[t("统计明细"),[tables.headers,...tables.rows]],[t("时序与质量"),tables.series]] as [string,string[][]][]){const sheet=book.addWorksheet(name);sheet.addRows(data);sheet.views=[{state:'frozen',ySplit:1}];sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF137F7A'}};sheet.columns.forEach(column=>column.width=24);sheet.eachRow(row=>row.alignment={vertical:'top',wrapText:true});}
  const buffer=await book.xlsx.writeBuffer();download(new Blob([buffer as BlobPart],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),filename(snapshot,'xlsx'));
 }
 export async function exportDocx(snapshot:ReportSnapshot){
  const {Document,Packer,Paragraph,TextRun,Table,TableRow,TableCell,WidthType,HeadingLevel}=await import('docx');const data=reportTables(snapshot);
  const table=(rows:string[][])=>new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:rows.map((row,index)=>new TableRow({children:row.map(text=>new TableCell({children:[new Paragraph({children:[new TextRun({text,bold:index===0,size:18})]})]}))}))});
- const doc=new Document({creator:'FIN Seed',title:snapshot.title,styles:{default:{document:{run:{font:'Microsoft YaHei',size:20}}}},sections:[{properties:{page:{size:{orientation:'landscape'},margin:{top:700,bottom:700,left:700,right:700}}},children:[new Paragraph({text:snapshot.title,heading:HeadingLevel.TITLE}),...meta(snapshot).map(([key,value])=>new Paragraph(`${key}：${value}`)),new Paragraph({text:'统计明细',heading:HeadingLevel.HEADING_1}),...(data.headers.length?[table([data.headers,...data.rows])]:[new Paragraph('无统计明细')]),new Paragraph({text:'时序与质量',heading:HeadingLevel.HEADING_1}),table(data.series)]}]});
+ const doc=new Document({creator:productName,title:snapshot.title,styles:{default:{document:{run:{font:'Microsoft YaHei',size:20}}}},sections:[{properties:{page:{size:{orientation:'landscape'},margin:{top:700,bottom:700,left:700,right:700}}},children:[new Paragraph({text:snapshot.title,heading:HeadingLevel.TITLE}),...meta(snapshot).map(([key,value])=>new Paragraph(`${key}：${value}`)),new Paragraph({text:t("统计明细"),heading:HeadingLevel.HEADING_1}),...(data.headers.length?[table([data.headers,...data.rows])]:[new Paragraph(t("无统计明细"))]),new Paragraph({text:t("时序与质量"),heading:HeadingLevel.HEADING_1}),table(data.series)]}]});
  download(await Packer.toBlob(doc),filename(snapshot,'docx'));
 }
 function prepareReport(element:HTMLElement){
@@ -45,14 +47,14 @@ export async function exportImage(snapshot:ReportSnapshot,element:HTMLElement){
  try{
   // PNG is an explicitly scoped chart-and-summary image. Full rows remain in XLSX, DOCX and paginated PDF.
   clone.querySelectorAll('.ant-table-wrapper,.table-heading,.quality-details').forEach(node=>node.remove());
-  const sources=document.createElement('div');sources.className='snapshot-foot';const heading=document.createElement('strong');heading.textContent='图表质量与来源摘要';sources.appendChild(heading);snapshot.result.series.forEach(series=>{const line=document.createElement('p');line.textContent=`${series.name}：${Array.from(new Set(series.points.map(point=>point.quality))).join('、')}；源点：${reportCellText(snapshot,'sourceIds',Array.from(new Set(series.points.flatMap(point=>point.sourceIds))))||'未提供'}`;sources.appendChild(line);});clone.appendChild(sources);
-  const note=document.createElement('p');note.className='snapshot-foot';note.textContent=`图片范围：图表与摘要。完整 ${snapshot.result.rows.length} 条统计记录与时序质量、源点明细请导出 Excel、Word 或 PDF。`;clone.appendChild(note);
-  const height=clone.scrollHeight;if(height*1.5>30000)throw new Error('图表摘要超过图片尺寸限制，请使用分页 PDF 或完整 Excel / Word 导出。');
+  const sources=document.createElement('div');sources.className='snapshot-foot';const heading=document.createElement('strong');heading.textContent=t("图表质量与来源摘要");sources.appendChild(heading);snapshot.result.series.forEach(series=>{const line=document.createElement('p');line.textContent=t("{0}：{1}；源点：{2}",series.name,Array.from(new Set(series.points.map(point=>point.quality))).join('、'),reportCellText(snapshot,'sourceIds',Array.from(new Set(series.points.flatMap(point=>point.sourceIds))))||t("未提供"));sources.appendChild(line);});clone.appendChild(sources);
+  const note=document.createElement('p');note.className='snapshot-foot';note.textContent=t("图片范围：图表与摘要。完整 {0} 条统计记录与时序质量、源点明细请导出 Excel、Word 或 PDF。",snapshot.result.rows.length);clone.appendChild(note);
+  const height=clone.scrollHeight;if(height*1.5>30000)throw new Error(t("图表摘要超过图片尺寸限制，请使用分页 PDF 或完整 Excel / Word 导出。"));
   const url=await toPng(clone,{backgroundColor:'#fff',pixelRatio:1.5,style:{position:'static',left:'0',top:'0'}});const a=document.createElement('a');a.href=url;a.download=filename(snapshot,'png');a.click();
  }finally{clone.remove();}
 }
 export async function exportPdf(snapshot:ReportSnapshot,element:HTMLElement){
- const [{toPng},{jsPDF}]=await Promise.all([import('html-to-image'),import('jspdf')]);const clone=prepareReport(element);const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true});const margin=10;const imageWidth=doc.internal.pageSize.getWidth()-margin*2;const usable=doc.internal.pageSize.getHeight()-margin*2;
+ const [{toPng},{jsPDF}]=await Promise.all([import('html-to-image'),import('jspdf')]);const clone=prepareReport(element);const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true});doc.setProperties({creator:productName,title:snapshot.title});const margin=10;const imageWidth=doc.internal.pageSize.getWidth()-margin*2;const usable=doc.internal.pageSize.getHeight()-margin*2;
  const viewport=document.createElement('div');const width=clone.scrollWidth;Object.assign(viewport.style,{position:'fixed',left:'-100000px',top:'0',width:`${width}px`,overflow:'hidden',background:'#fff'});document.body.appendChild(viewport);Object.assign(clone.style,{position:'relative',left:'0',top:'0',margin:'0'});viewport.appendChild(clone);
  try{
   const height=clone.scrollHeight;const pagePixels=usable*width/imageWidth;const top=clone.getBoundingClientRect().top;

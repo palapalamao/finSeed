@@ -25,6 +25,9 @@ class SeedRepo
   }
 
   [Str:Obj?][] records()
+  { SeedNativeEquipRepo(this).records(rawRecords) }
+
+  [Str:Obj?][] rawRecords(Bool recovery := false)
   {
     mustRead
     if (!revisionRead)
@@ -32,7 +35,13 @@ class SeedRepo
       revision = cx.db.readById(Ref("finseed-config-revision"),false)
       revisionRead = true
     }
-    return cx.db.readAllList(Filter.has("seed").and(Filter.has("seedKind"))).findAll |r| { cx.canRead(r) }.map |r->[Str:Obj?]| { decode(r) }
+    return cx.db.readAllList(Filter.has("seedKind").and(Filter.has("seed").or(Filter.has("equip")))).findAll |r|
+    {
+      if (!cx.canRead(r)) return false
+      // Recovery bodies are not application data. Avoid parsing every archived
+      // snapshot on every report/catalog read; rollback opts in explicitly.
+      return recovery || !(r["seedConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")
+    }.map |r->[Str:Obj?]| { decode(r) }
   }
 
   [Str:Obj?] catalog()
@@ -41,8 +50,11 @@ class SeedRepo
     source:=SeedNativeSpace.load(cx)
     projected:=source.project(all)
     info:=source.info(all)
-    return ["version":"0.2.6", "project":cx.proj.name, "user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
+    if (nativeModel) projected=SeedNativeEquipRepo(this).validateRead(projected)
+    return ["version":SeedRepo#.pod.version.toStr, "project":cx.proj.name, "user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":nativeModel ? "nativeEquip" : "legacy", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
   }
+
+  Bool nativeModel() { SeedNativeEquipRepo(this).active }
 
   [Str:Obj?][] liveRecords() { SeedNativeSpace.load(cx).project(records) }
 
@@ -61,6 +73,16 @@ class SeedRepo
   {
     mustWrite
     all := liveRecords
+    if (nativeModel && input["kind"] == "group") throw ArgErr("旧分析分组仅供历史报告读取，不再维护")
+    if (nativeModel && SeedRelations.meterKinds.contains(input["kind"]))
+    {
+      equipStore:=SeedNativeEquipRepo(this)
+      if (input["id"] == null && input["createVirtual"] == true) return equipStore.createVirtual(input)
+      rec:=equipStore.prepare(input)
+      equipStore.validate(rec,all.findAll |r| { r["id"] != rec["id"] }.dup.add(rec))
+      commit([equipStore.write(rec)])
+      return decode(stored(rec["id"].toStr))
+    }
     SeedNativeSpace.mustEditable(input["id"] as Str,all)
     rec := SeedNativeSpace.clean(input)
     kind := rec["kind"] as Str ?: ""
@@ -91,9 +113,10 @@ class SeedRepo
     SeedNativeSpace.mustEditable(id,all)
     prev := stored(id)
     checkMod(prev,mod)
+    if (nativeModel && prev["seedKind"] == "group") throw ArgErr("旧分组供历史报表兼容使用，不可删除")
     if (["job","alarm"].contains(prev["seedKind"])) throw ArgErr("任务和报警记录应保留以供追溯")
-    SeedConfig.canDelete(id, all)
-    commit([Diff(prev,null,Diff.remove)])
+    SeedConfig.canDelete(id, prev.has("equip") ? all.findAll |r| { r["kind"] != "nativePoint" && r["nativeReadonly"] != true } : all)
+    commit([prev.has("equip") ? Diff(prev,SeedNativeEquip.clear(prev)) : Diff(prev,null,Diff.remove)])
     return ["deleted":id]
   }
 
@@ -130,6 +153,15 @@ class SeedRepo
     {
       if (items.size != 1) throw ArgErr("每次复制一个对象")
       old:=all.find |r| { r["id"] == ids.first }
+      if (nativeModel)
+      {
+        target:=SeedNativeEquipRepo(this).equipment(input["targetId"] as Str ?: throw ArgErr("请选择已有目标设备"))
+        if (target.has("seedKind")) throw ArgErr("目标设备已经纳入能源分析")
+        copy:=old.dup; copy["id"]=target.id.id; copy["mod"]=input["targetMod"]; copy["name"]=target.dis
+        copy.remove("pointId"); copy.remove("expressionId"); copy.remove("canonicalId")
+        copy["pointId"]=input["pointId"]
+        return ["records":[save(copy)]]
+      }
       copy:=old.dup; copy.remove("id"); copy.remove("mod"); copy.remove("pointId"); copy.remove("canonicalId"); copy.remove("expressionId")
       copy["name"]=old["name"].toStr+" 副本 "+DateTime.nowTicks.toStr
       copy["includeInTotals"]=false
@@ -137,7 +169,9 @@ class SeedRepo
     }
     if (action == "previewDelete" || action == "delete")
     {
-      plan:=SeedTreePlan.deletion(all,ids)
+      // Unenrollment never cascades through a native physical hierarchy.
+      deleteScope:=nativeModel ? all.findAll |r| { r["kind"] != "nativePoint" && r["nativeReadonly"] != true } : all
+      plan:=SeedTreePlan.deletion(deleteScope,ids)
       selected:=SeedMath.maps(plan["records"])
       selected.each |r| { SeedNativeSpace.mustEditable(r["id"] as Str,all) }
       rev:=iso(revision?.get("mod")) ?: ""
@@ -149,7 +183,7 @@ class SeedRepo
       }
       if (input["revision"] != rev) throw SeedHttpErr(409,"CONFLICT","配置已变化，请重新查看删除预览")
       if (!((List)plan["blockers"]).isEmpty) throw ArgErr("仍被模板、公式或其他配置引用，请先解除预览中列出的关联")
-      diffs:=selected.map |r->Diff| { prev:=stored(r["id"].toStr); checkMod(prev,r["mod"]); return Diff(prev,null,Diff.remove) }
+      diffs:=selected.map |r->Diff| { prev:=stored(r["id"].toStr); checkMod(prev,r["mod"]); return prev.has("equip") ? Diff(prev,SeedNativeEquip.clear(prev)) : Diff(prev,null,Diff.remove) }
       commit(diffs)
       return ["deleted":selected.map |r->Str| { r["id"].toStr }]
     }
@@ -167,6 +201,18 @@ class SeedRepo
   private [Str:Obj?] saveBatch([Str:Obj?][] input, [Str:Obj?][] all)
   {
     if (input.isEmpty || input.size > 200) throw ArgErr("单次请保存 1 至 200 个对象")
+    if (nativeModel && input.any |r| { SeedRelations.meterKinds.contains(r["kind"]) })
+    {
+      if (input.any |r| { !SeedRelations.meterKinds.contains(r["kind"]) }) throw ArgErr("设备配置请与其他配置分别保存")
+      equipStore:=SeedNativeEquipRepo(this)
+      [Str:Obj?][] edits:=input.map |r->[Str:Obj?]| { equipStore.prepare(r) }
+      ids:=edits.map |r->Str| { r["id"].toStr }
+      if (ids.unique.size != ids.size) throw ArgErr("每台 FIN 设备只允许一个主能耗点，请明确选择")
+      candidate:=all.findAll |r| { !ids.contains(r["id"]) }.dup.addAll(edits)
+      edits.each |[Str:Obj?] r| { equipStore.validate(r,candidate) }
+      commit(edits.map |r->Diff| { equipStore.write(r) })
+      return ["records":ids.map |id->[Str:Obj?]| { decode(stored(id)) }]
+    }
     edits:=[Str:Obj?][,]; diffs:=Diff[,]; ids:=Str[,]
     input.each |data|
     {
@@ -210,6 +256,7 @@ class SeedRepo
   {
     mustWrite
     all := liveRecords
+    if (nativeModel && action != "toggle") throw ArgErr("请使用三树归属设置；复制配置需选择已有目标设备")
     SeedNativeSpace.mustEditable(id,all)
     prev := stored(id)
     checkMod(prev,mod)
@@ -224,6 +271,7 @@ class SeedRepo
         rec["kind"] = rec["kind"] == "meter" ? "totalMeter" : "meter"
       }
       SeedConfig.validate(rec, all)
+      if (nativeModel && prev.has("equip")) return ["records":[save(rec)]]
       commit([Diff(prev,encode(rec,prev))])
       return ["records":[decode(stored(id))]]
     }
@@ -295,7 +343,10 @@ class SeedRepo
     mustRead
     request := input.dup
     request["tz"] = cx.proj.meta["tz"] ?: "Shanghai"
+    SeedForecast.validate(request)
+    if (nativeModel) request=SeedNativeEquip.request(request,SeedNativeEquipRepo(this).mapping)
     all := input["dimension"] == "space" && input["spaceSource"] == "fin" ? liveRecords : records
+    if (nativeModel) all=SeedNativeEquipRepo(this).validateRead(all)
     return SeedEngine.report(request,all,SeedHistory.load(cx,request,all))
   }
 
@@ -312,6 +363,7 @@ class SeedRepo
   [Str:Obj?] migration([Str:Obj?] input)
   {
     mustWrite
+    if (input["target"] != "threeTree") return SeedNativeEquipRepo(this).migrate(input)
     all:=records
     action:=input["action"] as Str ?: "preview"
     if (action == "rollback") return rollbackMigration(input,all)
@@ -506,7 +558,7 @@ class SeedRepo
     if (!r.has("his")) throw ArgErr("点位尚未启用 FIN 历史记录")
   }
 
-  private Void commit(Diff[] changes, Bool event := false)
+  internal Void commit(Diff[] changes, Bool event := false)
   {
     if (!event)
     {
@@ -525,13 +577,14 @@ class SeedRepo
     revisionRead = false
   }
 
-  private static Void checkMod(Dict previous, Obj? mod)
+  internal static Void checkMod(Dict previous, Obj? mod)
   {
     if (mod == null || iso(previous["mod"]) != mod.toStr) throw SeedHttpErr(409,"CONFLICT","配置已被修改，请刷新后重试")
   }
 
-  private Dict encode([Str:Obj?] rec, Dict? old := null)
+  internal Dict encode([Str:Obj?] rec, Dict? old := null)
   {
+    if (old?.has("equip") == true) return SeedNativeEquip.tags(rec,old,cx.user.username)
     data := SeedNativeSpace.clean(rec)
     data.remove("id"); data.remove("mod")
     tags := Str:Obj?["seed":Marker.val,"seedKind":rec["kind"],"dis":rec["name"],"seedUpdatedBy":cx.user.username,"seedUpdatedAt":DateTime.now]
@@ -541,7 +594,7 @@ class SeedRepo
       if (val != null && !val.isEmpty) tags[tag] = Ref.fromStr(val)
       else if (old?.has(tag) == true) tags[tag] = Remove.val
     }
-    // Persist expression and template dependencies as native Folio Ref lists too.
+    // Persist expression and template dependencies as equipStore Folio Ref lists too.
     refs := Ref[,]
     vars := data["variables"] as Map
     if (vars != null) vars.each |v| { refs.add(Ref.fromStr(v.toStr)) }
@@ -553,7 +606,7 @@ class SeedRepo
         values := template[key] as List
         if (values != null) values.each |v| { refs.add(Ref.fromStr(v.toStr)) }
       }
-      ["xId","yId"].each |key| { if (template[key] != null) refs.add(Ref.fromStr(template[key].toStr)) }
+      ["xId","yId","baselineId"].each |key| { if (template[key] != null) refs.add(Ref.fromStr(template[key].toStr)) }
     }
     if (!refs.isEmpty) tags["seedDependencyRefs"] = refs.unique
     else if (old?.has("seedDependencyRefs") == true) tags["seedDependencyRefs"] = Remove.val
@@ -565,6 +618,7 @@ class SeedRepo
 
   static [Str:Obj?] decode(Dict rec)
   {
+    if (rec.has("equip")) return SeedNativeEquip.decode(rec)
     data := (Str:Obj?)JsonInStream((rec["seedConfig"] as Str ?: "{}").in).readJson
     refTags.each |tag,key| { if (rec[tag] is Ref) data[key] = ((Ref)rec[tag]).id }
     data["id"] = rec.id.id

@@ -112,6 +112,7 @@ internal class SeedMath
   {
     if (period == "hour") return floorHour(t)
     if (period == "day") return t.date.toDateTime(Time.defVal,t.tz)
+    if (period == "week") return (t.date-Duration((isoDay(t)-1)*1day.ticks)).toDateTime(Time.defVal,t.tz)
     if (period == "month") return Date(t.year,t.month,1).toDateTime(Time.defVal,t.tz)
     return Date(t.year,Month.jan,1).toDateTime(Time.defVal,t.tz)
   }
@@ -120,6 +121,7 @@ internal class SeedMath
   {
     if (period == "hour") return t + 1hr
     if (period == "day") return (t.date + 1day).toDateTime(Time.defVal,t.tz)
+    if (period == "week") return (t.date + 7day).toDateTime(Time.defVal,t.tz)
     if (period == "month")
     {
       month := t.month.ordinal + 1

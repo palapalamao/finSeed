@@ -50,7 +50,7 @@ const class SeedRest : WebMod
     catch (ParseErr e) { send(400,["ok":false,"error":["code":"INVALID","msg":"请求格式无效"]]) }
     catch (Err e)
     {
-      Log.get("finSeed").err("FIN Seed request failed",e)
+      Log.get("enerCubix").err("EnerCubix request failed",e)
       send(500,["ok":false,"error":["code":"INTERNAL","msg":"处理失败，请查看 FIN 日志"]])
     }
   }

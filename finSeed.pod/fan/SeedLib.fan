@@ -6,10 +6,17 @@ using util
 const class SeedLib
 {
   @Axon
-  static Str seedAppUri() { "/api/"+Context.cur.proj.name+"/ext/finSeed/" }
+  static Str enerCubixAppUri() { "/api/"+Context.cur.proj.name+"/ext/enerCubix/" }
+
+  ** Compatibility entry point for existing saved Axon expressions.
+  @Axon
+  static Str seedAppUri() { enerCubixAppUri() }
 
   @Axon
-  static Dict seedInfo() { Etc.makeDict(["pod":"finSeed","version":"0.2.6","user":Context.cur.user.username]) }
+  static Dict enerCubixInfo() { Etc.makeDict(["pod":SeedLib#.pod.name,"version":SeedLib#.pod.version.toStr,"user":Context.cur.user.username]) }
+
+  @Axon
+  static Dict seedInfo() { enerCubixInfo() }
 
   @Axon { admin=true }
   static Dict seedNativeSpaceAcceptance() { jsonResult(SeedNativeSpaceAcceptance(Context.cur).run) }
@@ -21,6 +28,12 @@ const class SeedLib
   ** Bounded read-only native navigation metadata for deployment verification.
   @Axon
   static Dict seedNativeSpaceInfo() { jsonResult(SeedRepo(Context.cur).nativeSpaceInfo) }
+
+  @Axon { admin=true }
+  static Dict seedNativeEquipAcceptance() { jsonResult(SeedNativeEquipAcceptance(Context.cur).run) }
+
+  @Axon { admin=true }
+  static Dict seedNativeEquipStageAcceptance() { jsonResult(SeedNativeEquipAcceptance(Context.cur).run(true)) }
 
   @Axon { admin=true }
   static Dict seedSaveConfig(Str json)

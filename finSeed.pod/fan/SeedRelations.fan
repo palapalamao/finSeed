@@ -14,7 +14,7 @@ const class SeedRelations
       if (target == null || target.isEmpty) return
       if (!meterKinds.contains(rec["kind"])) throw ArgErr("仅计量对象可以设置归属关系")
       other:=all.find |r| { r["id"] == target }
-      if (other == null || !expected.contains(other["kind"])) throw ArgErr("引用的归属对象不存在或类型不符")
+      if (other == null || (!expected.contains(other["kind"]) && !(key == "spaceId" && other["nativeEquip"] == true))) throw ArgErr("引用的归属对象不存在或类型不符")
       if (key == "meterParentId" || key == "canonicalId")
       {
         if (other["canonicalId"] != null) throw ArgErr("请选择计量主档案，不可引用兼容别名")

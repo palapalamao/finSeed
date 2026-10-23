@@ -88,6 +88,7 @@ class SeedHistory
     byTime:=Int:HisItem[:]; items.each |item| { byTime[item.ts.ticks]=item }
     sorted:=byTime.vals.sort |a,b| { a.ts <=> b.ts }
     out:=[Str:Obj?]["pointId":point.id.toStr,"unit":point["unit"]?.toStr ?: "","mode":mode,"quality":"ok"]
+    out["simulated"]=point.has("simulated")
     samples:=[Str:Obj?][,]
     rawSamples:=sorted.map |item->[Str:Obj?]| { ["ts":item.ts.toTimeZone(from.tz).toIso,"value":number(item.val)] }
     out["rawSamples"]=rawSamples; out["rawQuality"]="ok"

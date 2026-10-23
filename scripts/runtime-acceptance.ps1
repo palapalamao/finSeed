@@ -30,7 +30,7 @@ Invoke-SeedAcceptanceStep 'native-space-refresh-and-isolation' 'finseed-acceptan
 Invoke-SeedAcceptanceStep 'engineering-atomic-operations' 'finseed-acceptance-local' 'seedEngineeringAcceptance()'
 Invoke-SeedAcceptanceStep 'real-http-business-routes' 'finseed-acceptance-local' 'seedTransportAcceptance()'
 Invoke-SeedAcceptanceStep 'native-readonly-permissions' 'finseed-acceptance-reader' 'seedPermissionAcceptance()'
-$seedRuntimePod = Join-Path $seedRoot '.local\runtime-sdk\lib\fan\finSeed.pod'
+$seedRuntimePod = Join-Path $seedRoot '.local\runtime-sdk\lib\fan\enerCubix.pod'
 $seedSummary = [ordered]@{ checkedAt = [DateTime]::UtcNow.ToString('o'); targetFin = '5.3.0.2761'; project = 'finseed_acceptance'; podSha256 = (Get-FileHash -LiteralPath $seedRuntimePod -Algorithm SHA256).Hash.ToLowerInvariant(); status = 'passed'; checks = $seedChecks; browserScope = 'Native HTTP and audited FIN identity are checked here. Separate browser suites distinguish controlled API fixtures from real FIN business responses through the audited loopback bridge; they do not certify native browser-cookie login.' }
 [IO.File]::WriteAllText((Join-Path $seedRoot 'out\runtime-acceptance.json'), ($seedSummary | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
 Write-Output 'Native FIN calculation, persistence, real HTTP routes and readonly permissions passed. See out/runtime-acceptance.json.'

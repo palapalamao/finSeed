@@ -8,7 +8,7 @@ try {
     $env:FAN_HOME = $seedSdk
     Push-Location $seedRoot
     try {
-        Invoke-SeedCommand (Join-Path $seedSdk 'bin\fant.bat') @('finSeed')
+        Invoke-SeedCommand (Join-Path $seedSdk 'bin\fant.bat') @('enerCubix')
         Invoke-SeedCommand 'npm.cmd' @('--prefix', 'finSeed.pod/ts', 'test', '--', '--run')
         Invoke-SeedCommand 'npm.cmd' @('--prefix', 'finSeed.pod/ts', 'run', 'build')
     }

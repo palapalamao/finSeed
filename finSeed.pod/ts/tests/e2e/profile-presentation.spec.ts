@@ -12,7 +12,7 @@ async function setup(page:Page,branches=4,missing=false){
  const request:ReportRequest={kind:'profile',dimension:'metering',nodeIds:meters.map(m=>m.id),from:'2026-10-01T00:00:00+08:00',to:'2026-10-03T00:00:00+08:00',period:'day',metric:'energy',perArea:false};
  records.push({id:'readable-template',kind:'template',name:'10F两日概况',request});
  const state=await installTransport(page,{records});
- await page.route('**/api/testproject/ext/finSeed/v1/report',async route=>{
+ await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   const current=route.request().postDataJSON() as ReportRequest;state.requests.push({path:'report',body:current as unknown as Record<string,unknown>});
   const series=meters.map((m,i)=>({id:m.id+'|'+category,nodeId:m.id,name:m.name,categoryId:category,unit:'kWh',points:[{ts:current.from,value:10.12345+i,quality:'ok',sourceIds:[m.pointId]},{ts:'2026-10-02T00:00:00+08:00',value:missing?null:20.45678+i,quality:missing?'missing':'ok',sourceIds:[m.pointId]}]}));
   const result:ReportResult={kind:current.kind,from:current.from,to:current.to,period:current.period,series,rows:series.flatMap(s=>s.points.map(p=>({key:s.id+p.ts,nodeId:s.nodeId,name:s.name,categoryId:category,...p,unit:'kWh'}))),summary:{totals:series.map((s,i)=>({id:s.id,name:s.name,value:missing?null:30.58023+2*i,quality:missing?'missing':'ok',unit:'kWh'}))},warnings:[],extra:{details:meters.map(m=>({scopeId:master,nodeId:m.id,name:m.name,categoryId:category,sourceIds:[m.pointId],value:12.12345}))}};

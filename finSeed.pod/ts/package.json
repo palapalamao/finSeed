@@ -1,7 +1,7 @@
 {
-  "name": "fin-seed-ui",
+  "name": "enercubix-ui",
   "private": true,
-  "version": "0.2.6",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",

@@ -66,15 +66,15 @@ const class SeedHttpProbe : WebMod
     migration:=(Map)ok(call("migration/preview"))
     if (migration["revision"] == null || migration["sourceRevision"] == null) throw Err("Migration preview revision missing")
     checks["HTTP three dimensions and migration preview"]=true
-    shell:=call("/api/finseed_acceptance/ext/finSeed/")
+    shell:=call("/api/finseed_acceptance/ext/enerCubix/")
     expect(shell,302)
-    if (shell["location"] != "/pod/finSeed/res/web/seed/index.html#/dashboard?project=finseed_acceptance") throw Err("Native application entry redirect mismatch")
-    entry:=call("/pod/finSeed/res/web/seed/index.html")
+    if (shell["location"] != "/pod/enerCubix/res/web/seed/index.html#/dashboard?project=finseed_acceptance") throw Err("Native application entry redirect mismatch")
+    entry:=call("/pod/enerCubix/res/web/seed/index.html")
     expect(entry,200)
     module:=entry["module"] as Str ?: throw Err("Packed SPA module missing")
     if (module.startsWith("./")) module=module[2..-1]
     if (!module.startsWith("modules/") || module.contains("..")) throw Err("Invalid SPA module path")
-    moduleResponse:=call("/pod/finSeed/res/web/seed/"+module)
+    moduleResponse:=call("/pod/enerCubix/res/web/seed/"+module)
     expect(moduleResponse,200)
     if (!moduleResponse["contentType"].toStr.contains("javascript")) throw Err("Native SPA module MIME type is not JavaScript")
     attest:=call("/finStackAuth",Str:Obj?[:])
@@ -141,7 +141,7 @@ const class SeedHttpProbe : WebMod
   {
     client:=WebClient()
     client.followRedirects=false
-    relative := path.startsWith("/") ? path : "/api/finseed_acceptance/ext/finSeed/v1/"+path
+    relative := path.startsWith("/") ? path : "/api/finseed_acceptance/ext/enerCubix/v1/"+path
     client.reqUri=("http://127.0.0.1:38085"+relative).toUri
     if (authenticate) client.reqHeaders["Authorization"]=req.headers["Authorization"]
     client.reqHeaders["Accept"]="application/json"
