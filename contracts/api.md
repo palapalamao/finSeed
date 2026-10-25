@@ -223,3 +223,15 @@ GET `alarms` 每次持续超限返回一行，包括 episodeStartTs、lastTs、r
 - 分表堆积显示当前成员的已有量。一个分表缺测不补零，也不清空其他分表已有段；严格差额和漏损资格继续受数据完整性、独立来源、单位及权限约束。
 - 虚拟总表的后台计算、表计自有历史和原始读数保护保留。普通查询不会重新计算或改写已发布结果；后续生成和显式重算不读取历史关系配置，发布证据中的配置指纹来自当前计算配置。
 - 自动汇总的 `includeInTotals` 及去重规则保持原语义。关系日志不提供另一套计算模式，也不要求普通用户确认或导入恢复凭据。
+
+### 消息中心重要变更（开发分支，未部署）
+
+GET `messages/changes?offset=0&limit=30` 返回 `{items:ChangeMessage[],total,offset,limit}`。`offset` 为非负整数，`limit` 为 1–200，默认30；非法范围返回400。沿用现有 `{ok:true,data:...}` 响应包装。只读接口不确认、不重算、不改写配置或日志；现有 `alarms` 与 `alarms/ack` 保持原行为。
+
+`ChangeMessage` 为 `{id,ts,action,category,objectId,objectName,objectKind,actor?,changes:[{field,before,after}],detailsRestricted?}`。`action` 为 `created|updated|deleted`；`category` 为 `relationship|source|configuration`。一个对象 epoch 最多产生一条消息；同时包含多种字段时按 relationship、source、configuration 的优先级分类。按时间降序排列，同一时间以 epoch sequence 和不可变 epoch ID 稳定排序；分页总数在权限过滤后计算。分页期间发生新的提交时，offset 会随最新结果移动。
+
+消息由既有 `enerCubixMeterEpoch` 的相邻配置前后值投影，目前覆盖其已追踪的表计、传感器、分类、分项、公式、清洗方案、组织和空间。初始化快照不作为用户操作，同值及仅敏感／非重要字段变化不产生消息。新提交在 epoch 的独立 `enerCubixEpochActor` 标签记录当前 FIN 用户名；旧日志缺少操作者时不返回 actor，也不从配置推断。操作者与初始化标记不进入计算配置。
+
+仅返回白名单：当前归属引用、主点／公式绑定、公式与变量、对象名称／类型、autoSum、includeInTotals、historyMode、maximum、unit、清洗开关／方案／模式及受支持 parameters、报警开关／阈值。parameters 仅保留既有清洗参数名及受支持数值／单位结构，alarmLimits 仅保留 categoryId 与 limit；密码、令牌、凭据和整份旧配置不返回。
+
+当前无权读取的对象不返回消息；当前已删除对象的日志仅管理员可见。历史引用按当前对象权限重新检查，包括旧父引用、公式 variables、alarmLimits 内引用；失效、无权或不支持的嵌套引用字段整项省略，并返回 `detailsRestricted:true`，不暴露引用 ID、缓存名称或部分旧值。单条损坏 epoch 仅记服务端通用告警；其后的未知旧值不冒充新建或已知变更，后续有效快照重新建立比较基线。消息投影不被报告、选表或虚拟表计算使用。

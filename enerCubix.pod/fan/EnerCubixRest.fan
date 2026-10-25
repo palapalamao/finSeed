@@ -13,7 +13,7 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["catalog","points","alarms","tree","migration/preview"].contains(route)
+      readOnly := ["catalog","points","alarms","messages/changes","tree","migration/preview"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
@@ -41,6 +41,7 @@ const class EnerCubixRest : WebMod
         case "cleaning/preview": data=EnerCubixCleaningRepo(repo).preview(body)
         case "tasks": data=EnerCubixJobs(repo).run(body)
         case "alarms": data=repo.alarms
+        case "messages/changes": data=repo.changeMessages(Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "30"))
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw EnerCubixHttpErr(404,"NOT_FOUND","接口不存在")
       }

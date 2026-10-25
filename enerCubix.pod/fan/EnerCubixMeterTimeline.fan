@@ -15,7 +15,7 @@ internal class EnerCubixMeterTimeline
   }
 
   ** Append these to the same optimistic transaction as the engineering change.
-  static Diff[] capture(Folio db, Diff[] changes, DateTime at:=DateTime.now)
+  static Diff[] capture(Folio db, Diff[] changes, DateTime at:=DateTime.now, Str? actor:=null)
   {
     prior:=db.readById(key,false)
     before:=Str:Dict[:]
@@ -39,7 +39,7 @@ internal class EnerCubixMeterTimeline
     {
       diffs.add(Diff.makeAdd(Etc.makeDict(["enerCubixMeterTimeline":Marker.val,"enerCubixTimelineStart":at,"enerCubixTimelineRevision":Number(sequence),"dis":"EnerCubix meter history configuration"]),key))
       // Snapshot the committed post-change graph, starting only at this cutover.
-      after.each |record,id| { diffs.add(epoch(record.id,configuration(db,record),at,sequence)) }
+      after.each |record,id| { diffs.add(epoch(record.id,configuration(db,record),at,sequence,null,true)) }
       return diffs
     }
     ids:=before.keys.dup.addAll(after.keys).unique
@@ -47,7 +47,7 @@ internal class EnerCubixMeterTimeline
     {
       a:=before[id] == null ? null : configuration(db,before[id])
       b:=after[id] == null ? null : configuration(db,after[id])
-      if (json(a) != json(b)) diffs.add(epoch(Ref(id),b,at,sequence))
+      if (json(a) != json(b)) diffs.add(epoch(Ref(id),b,at,sequence,actor))
     }
     if (!diffs.isEmpty) diffs.add(Diff(prior,Etc.makeDict(["enerCubixTimelineRevision":Number(sequence)])))
     return diffs
@@ -144,9 +144,11 @@ internal class EnerCubixMeterTimeline
     return out
   }
   private static Str json(Obj? value) { JsonOutStream.writeJsonToStr(value) }
-  private static Diff epoch(Ref id, [Str:Obj?]? record, DateTime at, Int sequence)
+  private static Diff epoch(Ref id, [Str:Obj?]? record, DateTime at, Int sequence, Str? actor:=null, Bool initial:=false)
   {
     tags:=Str:Obj?["enerCubixMeterEpoch":Marker.val,"enerCubixRecordRef":id,"enerCubixEffectiveFrom":at,"enerCubixEpochSequence":Number(sequence),"dis":"EnerCubix meter configuration version"]
+    if (actor != null && !actor.trim.isEmpty) tags["enerCubixEpochActor"]=actor
+    if (initial) tags["enerCubixEpochInitial"]=Marker.val
     if (record == null) tags["enerCubixEpochRemoved"]=Marker.val
     else tags["enerCubixEpochConfig"]=json(record)
     return Diff.makeAdd(Etc.makeDict(tags))

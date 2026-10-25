@@ -589,6 +589,12 @@ class EnerCubixRepo
 
   [Str:Obj?][] alarms() { mustRead; return EnerCubixNativeAlarms(this).list }
 
+  [Str:Obj?] changeMessages(Int offset:=0, Int limit:=30)
+  {
+    mustRead
+    return EnerCubixChangeMessages.page(cx.db,|Dict r->Bool| { cx.canRead(r) },cx.user.isAdmin,offset,limit)
+  }
+
   private Void validatePoint([Str:Obj?] rec)
   {
     point := rec["pointId"] as Str
@@ -609,7 +615,7 @@ class EnerCubixRepo
     if (!event)
     {
       EnerCubixCleaningRepo(this).validateSaves(changes)
-      changes.addAll(EnerCubixMeterTimeline.capture(cx.db,changes))
+      changes.addAll(EnerCubixMeterTimeline.capture(cx.db,changes,DateTime.now,cx.user.username))
       // A shared optimistic revision serializes uniqueness/cycle checks across requests.
       key := Ref("enerCubix-config-revision")
       prior := revision
