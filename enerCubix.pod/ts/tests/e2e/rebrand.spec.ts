@@ -39,7 +39,7 @@ test('mobile workspace keeps navigation, language and object selection accessibl
  await page.setViewportSize({width:390,height:844});await installTransport(page);await openView(page,'profile');
  await expect(page.locator('.brand-wordmark')).toContainText('能源魔方');
  await page.getByRole('button',{name:'打开导航',exact:true}).click();
- await page.getByRole('dialog',{name:'主导航'}).getByRole('button',{name:'异常中心',exact:true}).click();
+ await page.getByRole('dialog',{name:'主导航'}).getByRole('button',{name:'消息中心',exact:true}).click();
  await expect(page.getByRole('heading',{name:'能耗报警',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'打开导航',exact:true}).click();
  await page.getByRole('dialog',{name:'主导航'}).getByRole('button',{name:'分析工作台',exact:true}).click();

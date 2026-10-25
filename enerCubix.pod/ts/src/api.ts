@@ -2,6 +2,7 @@ import {serverMessage,t} from './i18n';
 import {finCsrfFetch} from 'haystack-nclient';
 import type {Catalog,FinPoint,ReportRequest,ReportResult,EnerCubixRecord} from './types';
 import type {CleaningPreview} from './cleaning';
+import type {ChangeMessagePage} from './changeMessages';
 export class ApiError extends Error {constructor(public code:string,message:string){super(message);this.name='ApiError';}}
 export function unwrap<T>(value:unknown,status=200):T {
  if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"));
@@ -34,6 +35,7 @@ export class EnerCubixApi {
  migration=(body:Record<string,unknown>)=>this.request<{job:EnerCubixRecord|null;applied?:number}>('migration',body);
  report=(request:ReportRequest,signal?:AbortSignal)=>this.request<ReportResult>('report',request,signal);
  alarms=()=>this.request<EnerCubixRecord[]>('alarms');
+ changeMessages=(offset=0,limit=30,signal?:AbortSignal)=>this.request<ChangeMessagePage>(`messages/changes?offset=${offset}&limit=${limit}`,undefined,signal);
  ack=(record:EnerCubixRecord,note:string)=>this.request<EnerCubixRecord>('alarms/ack',{id:record.id,mod:record.mod,note});
  task=(body:{action:string;enabled?:boolean;from?:string;to?:string})=>this.request<EnerCubixRecord>('tasks',body);
 }

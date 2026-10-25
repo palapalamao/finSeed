@@ -5,7 +5,7 @@ import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import {BarChartOutlined,BellOutlined,DashboardOutlined,FileTextOutlined,MenuOutlined,ReloadOutlined,SettingOutlined,UserOutlined} from '@ant-design/icons';
 import {projectFromLocation,EnerCubixApi} from './api';
-import {Alarms} from './Alarms';
+import {MessageCenter} from './MessageCenter';
 import {Management,manageTitles,type ManageView} from './Management';
 import {ReportWorkspace} from './ReportWorkspace';
 import {analysisGroups} from './navigation';
@@ -15,12 +15,12 @@ import {version as uiVersion} from '../package.json';
 import {LanguageSwitcher} from './LanguageSwitcher';
 
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
-type View=ReportKind|ManageView|'alarms';
+type View=ReportKind|ManageView|'messages';
 const management:ManageView[]=['tree','categories','tariffs','calendars','expressions','copConfig','bindings','templates','tasks','settings','otherSettings'];
 const settingsViews:ManageView[]=management.filter(key=>key!=='templates');
 const reportViews:ReportKind[]=['dashboard','regression',...analysisGroups.flatMap(group=>group.kinds)];
 function readTemplate(){return new URLSearchParams(location.hash.split('?')[1]||'').get('template')||undefined;}
-function readView():View{const view=location.hash.slice(1).split('?')[0].replace(/^\//,'');return [...reportViews,'alarms',...management].includes(view as View)?view as View:'dashboard';}
+function readView():View{const view=location.hash.slice(1).split('?')[0].replace(/^\//,'');if(view==='alarms')return 'messages';return [...reportViews,'messages',...management].includes(view as View)?view as View:'dashboard';}
 
 export function App(){
  const[project,setProject]=useState(()=>projectFromLocation(location));
@@ -38,7 +38,7 @@ export function App(){
  useEffect(()=>{const update=()=>{setView(readView());setTemplateId(readTemplate());setProject(projectFromLocation(location));};window.addEventListener('hashchange',update);return()=>window.removeEventListener('hashchange',update);},[]);
  const configView=management.includes(view as ManageView);
  const settingsView=settingsViews.includes(view as ManageView);
- const analysisView=!configView&&view!=='dashboard'&&view!=='alarms';
+ const analysisView=!configView&&view!=='dashboard'&&view!=='messages';
  useEffect(()=>{if(analysisView)lastAnalysis.current=view as ReportKind;},[view,analysisView]);
  const navigate=(next:View,nextTemplate?:string)=>{setView(next);setTemplateId(nextTemplate);setMobileOpen(false);location.hash='/' + next + '?project=' + encodeURIComponent(project)+(nextTemplate?'&template='+encodeURIComponent(nextTemplate):'');};
  const version=catalog?.version||uiVersion;
@@ -46,7 +46,7 @@ export function App(){
   {key:'dashboard',label:t('总览'),icon:<DashboardOutlined/>,target:'dashboard' as View},
   {key:'analysis',label:t('分析工作台'),icon:<BarChartOutlined/>,target:(analysisView?view:lastAnalysis.current) as View},
   {key:'templates',label:t('报告模板'),icon:<FileTextOutlined/>,target:'templates' as View},
-  {key:'alarms',label:t('异常中心'),icon:<BellOutlined/>,target:'alarms' as View},
+  {key:'messages',label:t('消息中心'),icon:<BellOutlined/>,target:'messages' as View},
   {key:'configuration',label:t('设置'),icon:<SettingOutlined/>,target:'tree' as View}
  ];
  const selectedDestination=analysisView?'analysis':settingsView?'configuration':view;
@@ -71,7 +71,7 @@ export function App(){
      {error&&<Alert banner type="error" message={error}/>}
      <div className="content-frame">
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
-      {view==='alarms'?<Alarms api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
+      {view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
      </div>
     </>}
    </Layout.Content>
