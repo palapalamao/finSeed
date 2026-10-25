@@ -1,0 +1,47 @@
+name: "功能或开发任务 / Feature or task"
+description: "明确目标、负责人、边界和验收条件 / Define outcome, ownership and acceptance."
+title: "[Feature] "
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: "目标与用户价值 / Outcome and value"
+      description: "用户完成什么操作，会看到什么可观察的结果？ / What observable result will the user get?"
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "建议优先级 / Proposed priority"
+      options:
+        - "P1 当前周期重要任务 / Important this cycle"
+        - "P0 数据安全或核心流程阻断 / Data risk or core blocker"
+        - "P2 后续增强 / Later improvement"
+    validations:
+      required: true
+  - type: textarea
+    id: ownership
+    attributes:
+      label: "负责人和边界 / Owner and boundaries"
+      description: "单一交付负责人、执行聊天、允许修改的模块或文件、依赖任务及明确不做的内容。 / One delivery owner, execution chat, allowed scope, dependencies and exclusions."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "验收条件 / Acceptance criteria"
+      description: "写出操作、固定输入和预期结果；相关界面覆盖中英文及手机。 / Include actions, fixed inputs, expected results and applicable language/mobile checks."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: "验证方法和风险 / Verification and risk"
+      description: "需要哪些检查？是否涉及历史、统计、权限、迁移或部署？ / Which checks apply? Any history, calculation, permission, migration or deployment changes?"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: "设计和相关任务 / Design and related work"
+      description: "链接已确认的需求、设计或依赖，避免重新设计和重复开发。 / Link agreed requirements, designs and dependencies."

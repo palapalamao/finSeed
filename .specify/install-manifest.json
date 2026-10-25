@@ -1,0 +1,54 @@
+{
+  "tool": "github/spec-kit",
+  "version": "1.2.3",
+  "repository": "https://github.com/github/spec-kit",
+  "tag": "v1.2.3",
+  "sourceCommit": "5ea8b1cf0a38699340a38e00d02770308997d8c0",
+  "license": "MIT",
+  "installedOn": "2026-10-25",
+  "scope": "repository",
+  "integration": "codex",
+  "scriptType": "ps",
+  "preset": {
+    "id": "lean",
+    "version": "1.0.0"
+  },
+  "runtimeEventsInstalled": false,
+  "gitExtensionInstalled": false,
+  "githubExtensionInstalled": false,
+  "skills": [
+    ".agents/skills/speckit-analyze/SKILL.md",
+    ".agents/skills/speckit-checklist/SKILL.md",
+    ".agents/skills/speckit-clarify/SKILL.md",
+    ".agents/skills/speckit-constitution/SKILL.md",
+    ".agents/skills/speckit-converge/SKILL.md",
+    ".agents/skills/speckit-implement/SKILL.md",
+    ".agents/skills/speckit-plan/SKILL.md",
+    ".agents/skills/speckit-specify/SKILL.md",
+    ".agents/skills/speckit-tasks/SKILL.md",
+    ".agents/skills/speckit-taskstoissues/SKILL.md"
+  ],
+  "verified": {
+    "cliStarts": true,
+    "pythonDependencies": "pip check passed",
+    "integrationStatus": "warning: five expected upstream Lean overrides",
+    "missingManagedFiles": 0,
+    "invalidManifestPaths": 0,
+    "missingFeatureRejected": true,
+    "missingTasksRejected": true,
+    "completeFeatureAccepted": true,
+    "productRuntimeVerified": false
+  },
+  "skillSha256": {
+    ".agents/skills/speckit-analyze/SKILL.md": "fad1c37a451e017995b15fc3eefe243274642fbb3ff7c8a5ab021908df71aa93",
+    ".agents/skills/speckit-checklist/SKILL.md": "5c1dce9333a2b733422e2dc75de7fc4d63ba91a460833d14ef3966a672328b9d",
+    ".agents/skills/speckit-clarify/SKILL.md": "1e9de2b2a673c923f7ca650fc40e4d5f24654163c577e0f1ceb70edfaa08114b",
+    ".agents/skills/speckit-constitution/SKILL.md": "1d1e7309b160d58ca45550e7afd2ec363fbeae6ff878daa775519b359e4cb966",
+    ".agents/skills/speckit-converge/SKILL.md": "369e168cbcc9f903d1b8f3f360a32d24a7ebf3d07066b8676032cffcafbebd9e",
+    ".agents/skills/speckit-implement/SKILL.md": "067b84a7cf042d9e5d9103735e237a814acf3da21a622dd9eecf6cd709220d0e",
+    ".agents/skills/speckit-plan/SKILL.md": "5a5b0f811e49c55d3643f9a3915d03990fa8d308f13f6a3017101c2772742762",
+    ".agents/skills/speckit-specify/SKILL.md": "4b9a371177b4b1ad60ea8204b62a6da3cb6ca375bae0f92cd08888de87a4ba04",
+    ".agents/skills/speckit-tasks/SKILL.md": "1ce843e74629c61f49d82f13f59ca1624e6d86c74ab5e35b8ae59b33e5d7362c",
+    ".agents/skills/speckit-taskstoissues/SKILL.md": "47d5a13f2a39f2e40d8915feef7ff08cd36e08b176c7f28d107758e9e983b4d2"
+  }
+}

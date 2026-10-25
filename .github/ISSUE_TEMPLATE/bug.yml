@@ -1,0 +1,46 @@
+name: "缺陷报告 / Bug report"
+description: "先复现，再修复，最后核对原始问题 / Reproduce, fix, then verify the original symptom."
+title: "[Bug] "
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: "环境与版本 / Environment and version"
+      description: "源码或包版本、FIN 项目、浏览器、时区；不要提交密码或业务原始数据。 / Source/package version, FIN project, browser and timezone; exclude credentials and raw business data."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "复现步骤与固定输入 / Steps and fixed inputs"
+      description: "查询问题应列出最终表计集合、时间范围、数据截止、指标和清洗配置。 / For reports include effective meter set, range, data cutoff, metric and cleaning configuration."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "预期结果 / Expected result"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "实际结果及证据 / Actual result and evidence"
+      description: "附脱敏截图、输出或日志；明确已观察事实与推测。 / Attach redacted screenshots/output/logs and separate facts from hypotheses."
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: "影响 / Impact"
+      options:
+        - "P1 重要功能错误 / Important malfunction"
+        - "P0 数据安全、权限或核心流程阻断 / Data, permission or core blocker"
+        - "P2 非阻断问题 / Non-blocking issue"
+    validations:
+      required: true
+  - type: textarea
+    id: ownership
+    attributes:
+      label: "负责人和相关工作 / Owner and related work"
+      description: "由团队经理分配；指出是否已有其他任务处理同一问题。 / Assigned by the team manager; identify overlapping tasks."

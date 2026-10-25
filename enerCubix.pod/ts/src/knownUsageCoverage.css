@@ -1,0 +1,20 @@
+.usage-coverage{margin:24px 0;border-top:1px solid #dfe7eb;padding-top:20px;min-width:0}
+.usage-coverage-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px}
+.usage-coverage-heading h3{font-size:16px;color:#304c58;margin:0 0 5px}
+.usage-coverage-heading p,.usage-coverage-controls p,.usage-coverage-foot,.usage-coverage-note,.usage-coverage-raw>p{font-size:12px;color:#687e8b;line-height:1.8;margin:0}
+.usage-coverage-source{padding:14px 0;border-top:1px solid #edf1f3;min-width:0}
+.usage-coverage-source-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;overflow-wrap:anywhere}
+.usage-coverage-source-heading h4{font-size:14px;margin:0;color:#304c58}
+.usage-coverage-source-heading>span{font-size:12px;color:#687e8b}
+.usage-coverage-summary{display:grid;grid-template-columns:minmax(180px,.65fr) minmax(0,1.35fr);gap:14px 24px;margin:14px 0;font-variant-numeric:tabular-nums}
+.usage-coverage-summary dt{font-size:12px;color:#687e8b;margin-bottom:5px}.usage-coverage-summary dd{margin:0;font-size:15px;font-weight:600;color:#304c58}
+.usage-coverage-range{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-variant-numeric:tabular-nums}.usage-coverage-range time{white-space:nowrap}
+.usage-coverage-periods>summary{cursor:pointer;color:#137f7a;padding:6px 0;font-size:12px}.usage-coverage-periods>summary:focus-visible{outline:2px solid #137f7a;outline-offset:3px}
+.usage-coverage-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}
+.usage-coverage-controls label{display:flex;align-items:center;gap:7px;font-size:12px;white-space:nowrap}
+.usage-coverage-period-table{margin:12px 0}.usage-coverage-period-table .ant-table-cell{font-size:12px;vertical-align:top}
+.usage-coverage-period-table .usage-coverage-range{display:grid;gap:1px}.usage-coverage-period-table .usage-coverage-range>span{display:none}
+.usage-coverage-status{white-space:nowrap;color:#537b6e}.usage-coverage-partial,.usage-coverage-substituted{color:#94631d}.usage-coverage-missing,.usage-coverage-invalid,.usage-coverage-na{color:#a0523c}.usage-coverage-future,.usage-coverage-ongoing{color:#687e8b}
+.usage-coverage-number{white-space:nowrap;font-variant-numeric:tabular-nums}.usage-coverage-raw h5{margin:0 0 5px;font-size:12px}.usage-coverage-raw .ant-table-wrapper{margin-top:10px}
+.usage-coverage-foot{border-top:1px solid #edf1f3;padding-top:12px;margin-top:5px}
+@media(max-width:600px){.usage-coverage-heading{flex-wrap:wrap;gap:10px}.usage-coverage-summary{grid-template-columns:minmax(0,1fr);gap:12px}.usage-coverage-summary dd{font-size:14px}.usage-coverage-summary .usage-coverage-range{display:grid;gap:2px}.usage-coverage-summary .usage-coverage-range>span{display:none}}

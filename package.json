@@ -1,14 +1,14 @@
 {
   "name": "enercubix",
-  "version": "0.7.0",
+  "version": "0.11.8",
   "private": true,
   "description": "EnerCubix multidimensional energy analytics",
   "scripts": {
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
     "acceptance": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance.ps1",
-    "ui:dev": "npm --prefix finSeed.pod/ts run dev",
-    "ui:build": "npm --prefix finSeed.pod/ts run build",
-    "ui:test": "npm --prefix finSeed.pod/ts test"
+    "ui:dev": "npm --prefix enerCubix.pod/ts run dev",
+    "ui:build": "npm --prefix enerCubix.pod/ts run build",
+    "ui:test": "npm --prefix enerCubix.pod/ts test"
   }
 }

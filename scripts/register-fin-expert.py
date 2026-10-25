@@ -17,13 +17,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--credentials", type=Path, required=True)
-    parser.add_argument("--connection-id", default="finseed-acceptance-local")
-    parser.add_argument("--project", default="finseed_acceptance")
+    parser.add_argument("--connection-id", default="enerCubix-acceptance-local")
+    parser.add_argument("--project", default="enerCubix_acceptance")
     args = parser.parse_args()
     credentials = json.loads(args.credentials.read_text(encoding="utf-8-sig"))
     if credentials["url"].rstrip("/") != "http://127.0.0.1:38085":
         raise SystemExit("Refusing a non-isolated connection URL.")
-    if credentials["username"] not in {"finseed_test_admin", "finseed_test_reader"}:
+    if credentials["username"] not in {"enerCubix_test_admin", "enerCubix_test_reader"}:
         raise SystemExit("Refusing a non-test identity.")
 
     registry_path = args.workspace / "config.json"
@@ -53,7 +53,7 @@ def main() -> None:
             "live-connection", "set", "--id", args.connection_id,
             "--url", credentials["url"], "--project", args.project,
             "--username", credentials["username"],
-            "--display-name", "FIN Seed isolated acceptance", "--auth-policy", "scram",
+            "--display-name", "EnerCubix isolated acceptance", "--auth-policy", "scram",
         ]
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), warnings.catch_warnings():
             warnings.simplefilter("ignore")

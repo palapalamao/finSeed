@@ -19,20 +19,20 @@ def main() -> None:
     operation = request.pop("operation")
     runtime = ExpertRuntime(root=args.workspace)
     tools = ToolRegistry(runtime)
-    connection_id = request.pop("connection_id", "finseed-acceptance-local")
-    users = {"finseed-acceptance-local": "finseed_test_admin",
-             "finseed-acceptance-reader": "finseed_test_reader"}
+    connection_id = request.pop("connection_id", "enerCubix-acceptance-local")
+    users = {"enerCubix-acceptance-local": "enerCubix_test_admin",
+             "enerCubix-acceptance-reader": "enerCubix_test_reader"}
     if connection_id not in users:
         raise SystemExit("Only isolated acceptance connections are permitted.")
     connection = runtime.live_connections.get(connection_id)
     if (
         str(connection.base_url).rstrip("/") != "http://127.0.0.1:38085"
-        or connection.project != "finseed_acceptance"
+        or connection.project != "enerCubix_acceptance"
         or connection.username != users[connection_id]
     ):
         raise SystemExit("Refusing a target outside the isolated acceptance project.")
     request["connection_id"] = connection_id
-    request.setdefault("actor", "finseed-isolated-acceptance")
+    request.setdefault("actor", "enerCubix-isolated-acceptance")
     if operation == "test":
         result = tools.live_test_connection(connection_id, request["actor"])
     elif operation == "read":

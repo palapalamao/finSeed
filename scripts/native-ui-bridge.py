@@ -21,7 +21,7 @@ runtime = ExpertRuntime(root=Path(args.workspace))
 tools = ToolRegistry(runtime)
 audit_file = Path(__file__).resolve().parents[1] / "out/native-browser-audit.jsonl"
 routes = {"catalog", "points", "records", "records/delete", "tree/copy", "tree/move", "report", "tasks", "alarms", "alarms/ack"}
-users = {"finseed-acceptance-local": "finseed_test_admin", "finseed-acceptance-reader": "finseed_test_reader"}
+users = {"enerCubix-acceptance-local": "enerCubix_test_admin", "enerCubix-acceptance-reader": "enerCubix_test_reader"}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < size <= 1_048_576 or not self.headers.get("Content-Type", "").startswith("application/json"):
                 raise ValueError("bridge_request_size_or_type")
             request = json.loads(self.rfile.read(size))
-            path, connection_id = request["path"], request.get("connection_id", "finseed-acceptance-local")
+            path, connection_id = request["path"], request.get("connection_id", "enerCubix-acceptance-local")
             uri = urlsplit(path)
             query = parse_qsl(uri.query, max_num_fields=5)
             if uri.scheme or uri.netloc or uri.fragment or uri.path not in routes or (uri.query and uri.path != "points") or any(k not in {"q", "offset", "limit"} for k, _ in query):
@@ -65,11 +65,11 @@ class Handler(BaseHTTPRequestHandler):
             if len(path) > 4096 or connection_id not in users or (request.get("body") is not None and not isinstance(request["body"], dict)):
                 raise ValueError("bridge_request")
             connection = runtime.live_connections.get(connection_id)
-            if str(connection.base_url).rstrip("/") != "http://127.0.0.1:38085" or connection.project != "finseed_acceptance" or connection.username != users[connection_id]:
+            if str(connection.base_url).rstrip("/") != "http://127.0.0.1:38085" or connection.project != "enerCubix_acceptance" or connection.username != users[connection_id]:
                 raise ValueError("bridge_target")
             payload = "null" if request.get("body") is None else json.dumps(json.dumps(request["body"], ensure_ascii=False))
-            expression = "seedAcceptanceRequest(" + json.dumps(path) + "," + payload + ")"
-            result = tools.live_execute_axon({"connection_id": connection_id, "expression": expression, "actor": "finseed-native-browser", "max_rows": 5, "max_bytes": 2_000_000, "timeout_seconds": 60}).model_dump(mode="json")
+            expression = "enerCubixAcceptanceRequest(" + json.dumps(path) + "," + payload + ")"
+            result = tools.live_execute_axon({"connection_id": connection_id, "expression": expression, "actor": "enerCubix-native-browser", "max_rows": 5, "max_bytes": 2_000_000, "timeout_seconds": 60}).model_dump(mode="json")
             data = result.get("data") or {}
             audit_file.parent.mkdir(parents=True, exist_ok=True)
             with audit_file.open("a", encoding="utf-8") as log:

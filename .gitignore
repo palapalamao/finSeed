@@ -4,7 +4,7 @@ out/
 test-results/
 playwright-report/
 *.log
-finSeed.pod/res/web/seed/assets/
-finSeed.pod/res/web/seed/index.html
-finSeed.pod/res/web/seed/modules/
-finSeed.pod/ts/validation-logs/
+enerCubix.pod/res/web/enerCubix/assets/
+enerCubix.pod/res/web/enerCubix/index.html
+enerCubix.pod/res/web/enerCubix/modules/
+enerCubix.pod/ts/validation-logs/
