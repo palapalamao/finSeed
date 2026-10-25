@@ -1,4 +1,5 @@
 import {t} from './i18n';
+import type {MeterOrigin} from './meterOrigin';
 export type Kind = 'space'|'nativePoint'|'organization'|'group'|'meter'|'totalMeter'|'sensor'|'category'|'subcategory'|'utility'|'tariff'|'calendar'|'expression'|'cop'|'template'|'settings'|'binding'|'job'|'alarm'|'cleaningProfile';
 export type Dimension = 'space'|'metering'|'organization'|'legacy';
 export interface EnerCubixRecord {id?: string;mod?:string;kind:Kind;name:string;[key:string]:unknown}
@@ -12,7 +13,7 @@ export function reportDimension(kind:ReportKind,dimension:Dimension):Dimension{r
 export interface ReportPoint {ts:string;value:number|null;valueType?:'number'|'na'|'null';quality:string;sourceIds:string[];knownValue?:number|null;knownValueType?:'number'|'na'|'null';knownQuality?:string;completeValue?:number|null;completeValueType?:'number'|'na'|'null';completeQuality?:string;bucketEnd?:string;band?:'peak'|'valley'|'flat'|'unknown';lower?:number;upper?:number}
 export interface Series {id:string;nodeId?:string;name:string;categoryId?:string;unit:string;points:ReportPoint[];role?:'history'|'forecast'}
 export interface ReportResult {kind:ReportKind;from:string;to:string;asOf?:string;period:string;series:Series[];rows:Record<string,unknown>[];warnings:string[];summary:Record<string,unknown>;extra?:Record<string,unknown>;rangeAdjustment?:{status:'adjusted'|'unavailable';requestedFrom:string;requestedTo:string}}
-export interface ReportDisplay {objects:Record<string,string>;sources:Record<string,string>;meterKinds:Record<string,string>;sourceHistory?:Record<string,FinPoint>}
+export interface ReportDisplay {objects:Record<string,string>;sources:Record<string,string>;meterKinds:Record<string,string>;meterOrigins?:Record<string,MeterOrigin>;sourceHistory?:Record<string,FinPoint>}
 export interface ReportSnapshot {request:ReportRequest;result:ReportResult;generatedAt:string;title:string;project:string;categoryIds?:string[];categoryNames?:string[];display?:ReportDisplay}
 export const nodeKinds:Kind[]=['group','meter','totalMeter','sensor'];
 export const treeDimensions=['space','metering','organization'] as const;

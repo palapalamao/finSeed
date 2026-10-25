@@ -23,7 +23,7 @@ async function setup(page:Page,template=true){
 }
 test('shows one total bar beside a four-branch stack for every day and supports weekly buckets',async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));const state=await setup(page);
- await expect(page.locator('.leak-overview')).toContainText('每个时段两根柱');await expect(page.locator('.leak-overview .report-chart canvas')).toHaveCount(1);await expect(page.locator('.leak-overview')).toContainText('分表合计大于总表');await expect(page.locator('.report-details')).not.toHaveAttribute('open');
+ await expect(page.locator('.leak-overview')).toContainText('所选查询范围保持不变');await expect(page.locator('.leak-overview .report-chart canvas')).toHaveCount(1);await expect(page.locator('.leak-overview')).toContainText('分表合计大于总表');await expect(page.locator('.report-details')).not.toHaveAttribute('open');
  await page.screenshot({path:testInfo.outputPath('leak-grouped-stacks.png'),fullPage:true});
  await page.locator('.filter-field').filter({hasText:'汇总间隔'}).locator('.ant-select-selector').click();await page.locator('.ant-select-dropdown:visible').getByText('周',{exact:true}).click();await query(page);expect(state.requests.filter(row=>row.path==='report').at(-1)?.body.period).toBe('week');await expect(page.locator('.print-heading')).toContainText('汇总间隔：周');await page.screenshot({path:testInfo.outputPath('leak-week.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('leak-mobile.png'),fullPage:true});expect(errors).toEqual([]);

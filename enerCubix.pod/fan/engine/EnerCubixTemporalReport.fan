@@ -50,6 +50,7 @@ internal const class EnerCubixTemporalReport
       if (end > to) end=to
       if (start.ticks != cursor.ticks || end <= start) throw ArgErr("历史计量关系时段必须连续且不能重叠")
       req:=request.dup; req.remove("meterHistorySegments"); req["from"]=start.toIso; req["to"]=end.toIso
+      if (request["kind"] == "leak") req["leakSegment"]=true
       rs:=recordsFor(current,segment)
       available:=EnerCubixMath.strings(req["nodeIds"]).all |id| { rs.any |r| { r["id"] == id } }
       if (segment["known"] != true && request["kind"] == "energyFlow") rs=EnerCubixFlowOverview.inventory(request,current)

@@ -1,0 +1,333 @@
+{
+  "request": {
+    "nodeIds": [
+      "p:finseed_acceptance:r:3270ca52-f38a9368"
+    ],
+    "period": "hour",
+    "perArea": false,
+    "asOf": "2026-10-25T22:10:26.851+08:00",
+    "metric": "energy",
+    "kind": "leak",
+    "from": "2026-10-10T00:00:00+08:00",
+    "to": "2026-10-10T01:00:00+08:00",
+    "dimension": "metering"
+  },
+  "checks": 8,
+  "report": {
+    "summary": {
+      "totals": [
+        {
+          "submeter": null,
+          "lossEligible": false,
+          "quality": "topologyUnknown",
+          "unit": "kWh",
+          "total": 60,
+          "valueType": "null",
+          "percentage": null,
+          "name": "Owned history 846252625393000000 total",
+          "difference": null,
+          "id": "p:finseed_acceptance:r:3270ca52-f38a9368|p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "submeterQuality": "topologyUnknown",
+          "value": null,
+          "totalQuality": "cleaned",
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "balanceMode": "unknown",
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "sourceIds": [
+            "p:finseed_acceptance:r:3270ca52-c4631fba"
+          ]
+        }
+      ]
+    },
+    "period": "hour",
+    "asOf": "2026-10-25T22:10:26.851+08:00",
+    "kind": "leak",
+    "series": [
+      {
+        "unit": "kWh",
+        "name": "Owned history 846252625393000000 total",
+        "id": "p:finseed_acceptance:r:3270ca52-f38a9368|p:finseed_acceptance:r:3270ca51-a9401ff6",
+        "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+        "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+        "points": [
+          {
+            "submeter": null,
+            "lossEligible": false,
+            "knownQuality": "cleaned",
+            "knownValue": 60,
+            "quality": "topologyUnknown",
+            "bucketEnd": "2026-10-10T01:00:00+08:00",
+            "total": 60,
+            "valueType": "null",
+            "percentage": null,
+            "difference": null,
+            "knownValueType": "number",
+            "submeterQuality": "topologyUnknown",
+            "value": null,
+            "totalQuality": "cleaned",
+            "balanceMode": "unknown",
+            "sourceIds": [
+              "p:finseed_acceptance:r:3270ca52-c4631fba"
+            ],
+            "ts": "2026-10-10T00:00:00+08:00"
+          }
+        ]
+      }
+    ],
+    "warnings": [
+      "历史计量关系尚未确认，保留表计自身历史，不推定当时的分表或差额。"
+    ],
+    "extra": {
+      "cleaning": [
+        {
+          "summary": {
+            "filteredCount": 0,
+            "coverage": 1,
+            "substitutedCount": 0,
+            "intervalCount": 4,
+            "naCount": 0
+          },
+          "outputCount": 4,
+          "profileVersion": 1,
+          "processingScope": "objectIntervals",
+          "nullCount": 0,
+          "rejectedCount": 0,
+          "naCount": 0,
+          "validCount": 4,
+          "rolloverCount": 0,
+          "detailsTruncated": false,
+          "pointId": "p:finseed_acceptance:r:3270ca52-c4631fba",
+          "profileId": "p:finseed_acceptance:r:3270ca51-c94de4c3",
+          "substitutedCount": 0,
+          "details": [],
+          "removedNACount": 0,
+          "parameters": {
+            "defNull": true,
+            "timeMax": "1hr",
+            "deltaMax": {
+              "unit": "kWh",
+              "type": "number",
+              "value": 1000
+            },
+            "deltaMin": {
+              "unit": "kWh",
+              "type": "number",
+              "value": 0
+            }
+          },
+          "sourceIds": [
+            "p:finseed_acceptance:r:3270ca52-c4631fba"
+          ],
+          "inputCount": 4
+        }
+      ],
+      "leakBranches": [
+        {
+          "branchId": "p:finseed_acceptance:r:3270ca52-40de3bc8",
+          "unit": "kWh",
+          "name": "Owned history 846252625393000000 late physical child",
+          "activeSeconds": 0,
+          "knownQuality": "missing",
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "value": null,
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "knownValue": null,
+          "ts": "2026-10-10T00:00:00+08:00",
+          "quality": "topologyUnknown"
+        },
+        {
+          "branchId": "p:finseed_acceptance:r:3270ca52-f97044ae",
+          "unit": "kWh",
+          "name": "Owned history 846252625393000000 late virtual child",
+          "activeSeconds": 0,
+          "knownQuality": "missing",
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "value": null,
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "knownValue": null,
+          "ts": "2026-10-10T00:00:00+08:00",
+          "quality": "topologyUnknown"
+        }
+      ],
+      "details": [],
+      "leakTotals": [
+        {
+          "submeter": null,
+          "lossEligible": false,
+          "knownTotal": 60,
+          "quality": "topologyUnknown",
+          "knownSubmeterQuality": "missing",
+          "unit": "kWh",
+          "total": 60,
+          "valueType": "null",
+          "percentage": null,
+          "name": "Owned history 846252625393000000 total",
+          "membershipQuality": "topologyUnknown",
+          "difference": null,
+          "knownTotalQuality": "cleaned",
+          "id": "p:finseed_acceptance:r:3270ca52-f38a9368|p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "submeterQuality": "topologyUnknown",
+          "value": null,
+          "totalQuality": "cleaned",
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "balanceMode": "unknown",
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "sourceIds": [
+            "p:finseed_acceptance:r:3270ca52-c4631fba"
+          ],
+          "knownSubmeter": null
+        }
+      ],
+      "leakOwnUsage": [
+        {
+          "coverage": 0,
+          "topologyActiveSeconds": 3600,
+          "meterIds": [
+            "p:finseed_acceptance:r:3270ca52-40de3bc8"
+          ],
+          "completeValue": null,
+          "coveredSeconds": 0,
+          "quality": "invalidConfiguration",
+          "masterId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "unit": "kWh",
+          "removed": false,
+          "pointId": "p:finseed_acceptance:r:3270ca52-ad72aba0",
+          "substituted": false,
+          "valueType": "null",
+          "name": "Owned history 846252625393000000 late physical child",
+          "completeQuality": "invalidConfiguration",
+          "activeSeconds": 3600,
+          "periods": [
+            {
+              "pointId": "p:finseed_acceptance:r:3270ca52-ad72aba0",
+              "from": "2026-10-10T00:00:00+08:00",
+              "to": "2026-10-10T01:00:00+08:00",
+              "value": null,
+              "quality": "invalidConfiguration"
+            }
+          ],
+          "id": "p:finseed_acceptance:r:3270ca52-40de3bc8",
+          "complete": false,
+          "nodeId": "p:finseed_acceptance:r:3270ca52-40de3bc8",
+          "value": null,
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "sourceIds": []
+        },
+        {
+          "coverage": 1,
+          "topologyActiveSeconds": 3600,
+          "meterIds": [
+            "p:finseed_acceptance:r:3270ca52-f38a9368"
+          ],
+          "completeValue": 60,
+          "coveredSeconds": 3600,
+          "quality": "cleaned",
+          "masterId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "unit": "kWh",
+          "removed": false,
+          "pointId": "p:finseed_acceptance:r:3270ca52-c4631fba",
+          "substituted": false,
+          "valueType": "number",
+          "name": "Owned history 846252625393000000 total",
+          "completeQuality": "cleaned",
+          "activeSeconds": 3600,
+          "periods": [
+            {
+              "pointId": "p:finseed_acceptance:r:3270ca52-c4631fba",
+              "from": "2026-10-10T00:00:00+08:00",
+              "to": "2026-10-10T01:00:00+08:00",
+              "value": 60,
+              "quality": "cleaned"
+            }
+          ],
+          "id": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "complete": true,
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "value": 60,
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "sourceIds": [
+            "p:finseed_acceptance:r:3270ca52-c4631fba"
+          ]
+        },
+        {
+          "coverage": 0,
+          "topologyActiveSeconds": 3600,
+          "meterIds": [
+            "p:finseed_acceptance:r:3270ca52-f97044ae"
+          ],
+          "completeValue": null,
+          "coveredSeconds": 0,
+          "quality": "invalidConfiguration",
+          "masterId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+          "unit": "kWh",
+          "removed": false,
+          "pointId": "p:finseed_acceptance:r:3270ca52-a235d7c8",
+          "substituted": false,
+          "valueType": "null",
+          "name": "Owned history 846252625393000000 late virtual child",
+          "completeQuality": "invalidConfiguration",
+          "activeSeconds": 3600,
+          "periods": [
+            {
+              "pointId": "p:finseed_acceptance:r:3270ca52-a235d7c8",
+              "from": "2026-10-10T00:00:00+08:00",
+              "to": "2026-10-10T01:00:00+08:00",
+              "value": null,
+              "quality": "invalidConfiguration"
+            }
+          ],
+          "id": "p:finseed_acceptance:r:3270ca52-f97044ae",
+          "complete": false,
+          "nodeId": "p:finseed_acceptance:r:3270ca52-f97044ae",
+          "value": null,
+          "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+          "sourceIds": []
+        }
+      ],
+      "meterHistorySegments": [
+        {
+          "known": false,
+          "from": "2026-10-10T00:00:00+08:00",
+          "to": "2026-10-10T01:00:00+08:00"
+        }
+      ]
+    },
+    "from": "2026-10-10T00:00:00+08:00",
+    "to": "2026-10-10T01:00:00+08:00",
+    "rows": [
+      {
+        "submeter": null,
+        "knownQuality": "cleaned",
+        "knownTotal": 60,
+        "knownValue": 60,
+        "bucketEnd": "2026-10-10T01:00:00+08:00",
+        "total": 60,
+        "valueType": "null",
+        "percentage": null,
+        "knownTotalQuality": "cleaned",
+        "value": null,
+        "key": "p:finseed_acceptance:r:3270ca52-f38a9368|p:finseed_acceptance:r:3270ca51-a9401ff6|2026-10-10T00:00:00+08:00",
+        "sourceIds": [
+          "p:finseed_acceptance:r:3270ca52-c4631fba"
+        ],
+        "knownSubmeter": null,
+        "lossEligible": false,
+        "quality": "topologyUnknown",
+        "knownSubmeterQuality": "missing",
+        "unit": "kWh",
+        "name": "Owned history 846252625393000000 total",
+        "membershipQuality": "topologyUnknown",
+        "difference": null,
+        "knownValueType": "number",
+        "submeterQuality": "topologyUnknown",
+        "nodeId": "p:finseed_acceptance:r:3270ca52-f38a9368",
+        "totalQuality": "cleaned",
+        "balanceMode": "unknown",
+        "categoryId": "p:finseed_acceptance:r:3270ca51-a9401ff6",
+        "ts": "2026-10-10T00:00:00+08:00"
+      }
+    ]
+  },
+  "project": "finseed_acceptance",
+  "status": "passed"
+}

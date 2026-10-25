@@ -11,7 +11,7 @@ class EnerCubixOwnedHistoryAcceptance
   Int checks := 0
   new make(Context cx) { this.cx=cx; repo=EnerCubixRepo(cx) }
 
-  Str:Obj? run()
+  Str:Obj? run(Bool leakOnly := false)
   {
     if (!["finseed_acceptance","enerCubix_acceptance"].contains(cx.proj.name)) throw ArgErr("Owned-history acceptance requires the isolated project")
     repo.mustWrite
@@ -37,6 +37,15 @@ class EnerCubixOwnedHistoryAcceptance
       check(values(repo.report(req)) == expected,"an unavailable newly added physical child does not change old total raw history")
       virtualChild:=source(["equip":Marker.val,"dis":prefix+" late virtual child","siteRef":site.id,"enerCubix":Marker.val,"enerCubixKind":"totalMeter","enerCubixAutoSum":true,"enerCubixMeterParentRef":equip.id,"enerCubixCategoryRef":Ref(category["id"].toStr),"enerCubixPointRef":Ref.gen])
       check(values(repo.report(req)) == expected,"a newly added nested virtual child does not change old total raw history")
+      balanceReq:=req.dup;balanceReq["kind"]="leak";balanceReq["asOf"]=DateTime.now.toIso
+      balance:=repo.report(balanceReq)
+      ownUsage:=EnerCubixMath.maps(((Map)balance["extra"])["leakOwnUsage"])
+      ownTotal:=ownUsage.find |r| {r["nodeId"] == equip.id.id}
+      check(ownTotal != null && ownTotal["value"] == 60f,"leak report reads the selected total's own stored history even before historical membership is confirmed")
+      balanceTotal:=EnerCubixMath.maps(((Map)balance["extra"])["leakTotals"]).first
+      check(balanceTotal["knownTotal"] == 60f && balanceTotal["difference"] == null && balanceTotal["percentage"] == null,"unavailable child data cannot hide own usage or create a leakage claim")
+      check(balance["from"] == balanceReq["from"] && balance["to"] == balanceReq["to"] && balance["asOf"] == balanceReq["asOf"],"leak report keeps the exact requested range and fixed cutoff")
+      if (leakOnly) return ["status":"passed","checks":checks,"project":cx.proj.name,"request":balanceReq,"report":balance]
       req["kind"]="profile"
       report:=repo.report(req)
       total:=EnerCubixMath.maps(((Map)report["summary"])["totals"]).first

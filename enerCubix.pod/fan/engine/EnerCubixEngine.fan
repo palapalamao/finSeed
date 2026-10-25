@@ -8,7 +8,10 @@ class EnerCubixEngine
     // bounds remain the user's selection, including missing and future buckets.
     cutoff:=EnerCubixKnownUsage.cutoff(request)
     frozen:=request.dup.set("asOf",cutoff.toIso)
-    result:=calculate(frozen,records,EnerCubixKnownUsage.clip(histories,cutoff))
+    clipped:=EnerCubixKnownUsage.clip(histories,cutoff)
+    result:=calculate(frozen,records,clipped)
+    if (frozen["kind"] == "leak" && frozen["leakSegment"] != true && EnerCubixDimension.active(frozen))
+      EnerCubixLeakUsage.attach(result,frozen,records,clipped)
     result["asOf"]=cutoff.toIso
     return result
   }

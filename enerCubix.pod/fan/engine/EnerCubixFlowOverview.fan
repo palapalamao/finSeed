@@ -28,7 +28,7 @@ internal const class EnerCubixFlowOverview
     return EnerCubixMath.maps(EnerCubixEnergyFlow.scope(dim.normalizeRequest(request),dim)["selected"])
   }
 
-  static Str:Obj? build(Str:Obj? request, [Str:Obj?][] current, [Str:Obj?][] histories)
+  static Str:Obj? build(Str:Obj? request, [Str:Obj?][] current, [Str:Obj?][] histories, Str[]? ownIds := null)
   {
     from:=DateTime.fromIso(request["from"].toStr); to:=DateTime.fromIso(request["to"].toStr)
     cutoff:=EnerCubixKnownUsage.cutoff(request); limit:=to < cutoff ? to : cutoff
@@ -45,12 +45,14 @@ internal const class EnerCubixFlowOverview
       known:=segment["known"] == true
       if (!known) unknownSeconds+=(end-start).ticks.toFloat/1sec.ticks.toFloat
       records:=known ? EnerCubixTemporalReport.recordsFor(current,segment) : index
-      members(request,records,known).each |meter|
+      selected:=ownIds == null ? members(request,records,known) : records.findAll |r| {ownIds.contains(r["id"]) && r["categoryId"] == request["categoryId"] && ["meter","totalMeter"].contains(r["kind"])}
+      selected.each |meter|
       {
         id:=meter["id"].toStr; candidates[id]=meter
         active[id]=(active[id] ?: 0f)+(end-start).ticks.toFloat/1sec.ticks.toFloat
       }
     }
+    if (ownIds != null) index.findAll |r| {ownIds.contains(r["id"]) && r["categoryId"] == request["categoryId"]}.each |r| {if (!candidates.containsKey(r["id"].toStr)) candidates[r["id"].toStr]=r}
     // Unknown topology does not remove a meter's own stored consumption. Current
     // unassigned meters remain visible, independently from verified flow/balance.
     if (EnerCubixMath.strings(request["nodeIds"]).isEmpty)
@@ -96,7 +98,8 @@ internal const class EnerCubixFlowOverview
         else windows.add(["from":start.toIso,"to":end.toIso,"pointId":source])
       }
       values:=EnerCubixValue[,]; completeValues:=EnerCubixValue[,]; periods:=[Str:Obj?][,]
-      category:=meter["categoryId"].toStr; unit:=strict.unit(id,category,"energy")
+      metric:=ownIds == null ? "energy" : (request["metric"] as Str ?: "energy")
+      category:=meter["categoryId"].toStr; unit:=strict.unit(id,category,metric)
       covered:=0f; lifetime:=0f
       windows.each |window|
       {
@@ -111,10 +114,10 @@ internal const class EnerCubixFlowOverview
         while (cursor < finish)
         {
           end:=EnerCubixMath.floorHour(cursor)+1hr; if (end > finish) end=finish
-          v:=observed.node(id,category,cursor,end)
-          values.add(v); completeValues.add(own.node(id,category,cursor,end))
+          v:=observed.node(id,category,cursor,end,metric)
+          values.add(v); completeValues.add(own.node(id,category,cursor,end,metric))
           last:=periods.last
-          if (last != null && last["quality"] == v.quality && last["to"] == cursor.toIso && last["pointId"] == source)
+          if (ownIds == null && last != null && last["quality"] == v.quality && last["to"] == cursor.toIso && last["pointId"] == source)
           {
             last["to"]=end.toIso
             if (v.value != null) last["value"]=(EnerCubixMath.num(last["value"]) ?: 0f)+v.value

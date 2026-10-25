@@ -4,6 +4,8 @@ import type {Dimension,FinPoint,EnerCubixRecord} from './types';
 import {finEquipUrl,isNativeEquip,mainEnergySources} from './nativeEquip';
 import {EnergySourceBadge} from './EnergySourceBadge';
 import {names} from './types';
+import {MeterOriginBadge} from './MeterOriginBadge';
+import {meterOrigin,meterOriginDescription} from './meterOrigin';
 import {meterRollupSeconds} from './settings';
 import {dimensionPath,isNativeSource,meterDetailCounts} from './dimensionTree';
 interface Props {meter?:EnerCubixRecord;records:EnerCubixRecord[];point?:FinPoint;canWrite:boolean;onEdit:(record:EnerCubixRecord)=>void;onJump:(dimension:Dimension,id:string)=>void;onAdmit?:(record:EnerCubixRecord)=>void}
@@ -20,7 +22,8 @@ export function MeterDetails({meter,records,point,canWrite,onEdit,onJump,onAdmit
  ]}/></>;
  const counts=meterDetailCounts(records,meter.id!);
  const relation=(field:string,dimension:Dimension)=>{const row=records.find(item=>item.id===meter[field]);return row?<Button type="link" size="small" onClick={()=>onJump(dimension,row.id!)}>{dimensionPath(records,row.id,dimension).map(item=>item.name).join(' / ')}</Button>:<Typography.Text type="secondary">{t("未配置")}</Typography.Text>;};
- return <><div className="meter-detail-heading"><Tag>{names[meter.kind]}</Tag><h3>{meter.name}</h3><Button size="small" disabled={!canWrite} onClick={()=>onEdit(meter)}>{t("编辑表计属性")}</Button>{finLink}</div>{!!meter.configurationError&&<Alert type="error" message={t("能源配置无效，相关统计已阻止")} description={String(meter.configurationError)}/>}<dl className="meter-detail-counts">{[[t("直接下级"),counts.direct],[t("所有下级"),counts.descendants],[t("已绑定点位"),counts.bound],[t("待完成配置"),counts.unfinished]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p className="meter-detail-hint">{t("统计自身及计量下级；缺少绑定或能源分类的对象计为待完成。")}</p><Descriptions className="meter-properties" size="small" column={1} items={[
+ return <><div className="meter-detail-heading">{meter.kind==='totalMeter'?<MeterOriginBadge record={meter}/>:<Tag>{names[meter.kind]}</Tag>}<h3>{meter.name}</h3><Button size="small" disabled={!canWrite} onClick={()=>onEdit(meter)}>{t("编辑表计属性")}</Button>{finLink}</div>{!!meter.configurationError&&<Alert type="error" message={t("能源配置无效，相关统计已阻止")} description={String(meter.configurationError)}/>}<dl className="meter-detail-counts">{[[t("直接下级"),counts.direct],[t("所有下级"),counts.descendants],[t("已绑定点位"),counts.bound],[t("待完成配置"),counts.unfinished]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p className="meter-detail-hint">{t("统计自身及计量下级；缺少绑定或能源分类的对象计为待完成。")}</p><Descriptions className="meter-properties" size="small" column={1} items={[
+  ...(meter.kind==='totalMeter'?[{key:'origin',label:t('表计来源'),children:meterOriginDescription(meterOrigin(meter))},{key:'connector',label:t('来源连接器'),children:meterOrigin(meter).connectorId||'—'}]:[]),
   {key:'space',label:t("计量覆盖范围"),children:relation(meter.spaceId?'spaceId':'nativeSpaceId','space')},{key:'parent',label:t("上级表计"),children:relation('meterParentId','metering')},{key:'organization',label:t("组织归属"),children:relation('organizationId','organization')},
   {key:'category',label:t("能源类型"),children:records.find(row=>row.id===meter.categoryId)?.name||t("未配置")},{key:'usage',label:t("分项"),children:records.find(row=>row.id===meter.utilityId)?.name||t("未配置")},
   {key:'pointName',label:meter.kind==='sensor'?t("FIN 原点名称"):t("主能耗点"),children:<span>{meter.expressionId?t("公式计算"):pointName}{meter.kind!=='sensor'&&!!meter.pointId&&!meter.expressionId&&<EnergySourceBadge meterName={meter.name}/>}</span>},{key:'point',label:t("FIN 点标识"),children:String(meter.pointId||t("未绑定"))},

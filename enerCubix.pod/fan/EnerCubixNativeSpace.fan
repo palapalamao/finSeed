@@ -131,7 +131,7 @@ class EnerCubixNativeSpace
   {
     out:=record.dup
     alarmFields:=record["kind"] == "alarm" ? ["nativeAlarmId","nativeAlarmArchive","nativeRecoveredAt"] : Str[,]
-    out.keys.findAll |key| { (key.startsWith("native") && !alarmFields.contains(key)) || ["configurationError","legacyId","legacyParentId"].contains(key) }.each |key| { out.remove(key) }
+    out.keys.findAll |key| { (key.startsWith("native") && !alarmFields.contains(key)) || ["configurationError","legacyId","legacyParentId","meterOrigin"].contains(key) }.each |key| { out.remove(key) }
     return out
   }
 

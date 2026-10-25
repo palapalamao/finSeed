@@ -57,6 +57,16 @@ const class EnerCubixLib
   @Axon { admin=true }
   static Dict enerCubixOwnedHistoryAcceptance() { jsonResult(EnerCubixOwnedHistoryAcceptance(Context.cur).run) }
 
+  @Axon { admin = true }
+  static Dict enerCubixLeakHistoryAcceptance() { jsonResult(EnerCubixOwnedHistoryAcceptance(Context.cur).run(true)) }
+
+  @Axon { admin = true }
+  static Dict enerCubixLegacyMembership(Str json)
+  { jsonResult(EnerCubixLegacyMembershipRepo(EnerCubixRepo(Context.cur)).run((Str:Obj?)JsonInStream(json.in).readJson)) }
+
+  @Axon { admin=true }
+  static Dict enerCubixLegacyMembershipAcceptance() { jsonResult(EnerCubixLegacyMembershipAcceptance(Context.cur).run) }
+
   @Axon { admin=true }
   static Dict enerCubixFlowHistoryAcceptance() { jsonResult(EnerCubixFlowHistoryAcceptance(Context.cur).run) }
 

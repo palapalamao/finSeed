@@ -51,6 +51,17 @@ class EnerCubixRepo
     projected:=source.project(all)
     info:=source.info(all)
     projected=EnerCubixCleaningRepo(this).decorate(EnerCubixNativeEquipRepo(this).validateRead(projected))
+    sources:=Str:Dict?[:]
+    readSource:=|Str id->Dict?|
+    {
+      if (!sources.containsKey(id))
+      {
+        record:=cx.db.readById(Ref(id),false)
+        sources[id]=record != null && cx.canRead(record) ? record : null
+      }
+      return sources[id]
+    }
+    projected=EnerCubixMeterOrigin.decorate(projected,readSource,|Ref ref->Dict?| { readSource(ref.id) })
     return ["version":EnerCubixRepo#.pod.version.toStr, "project":cx.proj.name, "user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
   }
 
@@ -368,12 +379,14 @@ class EnerCubixRepo
     request["asOf"]=(cutoff < now ? cutoff : now.toTimeZone(cutoff.tz)).toIso
     request["tz"] = cx.proj.meta["tz"] ?: "Shanghai"
     EnerCubixForecast.validate(request)
+    request.remove("legacyMembership")
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
     all := (input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin" ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
     request=EnerCubixEngine.flowScope(request,all)
     if (["leak","energyFlow"].contains(request["kind"]))
       request["meterHistorySegments"]=EnerCubixMeterTimeline.segments(cx.db,all,DateTime.fromIso(request["from"].toStr),DateTime.fromIso(request["to"].toStr))
+    if (request["kind"] == "leak") request["legacyMembership"]=EnerCubixLegacyMembershipRepo(this).active(request)
     return EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
   }
 

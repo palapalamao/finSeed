@@ -1,4 +1,5 @@
 import {locale,t} from './i18n';
+import {meterOrigin,meterOriginLabel} from './meterOrigin';
 import dayjs from 'dayjs';
 import {dimensionNames} from './types';
 import {reportQualityText} from './reportQuality';
@@ -17,6 +18,8 @@ reportLabels.sourceUsage=t('源点用量覆盖');
 Object.assign(reportLabels,{balanceMode:t('平衡判断口径'),lossEligible:t('可用于泄漏判断'),totalQuality:t('总表用量质量'),submeterQuality:t('分表合计质量'),meterHistorySegments:t('历史关系分段'),segmentCount:t('分段数量')});
 Object.assign(reportLabels,{activeSeconds:t('纳入时长（秒）'),removed:t('是否已移除'),periods:t('覆盖时段与缺口')});
 Object.assign(reportLabels,{asOf:t('数据截止'),usageBasis:t('用量显示口径'),usagePolicy:t('计算条件'),selectionTotals:t('范围已有用量合计（已去重）'),usageCoverage:t('对象覆盖情况'),scopeQuality:t('范围归属与计量关系'),meterIds:t('有效表计集合'),scopeDimension:t('选择视角'),scopeNodeIds:t('原选对象'),selectionScope:t('原选择范围'),coverageStart:t('有数据起始'),coverageEnd:t('有数据结束'),expectedSeconds:t('查询时长（秒）'),knownSamples:t('有数值样本数'),knownCurrent:t('本期已有用量'),knownReference:t('对比期已有用量'),currentCoverage:t('本期覆盖率'),referenceCoverage:t('对比期覆盖率'),knownWorking:t('工作时段已有用量'),knownNonworking:t('非工作时段已有用量'),comparability:t('可比性'),percentageBasis:t('占比口径'),rankBasis:t('排名口径'),completeCurrent:t('完整本期用量'),completeReference:t('完整对比期用量'),completePercentage:t('完整范围占比'),completeWorking:t('完整工作时段用量'),completeNonworking:t('完整非工作时段用量'),topologyActiveSeconds:t('已确认关系时长（秒）')});
+Object.assign(reportLabels,{knownTotal:t('总表已有用量'),knownSubmeter:t('参与时段分表已有合计'),knownTotalQuality:t('总表已有用量质量'),knownSubmeterQuality:t('参与时段分表合计质量'),membershipQuality:t('参与关系状态'),participationQuality:t('分表参与状态'),leakOwnUsage:t('各表自身已有用量'),masterId:t('对照总表')});
+Object.assign(reportLabels,{legacyMembership:t('旧关系恢复范围'),proofId:t('恢复记录'),childId:t('分表')});
 export function reportLabel(snapshot:ReportSnapshot,key:string){if(snapshot.result.kind==='energyFlow'&&key==='complete')return t('是否完整');if(snapshot.result.kind==='energyFlow'&&key==='coveredSeconds')return t('有效时长（秒）');const objects=snapshot.request.kind==='comparison'&&!snapshot.request.otherFrom;return (objects?({current:t("对象用量"),reference:t("基准用量"),difference:t("差值（对象 − 基准）"),percentage:t("相对基准变化率 (%)")} as Record<string,string>)[key]:undefined)||reportLabels[key]||key;}
 export const numberText=(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:2,useGrouping:false}).format(value);
 export function displaySeriesName(series:Series):string{
@@ -27,7 +30,7 @@ export function buildReportDisplay(records:EnerCubixRecord[],points:FinPoint[]=[
  const objects:Record<string,string>={},sources:Record<string,string>={},meterKinds:Record<string,string>={};
  for(const r of records){if(r.id){objects[r.id]=r.name;meterKinds[r.id]=r.kind;}if(r.kind==='nativePoint'&&typeof r.nativeSourceId==='string'&&typeof r.nativeDis==='string')sources[r.nativeSourceId]=r.nativeDis;}
  for(const point of points)sources[point.id]=sources[point.id]||point.name;
- return {objects,sources,meterKinds,sourceHistory:Object.fromEntries(points.map(point=>[point.id,point]))};
+ return {objects,sources,meterKinds,meterOrigins:Object.fromEntries(records.filter(row=>row.id&&row.kind==='totalMeter').map(row=>[row.id!,meterOrigin(row)])),sourceHistory:Object.fromEntries(points.map(point=>[point.id,point]))};
 }
 export function reportSourceIds(result:ReportResult):string[]{
  const ids=new Set<string>();const visit=(value:unknown,key='')=>{if(key==='sourceIds'&&Array.isArray(value)){value.forEach(id=>{if(typeof id==='string')ids.add(id);});}else if(Array.isArray(value))value.forEach(item=>visit(item));else if(value&&typeof value==='object')Object.entries(value).forEach(([k,v])=>visit(v,k));};visit(result);return [...ids];
@@ -45,6 +48,8 @@ function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{
 export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>):unknown{
  if(value===null||value===undefined)return value;
  if(['usageBasis','usagePolicy','percentageBasis','rankBasis','comparability'].includes(key))return ({knownUsage:key==='percentageBasis'?t('已有用量占比'):key==='rankBasis'?t('已有用量排名'):t('已有用量'),complete:t('完整可比'),incompleteCoverage:t('覆盖不完整，不计算可比指标'),overlappingScopes:t('范围重叠，保留各对象用量，不计算占比'),zeroKnownTotal:t('已有用量合计为零，无法计算占比'),noKnownUsage:t('没有可用于占比的已有用量'),negativeConsumption:t('存在负用量，无法计算占比'),incompatibleBaseline:t('基准的能源类型或单位不一致'),missingCalendar:t('未配置工作日历'),billingRequiresCompleteCoverage:t('费用按费率规则计算；缺测或阶梯基线不足时不生成完整账单。'),completeTrainingHistoryRequired:t('预测仅使用满足完整率和回测条件的训练历史。'),completePairsRequired:t('回归只使用有效且完整的成对观测。'),comparableCoverageRequired:t('效率、比率与损耗需要完整且可比较的数据覆盖。')} as Record<string,string>)[String(value)]||value;
+ if(key==='proofId')return value;
+ if(key==='basis'&&value==='snapshotRecovered')return t('按旧备份恢复');
  if(key==='balanceMode')return ({independent:t('独立计量平衡'),consistency:t('计算一致性检查'),mixed:t('混合计算口径'),unknown:t('未知历史关系')} as Record<string,string>)[String(value)]||value;
  if(['complete','removed'].includes(key))return value===true?t('是'):t('否');
  if(['coverage','currentCoverage','referenceCoverage'].includes(key)&&typeof value==='number')return numberText(value*100)+'%';
@@ -94,7 +99,7 @@ export function leakGroups(snapshot:ReportSnapshot){
 }
 export function profileGroups(snapshot:ReportSnapshot){
  const groups=new Map<string,{title:string;series:Series[]}>();
- for(const series of snapshot.result.series){const node=series.nodeId||series.id.split('|')[0];const reference=series.id.endsWith('|reference')||snapshot.request.referenceIds?.includes(node);const role=reference?t("参考曲线"):snapshot.result.kind==='primary'?t("折算对比"):t("用量对比");const kind=snapshot.display?.meterKinds[node];const category=series.categoryId?referenceName(snapshot,series.categoryId,'categoryId'):'';const key=`${series.categoryId||''}|${series.unit}|${role}`;const group=groups.get(key)||{title:[category,role,t(series.unit)].filter(Boolean).join(' · '),series:[]};group.series.push(!reference&&(kind==='totalMeter'||kind==='meter')?{...series,name:`${series.name}（${kind==='totalMeter'?t("总表"):t("分表")}）`}:series);groups.set(key,group);}
+ for(const series of snapshot.result.series){const node=series.nodeId||series.id.split('|')[0];const reference=series.id.endsWith('|reference')||snapshot.request.referenceIds?.includes(node);const role=reference?t("参考曲线"):snapshot.result.kind==='primary'?t("折算对比"):t("用量对比");const kind=snapshot.display?.meterKinds[node];const category=series.categoryId?referenceName(snapshot,series.categoryId,'categoryId'):'';const key=`${series.categoryId||''}|${series.unit}|${role}`;const group=groups.get(key)||{title:[category,role,t(series.unit)].filter(Boolean).join(' · '),series:[]};group.series.push(!reference&&(kind==='totalMeter'||kind==='meter')?{...series,name:`${series.name}（${kind==='totalMeter'?(snapshot.display?.meterOrigins?.[node]&&snapshot.display.meterOrigins[node].type!=='unconfirmed'?meterOriginLabel(snapshot.display.meterOrigins[node]):t("总表")):t("分表")}）`}:series);groups.set(key,group);}
  return [...groups.values()];
 }
 export function profileStats(snapshot:ReportSnapshot,series:Series){

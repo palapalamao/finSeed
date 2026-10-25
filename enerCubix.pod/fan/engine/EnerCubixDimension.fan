@@ -195,6 +195,26 @@ class EnerCubixDimension
         else if (segment["known"] != true) req["kind"]="profile"
         plan:=dependencies(req,rs)
         points.addAll(EnerCubixMath.strings(plan["points"])); nodes.addAll(EnerCubixMath.strings(plan["nodes"]))
+
+      }
+      if (request["kind"] == "leak")
+      {
+        // Displaying a meter's own history is independent of confirming a parent
+        // edge. Load these bindings too, without adding any historical edges.
+        req:=request.dup; req.remove("meterHistorySegments"); req["kind"]="profile"
+        ids:=EnerCubixLeakUsage.meterIds(request,records)
+        inventory:=EnerCubixFlowOverview.inventory(request,records)
+        req["nodeIds"]=ids.findAll |id| {inventory.any |r| {r["id"] == id}}
+        plan:=dependencies(req,inventory)
+        points.addAll(EnerCubixMath.strings(plan["points"])); nodes.addAll(EnerCubixMath.strings(plan["nodes"]))
+        EnerCubixLegacyMembership.edges(request).findAll |e| {ids.contains(e["childId"])}.each |edge|
+        {
+          r:=EnerCubixLegacyMembership.record(records,edge)
+          boundRecords:=records.findAll |row| {row["id"] != r["id"]}.dup.add(r)
+          ownReq:=req.dup.set("nodeIds",[r["id"]])
+          p:=dependencies(ownReq,boundRecords)
+          points.addAll(EnerCubixMath.strings(p["points"])); nodes.addAll(EnerCubixMath.strings(p["nodes"]))
+        }
       }
       return ["points":points.unique.sort,"nodes":nodes.unique]
     }

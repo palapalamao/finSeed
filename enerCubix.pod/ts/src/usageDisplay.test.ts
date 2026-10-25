@@ -1,6 +1,11 @@
 import {it,expect} from 'vitest';
-import {makeSnapshot} from './exports';
+import {makeSnapshot,reportTables} from './exports';
 import type {ReportKind,ReportRequest,ReportResult} from './types';
+it('exports available master and participation totals without replacing an incomplete leakage difference or query bounds',()=>{
+ const q=request('leak'),r:ReportResult={kind:'leak',from:q.from,to:q.to,period:'hour',asOf:q.from,series:[],warnings:[],summary:{},rows:[{nodeId:'m',ts:q.from,knownTotal:100,knownSubmeter:40,difference:null,percentage:null,membershipQuality:'topologyUnknown'}],extra:{leakOwnUsage:[{nodeId:'m',name:'Original meter',value:100,unit:'kWh'}]}};
+ const before=structuredClone(r),snapshot=makeSnapshot(q,r,'Balance','test'),table=reportTables(snapshot);
+ expect(snapshot.result.rows[0]).toMatchObject({knownTotal:100,knownSubmeter:40,difference:null,percentage:null});expect(snapshot.result.from).toBe(q.from);expect(snapshot.result.to).toBe(q.to);expect(table.rows[0]).toContain('100');expect(table.rows[0]).toContain('40');expect(r).toEqual(before);
+});
 const request=(kind:ReportKind):ReportRequest=>({kind,nodeIds:['m'],from:'2026-10-20T00:00:00+08:00',to:'2026-10-20T02:30:00+08:00',metric:'energy',period:'hour',perArea:false});
 for(const kind of ['profile','ranking','proportion','utility','daily','comparison','primary','workingHours','workingDays','dashboard'] as const)it(`freezes one known quantity throughout ${kind}`,()=>{
  const q=request(kind),r:ReportResult={kind,from:q.from,to:q.to,period:'hour',asOf:'2026-10-20T02:10:00+08:00',series:[{id:'m|e',nodeId:'m',name:'Original meter',unit:'kWh',points:[{ts:q.from,value:null,quality:'missing',sourceIds:['p'],knownValue:30,knownValueType:'number',knownQuality:'filtered'}]}],rows:[{nodeId:'m',value:null,quality:'missing',knownValue:30,knownQuality:'filtered',percentage:null,knownPercentage:100}],summary:{totals:[{id:'m|e',value:null,quality:'missing'}],knownTotals:[{id:'m|e',value:30,valueType:'number',quality:'filtered'}]},extra:{usageBasis:'knownUsage',grandTotals:[{value:null,knownValue:30,knownQuality:'filtered'}],comparisons:[{current:null,reference:null,knownCurrent:30,knownReference:15,difference:null,percentage:null}]},warnings:[]};
