@@ -1,6 +1,6 @@
 class EnerCubixTemporalBalanceTest : Test
 {
-  Void testCategoryUnitChangesDoNotAddDifferentScales()
+  Void testCurrentCategoryUnitAppliesAcrossTheWholeRange()
   {
     before:=records.findAll |r| { r["id"] == "electric" || r["id"] == "m" }
     [Str:Obj?][] after:=before.map |r->[Str:Obj?]| { r.dup }
@@ -19,7 +19,7 @@ class EnerCubixTemporalBalanceTest : Test
     row:=EnerCubixMath.maps(result["rows"]).first
     near(row["value"],20f); near(row["coverage"],0.5f)
   }
-  Void testWholeRangeOverviewKeepsOwnSubtotalsWhenPastTopologyIsUnknown()
+  Void testUnknownTopologyLogKeepsCurrentTreeAndOwnSubtotals()
   {
     rs:=records.findAll |r| { r["id"] != "c" }
     req:=request("energyFlow",4); req["nodeIds"]=Str[,]
@@ -34,13 +34,14 @@ class EnerCubixTemporalBalanceTest : Test
     verifyEq(main["complete"],false); near(main["coveredSeconds"],10800f)
     near(rows.find |r| { r["nodeId"] == "a" }["value"],20f)
     graph:=(Map)EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"]).first["energyFlow"]
-    verifyEq(EnerCubixMath.maps(graph["nodes"]).size,2)
-    verifyEq(EnerCubixMath.maps(graph["links"]).size,0)
+    verify(EnerCubixMath.maps(graph["nodes"]).any |n| { n["id"] == "a" })
+    verify(!EnerCubixMath.maps(graph["links"]).isEmpty)
+    verify(EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"]).all |s| { s["known"] == true })
     verifyEq(graph["unit"],"kWh")
     verifyEq(EnerCubixMath.strings(EnerCubixDimension.dependencies(req,rs)["points"]),["pa","pm"])
   }
 
-  Void testDeletionRetainsPastOwnHistoryAndDoesNotUseChildAfterRemoval()
+  Void testDeletionLogDoesNotReviveTheRemovedChildOrItsBinding()
   {
     before:=records.findAll |r| { r["id"] != "c" }
     after:=before.findAll |r| { r["id"] != "a" }
@@ -50,38 +51,38 @@ class EnerCubixTemporalBalanceTest : Test
     result:=EnerCubixEngine.report(req,after,hs)
     rows:=EnerCubixMath.maps(result["rows"])
     main:=rows.find |r| { r["nodeId"] == "m" }; child:=rows.find |r| { r["nodeId"] == "a" }
-    verifyNotNull(child); near(main["value"],60f); near(child["value"],5f)
-    verifyEq(child["removed"],true); near(child["activeSeconds"],3600f)
-    verifyEq(child["complete"],true)
+    verifyNull(child); near(main["value"],60f)
+    verifyEq(rows.size,1); verifyEq(main["complete"],true)
     plan:=EnerCubixDimension.dependencies(req,after)
-    verify(EnerCubixMath.strings(plan["points"]).contains("pa"))
+    verifyEq(EnerCubixMath.strings(plan["points"]),["pm"])
     req["nodeIds"]=["a"]
-    focused:=EnerCubixEngine.report(req,after,hs)
-    near(EnerCubixMath.maps(focused["rows"]).first["value"],5f)
+    verifyErr(ArgErr#) { EnerCubixEngine.report(req,after,hs) }
   }
 
-  Void testRebindingUsesEachEffectiveOwnArchiveAndKeepsNaAndSubstitutionDistinct()
+  Void testCurrentBindingAppliesAcrossTheRangeAndKeepsZeroNaAndSubstitutionDistinct()
   {
     before:=records.findAll |r| { r["id"] == "electric" || r["id"] == "m" }
     [Str:Obj?][] after:=before.map |r->[Str:Obj?]| { r.dup }
     after.find |r| { r["id"] == "m" }["pointId"]="new"
     req:=request("energyFlow",4); req["nodeIds"]=Str[,]
     req["meterHistorySegments"]=[segment(0,2,before),segment(2,4,after)]
-    old:=closedHistory("pm",[0f,null,900f,900f])
-    newer:=closedHistory("new",[999f,999f,4f,6f])
+    old:=closedHistory("pm",[999f,999f,900f,900f])
+    newer:=closedHistory("new",[0f,null,4f,6f])
     intervals:=EnerCubixMath.maps(newer["intervals"]); intervals[3]["quality"]="substituted"
+    intervals[1]["valueType"]="na"; intervals[1]["quality"]="na"
     newer["intervals"]=intervals
-    intervals=EnerCubixMath.maps(old["intervals"]); intervals[1]["valueType"]="na"; intervals[1]["quality"]="na"; old["intervals"]=intervals
     result:=EnerCubixEngine.report(req,after,[old,newer])
     row:=EnerCubixMath.maps(result["rows"]).first
     near(row["value"],10f); near(row["coverage"],0.75f)
     verifyEq(row["quality"],"substituted")
     verify(EnerCubixMath.maps(row["periods"]).any |p| { p["quality"] == "na" && p["value"] == null })
+    verify(EnerCubixMath.maps(row["periods"]).any |p| { p["value"] == 0f })
+    verify(EnerCubixMath.maps(row["periods"]).all |p| { p["pointId"] == "new" })
     plan:=EnerCubixDimension.dependencies(req,after)
-    verifyEq(EnerCubixMath.strings(plan["points"]),["new","pm"])
+    verifyEq(EnerCubixMath.strings(plan["points"]),["new"])
   }
 
-  Void testCapturedNativeBindingSuppressesItsLegacyAliasWithoutTodaysMapping()
+  Void testCurrentNativeBindingSuppressesItsLegacyAlias()
   {
     rs:=records.findAll |r| { r["id"] != "c" }
     rs.find |r| { r["id"] == "m" }["nativeEquip"]=true
@@ -96,7 +97,7 @@ class EnerCubixTemporalBalanceTest : Test
     near(EnerCubixMath.maps(graph["nodes"]).first["value"],100f)
   }
 
-  Void testTodayKeepsUnknownPastAndGapsSeparateFromCompleteFlowWindows()
+  Void testCurrentTreeKeepsDataGapsSeparateFromCompleteFlowWindows()
   {
     rs:=records.findAll |r| { r["id"] != "c" }
     req:=request("energyFlow",4); req["from"]=ts(-1); req["to"]=(DateTime.fromIso(ts(4))+50sec).toIso
@@ -105,7 +106,7 @@ class EnerCubixTemporalBalanceTest : Test
     result:=EnerCubixEngine.report(req,rs,hs)
     parts:=EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"])
     verifyEq(parts.size,5)
-    verifyEq(parts[0]["known"],false)
+    verify(parts.all |s| { s["known"] == true })
     verifyEq(parts[1]["from"],ts(0)); verifyEq(parts[1]["to"],ts(1))
     verifyEq(parts[2]["from"],ts(1)); verifyEq(parts[2]["to"],ts(2))
     verifyEq(parts[3]["from"],ts(2)); verifyEq(parts[3]["to"],ts(4))
@@ -152,18 +153,19 @@ class EnerCubixTemporalBalanceTest : Test
     verifyNull(row["percentage"])
   }
 
-  Void testMembershipChangeAggregatesOnlyTheActiveChildIntervals()
+  Void testCurrentMembershipKeepsEarlierMissingChildIntervalsIncomplete()
   {
     rs:=records; before:=rs.findAll |r| { r["id"] != "c" }
     req:=request("leak",2); req["meterHistorySegments"]=[segment(0,1,before),segment(1,2,rs)]
     report:=EnerCubixEngine.report(req,rs,histories)
     row:=EnerCubixMath.maps(report["rows"]).first
-    near(row["total"],220f); near(row["submeter"],200f); near(row["difference"],20f)
-    near(row["percentage"],20f/220f*100f)
+    near(row["total"],220f); near(row["knownSubmeter"],200f)
+    verifyNull(row["submeter"]); verifyNull(row["difference"]); verifyNull(row["percentage"])
+    verifyEq(row["membershipQuality"],"ok"); verifyEq(row["lossEligible"],false)
     verifyEq(EnerCubixMath.maps(report["rows"]).size,1)
   }
 
-  Void testFlowReturnsSeparateHistoricTreesWithoutReparentingThePast()
+  Void testFlowUsesTheCurrentTreeInEveryDataCoverageSection()
   {
     rs:=records; before:=rs.findAll |r| { r["id"] != "c" }
     req:=request("energyFlow",2); req["meterHistorySegments"]=[segment(0,1,before),segment(1,2,rs)]
@@ -172,31 +174,36 @@ class EnerCubixTemporalBalanceTest : Test
     verifyEq(segments.size,2)
     first:=EnerCubixMath.maps(((Str:Obj?)segments[0]["energyFlow"])["nodes"])
     last:=EnerCubixMath.maps(((Str:Obj?)segments[1]["energyFlow"])["nodes"])
-    verify(!first.any |r| { r["id"] == "c" })
+    verify(first.any |r| { r["id"] == "c" })
     verify(last.any |r| { r["id"] == "c" })
+    verifyNull(first.find |r| { r["id"] == "c" }["value"])
+    near(last.find |r| { r["id"] == "c" }["value"],40f)
+    verify(segments.all |s| { s["known"] == true })
     near(first.find |r| { r["id"] == "m" }["value"],100f)
     near(last.find |r| { r["id"] == "m" }["value"],120f)
   }
 
-  Void testUnknownPastDoesNotInventCurrentBranches()
+  Void testUnknownTopologyLogDoesNotHideCurrentBranchesOrInventMissingData()
   {
     req:=request("energyFlow",1); req["meterHistorySegments"]=[["from":ts(0),"to":ts(1),"known":false]]
     report:=EnerCubixEngine.report(req,records,histories)
     flow:=(Str:Obj?)((Str:Obj?)report["extra"])["energyFlow"]
     ns:=EnerCubixMath.maps(flow["nodes"])
     verifyEq(EnerCubixMath.maps(flow["links"]).size,0)
-    verify(!ns.any |r| { r["id"] == "a" || r["id"] == "c" })
+    verify(ns.any |r| { r["id"] == "a" })
+    verify(ns.any |r| { r["id"] == "c" })
+    verifyNull(ns.find |r| { r["id"] == "c" }["value"])
     n:=ns.find |r| { r["id"] == "m" }
-    near(n["value"],100f); verifyEq(n["balanceQuality"],"topologyUnknown")
+    near(n["value"],100f); verifyEq(n["hasChildren"],true)
+    verify(n["balanceQuality"] != "topologyUnknown"); verifyEq(n["lossEligible"],false)
   }
 
-  Void testHistoryPlanIncludesRetiredPointsFromKnownSegments()
+  Void testHistoryPlanIgnoresRetiredPointsFromTopologyLogs()
   {
     rs:=records; old:=records; old.find |r| { r["id"] == "m" }["pointId"]="old-pm"
     req:=request("energyFlow",2); req["meterHistorySegments"]=[segment(0,1,old),segment(1,2,rs)]
     plan:=EnerCubixDimension.dependencies(req,rs)
-    verify(((Str[])plan["points"]).contains("old-pm"))
-    verify(((Str[])plan["points"]).contains("pm"))
+    verifyEq(plan["points"],["pa","pc","pm"])
   }
 
   Void testFormulaArchiveIsAuthoritativeAndMissingArchiveNeverFallsBack()

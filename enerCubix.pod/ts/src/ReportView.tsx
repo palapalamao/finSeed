@@ -45,8 +45,9 @@ function PrimaryOverview({snapshot}:{snapshot:ReportSnapshot}){
 }
 function LeakOverview({snapshot}:{snapshot:ReportSnapshot}){
  const groups=leakGroups(snapshot);const value=(n:unknown)=>typeof n==='number'?numberText(n):'—';
+ const current=snapshot.result.extra?.relationBasis==='current';
  const own=Array.isArray(snapshot.result.extra?.leakOwnUsage)?snapshot.result.extra.leakOwnUsage as Record<string,unknown>[]:[];
- return <section className="leak-overview"><div className="profile-heading"><div><h3>{t("总分表平衡")}</h3><p>{t("各表已有用量独立显示；分表合计仅包含历史上实际参与的时段，所选查询范围保持不变。")}</p></div></div>
+ return <section className="leak-overview"><div className="profile-heading"><div><h3>{t("总分表平衡")}</h3><p>{current?t('按当前总分表关系汇总查询区间的已有用量；关系变更仅作日志。'):t("各表已有用量独立显示；分表合计仅包含历史上实际参与的时段，所选查询范围保持不变。")}</p></div></div>
  {groups.length?groups.map(group=>{const available=!!group.total&&'knownTotal'in group.total;const meters=own.filter(row=>row.masterId===group.series.nodeId&&row.categoryId===group.series.categoryId);return <section className="profile-group" key={group.series.id}>
  <h3>{group.series.name}<ReportMeterOriginBadge snapshot={snapshot} id={group.series.nodeId||group.series.id.split('|')[0]}/>{group.series.categoryId&&snapshot.display?.objects[group.series.categoryId]?` · ${snapshot.display.objects[group.series.categoryId]}`:''} · {t(group.series.unit)}</h3>
  {group.total?.balanceMode==='consistency'&&<Alert className="report-warning" type="info" showIcon message={t('该总表由被比较的分表计算得到，此处仅检查计算一致性，不代表独立泄漏判断。')}/>}
@@ -54,10 +55,10 @@ function LeakOverview({snapshot}:{snapshot:ReportSnapshot}){
  {group.total?.balanceMode==='mixed'&&<Alert className="report-warning" type="info" showIcon message={t('本区间跨越不同计算口径，差额率不用于泄漏判断。')}/>}
  {available&&group.total?.membershipQuality==='topologyUnknown'&&<Alert className="report-warning" type="warning" showIcon message={t('部分历史计量关系尚未确认；各表用量仍显示，分表合计仅含已确认的参与时段，不推断过去的上下级关系。')}/>}
  {available&&group.total?.difference==null&&<Alert className="report-warning" type="warning" showIcon message={t('数据覆盖或计量关系不足，暂不能可靠计算差额。已有用量小计仍保留，不能据此判定泄漏。')}/>}
- <div className="profile-stat-grid">{(['total','submeter','difference']as const).map((key,index)=><div className="metric-readout" key={key}><span>{[available?t('总表已有用量'):t("区间总表用量"),available?t('参与时段分表已有合计'):t("区间分表合计"),t("区间差额（总表 − 分表）")][index]}</span><strong>{value(group.total?.[available&&key==='total'?'knownTotal':available&&key==='submeter'?'knownSubmeter':key])} <small>{t(group.series.unit)}</small></strong></div>)}<div className="metric-readout"><span>{t("区间差额率")}</span><strong>{value(group.total?.percentage)} <small>%</small></strong><small>{t("差额 ÷ 总表")}</small></div></div>
+ <div className="profile-stat-grid">{(['total','submeter','difference']as const).map((key,index)=><div className="metric-readout" key={key}><span>{[available?t('总表已有用量'):t("区间总表用量"),available?(current?t('按当前关系分表已有合计'):t('参与时段分表已有合计')):t("区间分表合计"),t("区间差额（总表 − 分表）")][index]}</span><strong>{value(group.total?.[available&&key==='total'?'knownTotal':available&&key==='submeter'?'knownSubmeter':key])} <small>{t(group.series.unit)}</small></strong></div>)}<div className="metric-readout"><span>{t("区间差额率")}</span><strong>{value(group.total?.percentage)} <small>%</small></strong><small>{t("差额 ÷ 总表")}</small></div></div>
  {meters.length>0&&<><h4>{t('各表自身已有用量')}</h4><p>{t('各表按自身有效历史独立读取；下表用量未按上下级关系相加。')}</p><DataRows rows={meters.map(({name,value,unit,quality,coveredSeconds,removed})=>({name,value,unit,quality,coveredSeconds,removed}))} snapshot={snapshot}/></>}
  {group.result.rows.some(row=>typeof row.difference==='number'&&row.difference<0)&&<Alert className="report-warning" type="warning" showIcon message={t("分表合计大于总表，请核对计量关系与数据；负差额不直接代表泄漏。")}/>}
- <ReportChart snapshot={{...snapshot,result:group.result}}/><p className="profile-chart-note">{available?t('左柱为总表已有用量，右柱按直属分表实际参与时段堆叠。未参与不算缺测；参与但缺测不补零，其他分表已有量保留。差额仅在数据和关系可靠时单独显示。'):t("差额 = 总表 − 分表合计，单独列于明细，不参与堆叠。分表缺测时整根分表柱留空；周按周一开始，首尾时段仅含查询范围内数据。")}</p>
+ <ReportChart snapshot={{...snapshot,result:group.result}}/><p className="profile-chart-note">{current?t('左柱为总表已有用量，右柱按当前关系堆叠各分表已有量。缺测不补零，其他分表已有量保留；差额仅在数据完整且可比时显示。'):available?t('左柱为总表已有用量，右柱按直属分表实际参与时段堆叠。未参与不算缺测；参与但缺测不补零，其他分表已有量保留。差额仅在数据和关系可靠时单独显示。'):t("差额 = 总表 − 分表合计，单独列于明细，不参与堆叠。分表缺测时整根分表柱留空；周按周一开始，首尾时段仅含查询范围内数据。")}</p>
  </section>}):<Empty description={t("此范围没有可绘制的总分表数据")}/>}</section>;
 }
 function ComparisonOverview({snapshot}:{snapshot:ReportSnapshot}){

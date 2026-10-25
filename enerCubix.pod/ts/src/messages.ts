@@ -1,5 +1,10 @@
 // Application-owned text only. Project names and source data remain unchanged.
 export const englishMessages:Record<string,string> = {
+ "按当前总分表关系汇总查询区间的已有用量；关系变更仅作日志。":"Available consumption for the query range is aggregated using current meter relationships. Relationship changes are audit logs only.",
+ "按当前关系分表已有合计":"Available submeter total using current relationships",
+ "左柱为总表已有用量，右柱按当前关系堆叠各分表已有量。缺测不补零，其他分表已有量保留；差额仅在数据完整且可比时显示。":"The left bar shows available main-meter consumption; the right bar stacks available submeter consumption using current relationships. Missing data is not filled with zero, and other available consumption remains visible. Differences require complete, comparable data.",
+ "关系计算依据":"Relationship basis",
+ "当前关系":"Current relationships",
  "部分旧关系已按备份恢复，仅汇总有依据时段；其他历史关系仍待确认，差额不用于泄漏判断。":"Some historical relationships were restored from backups. Only evidenced periods are included; other historical relationships remain unconfirmed. This difference does not establish leakage.",
  "按旧备份恢复":"Restored from historical backups",
  "旧关系恢复范围":"Restored historical membership periods",

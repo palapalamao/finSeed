@@ -4,23 +4,42 @@ class EnerCubixEngine
 {
   static Str:Obj? report(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
   {
+    current:=request.dup
+    ["meterHistorySegments","legacyMembership","leakSegment"].each |key| { current.remove(key) }
+    return run(current,records,histories,false)
+  }
+
+  internal static Str:Obj? reportSection(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
+  { run(request,records,histories,true) }
+
+  private static Str:Obj? run(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
+  {
     // One cutoff is shared by all nested reports and temporal sections. Query
     // bounds remain the user's selection, including missing and future buckets.
     cutoff:=EnerCubixKnownUsage.cutoff(request)
     frozen:=request.dup.set("asOf",cutoff.toIso)
     clipped:=EnerCubixKnownUsage.clip(histories,cutoff)
-    result:=calculate(frozen,records,clipped)
-    if (frozen["kind"] == "leak" && frozen["leakSegment"] != true && EnerCubixDimension.active(frozen))
+    result:=calculate(frozen,records,clipped,section)
+    if (frozen["kind"] == "leak" && !section && EnerCubixDimension.active(frozen))
       EnerCubixLeakUsage.attach(result,frozen,records,clipped)
+    extra:=(Str:Obj?)(result["extra"] ?: Str:Obj?[:])
+    extra["relationBasis"]="current"
+    result["extra"]=extra
     result["asOf"]=cutoff.toIso
     return result
   }
 
-  private static Str:Obj? calculate(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
+  private static Str:Obj? calculate(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
   {
     request=flowScope(request,records)
-    if (["leak","energyFlow"].contains(request["kind"]) && request["meterHistorySegments"] is List)
-      return EnerCubixTemporalReport.report(request,records,histories)
+    if (request["kind"] == "energyFlow" && !section)
+    {
+      if (EnerCubixMath.strings(request["nodeIds"]).any |id| { !records.any |r| {r["id"] == id} })
+        throw ArgErr("能流图对象必须是所选能源的计量表")
+      // Only data coverage divides flow sections. Configuration history is audit-only.
+      current:=request.dup.set("meterHistorySegments",[["from":request["from"],"to":request["to"],"known":true,"records":records]])
+      return EnerCubixTemporalReport.report(current,records,histories)
+    }
     EnerCubixForecast.validate(request)
     from:=DateTime.fromIso(request["from"]?.toStr ?: "")
     to:=DateTime.fromIso(request["to"]?.toStr ?: "")

@@ -45,7 +45,9 @@ function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{
  const names=id.split('|').map(part=>snapshot.display?.objects[part]||snapshot.display?.sources[part]).filter(Boolean);
  return snapshot.display?.objects[id]||snapshot.display?.sources[id]||names.join(' / ')||(key==='categoryId'?t("能源类型名称不可用"):t("对象名称不可用"));
 }
+Object.assign(reportLabels,{relationBasis:t('关系计算依据')});
 export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>):unknown{
+ if(key==='relationBasis'&&value==='current')return t('当前关系');
  if(value===null||value===undefined)return value;
  if(['usageBasis','usagePolicy','percentageBasis','rankBasis','comparability'].includes(key))return ({knownUsage:key==='percentageBasis'?t('已有用量占比'):key==='rankBasis'?t('已有用量排名'):t('已有用量'),complete:t('完整可比'),incompleteCoverage:t('覆盖不完整，不计算可比指标'),overlappingScopes:t('范围重叠，保留各对象用量，不计算占比'),zeroKnownTotal:t('已有用量合计为零，无法计算占比'),noKnownUsage:t('没有可用于占比的已有用量'),negativeConsumption:t('存在负用量，无法计算占比'),incompatibleBaseline:t('基准的能源类型或单位不一致'),missingCalendar:t('未配置工作日历'),billingRequiresCompleteCoverage:t('费用按费率规则计算；缺测或阶梯基线不足时不生成完整账单。'),completeTrainingHistoryRequired:t('预测仅使用满足完整率和回测条件的训练历史。'),completePairsRequired:t('回归只使用有效且完整的成对观测。'),comparableCoverageRequired:t('效率、比率与损耗需要完整且可比较的数据覆盖。')} as Record<string,string>)[String(value)]||value;
  if(key==='proofId')return value;

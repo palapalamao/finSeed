@@ -57,7 +57,7 @@ class EnerCubixMeterGenerationTest : Test
     }
   }
 
-  Void testMembershipMidMinuteUsesOnlyPostBoundaryUsage()
+  Void testMembershipMidMinuteUsesCurrentMembersForTheWholeMinute()
   {
     withDb |db|
     {
@@ -70,7 +70,8 @@ class EnerCubixMeterGenerationTest : Test
       edits.addAll(EnerCubixMeterTimeline.capture(db,edits,at+30sec)); db.commitAll(edits)
       EnerCubixMeterGeneration.update(db,at+3min)
       data:=EnerCubixMeterHistory.loadDb(db,db.readById(Ref("total-p")),at,at+1min)
-      verifyEq(EnerCubixHistoryData(data).read(at,at+1min).value,8f)
+      value:=EnerCubixHistoryData(data).read(at,at+1min)
+      verifyEq(value.value,10f); verifyEq(value.quality,"derived")
     }
   }
 
@@ -170,7 +171,11 @@ class EnerCubixMeterGenerationTest : Test
       EnerCubixMeterGeneration.recalculate(db,records,at,at+1min)
       verifyEq(db.readAllList(Filter.has("enerCubixIntervalCorrection")).size,corrections)
       verifyEq(db.readById(state.id)["enerCubixGeneratedCumulative"],cumulative)
-      verifyErr(ArgErr#) {EnerCubixMeterGeneration.recalculate(db,records,at-1min,at+1min)}
+      // Missing relationship logs do not block repair; unpublished intervals
+      // remain untouched because the meter's own generation start is retained.
+      verifyEq(EnerCubixMeterGeneration.recalculate(db,records,at-1min,at+1min),2)
+      verifyNull(EnerCubixMeterHistory.loadDb(db,root,at-1min,at))
+      verifyEq(db.readById(state.id)["enerCubixGeneratedCumulative"],cumulative)
     }
   }
 

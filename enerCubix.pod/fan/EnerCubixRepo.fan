@@ -380,13 +380,12 @@ class EnerCubixRepo
     request["tz"] = cx.proj.meta["tz"] ?: "Shanghai"
     EnerCubixForecast.validate(request)
     request.remove("legacyMembership")
+    request.remove("meterHistorySegments")
+    request.remove("leakSegment")
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
     all := (input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin" ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
     request=EnerCubixEngine.flowScope(request,all)
-    if (["leak","energyFlow"].contains(request["kind"]))
-      request["meterHistorySegments"]=EnerCubixMeterTimeline.segments(cx.db,all,DateTime.fromIso(request["from"].toStr),DateTime.fromIso(request["to"].toStr))
-    if (request["kind"] == "leak") request["legacyMembership"]=EnerCubixLegacyMembershipRepo(this).active(request)
     return EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
   }
 

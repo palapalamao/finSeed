@@ -23,13 +23,6 @@ class EnerCubixHistory
     from:=(DateTime)plan["from"]; to:=(DateTime)plan["to"]
     out:=[Str:Obj?][,]
     modeRecords:=EnerCubixDimension.active(request) ? EnerCubixDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
-    segments:=EnerCubixMath.maps(request["meterHistorySegments"])
-    if (!segments.isEmpty)
-    {
-      historical:=[Str:Obj?][,]
-      segments.each |segment| { historical.addAll(EnerCubixMath.maps(segment["records"])) }
-      if (!historical.isEmpty) modeRecords=historical
-    }
     pointIds(request,records).each |id|
     {
       Dict? point:=null

@@ -36,8 +36,6 @@ internal class EnerCubixMeterGeneration
     if (to <= from || to-from > 366day || from != EnerCubixMeterHistory.floorMinute(from) || to != EnerCubixMeterHistory.floorMinute(to)) throw ArgErr("重算范围须按整分钟选择且不超过366天")
     if (to > EnerCubixMeterHistory.floorMinute(DateTime.now-1min)) throw ArgErr("不能重算未来或尚未结束的时间区间")
     if (db.readAllList(Filter.has("enerCubixMeterGeneration")).isEmpty) return 0
-    sections:=EnerCubixMeterTimeline.segments(db,records,from,to)
-    if (sections.any |section| {section["known"] != true}) throw ArgErr("历史计量关系尚未记录，不能重算启用前的历史")
     if (!locked)
     {
       return (Int)EnerCubixTaskLock.withLock(db,Uuid().toStr) |held->Obj?|
@@ -47,8 +45,7 @@ internal class EnerCubixMeterGeneration
     while (at < to)
     {
       end:=at+1min
-      snapshot:=EnerCubixMeterTimeline.recordsAt(db,at)
-      targets:=snapshot.findAll |r| {eligible(db,r)}.sort |a,b| {level(a,snapshot,Str[,]) <=> level(b,snapshot,Str[,])}
+      targets:=records.findAll |r| {eligible(db,r)}.sort |a,b| {level(a,records,Str[,]) <=> level(b,records,Str[,])}
       targets.each |record|
       {
         pointId:=record["pointId"] as Str ?: record["historyPointId"] as Str
@@ -60,14 +57,7 @@ internal class EnerCubixMeterGeneration
         cursor:=state?.get("enerCubixGenerationCursor") as DateTime
         if (state == null || start == null || cursor == null || at < start) return
         if (end > cursor) throw ArgErr("只能修正已经生成的历史区间")
-        pieces:=EnerCubixValue[,]
-        EnerCubixMeterTimeline.segments(db,records,at,end).each |segment|
-        {
-          configs:=EnerCubixMath.maps(segment["records"])
-          own:=configs.find |r| {r["id"] == record["id"]}
-          pieces.add(own == null ? EnerCubixValue(null,"missingSource") : calculate(db,own,configs,DateTime.fromIso(segment["from"].toStr),DateTime.fromIso(segment["to"].toStr)))
-        }
-        publish(db,point,state,at,end,EnerCubixValue.sum(pieces),DateTime.now,record["expressionId"] != null,true)
+        publish(db,point,state,at,end,calculate(db,record,records,at,end),DateTime.now,record["expressionId"] != null,true)
         count++
         if (onProgress != null) onProgress(count == 0 ? 0 : 1)
         else
@@ -95,18 +85,7 @@ internal class EnerCubixMeterGeneration
         if (state == null || from == null || from+1min > finish) break
         if ((state["enerCubixOwnerRef"] as Ref)?.id != record["id"]) throw ArgErr("表计用量历史点归属已改变，停止写入")
         to:=from+1min
-        sections:=EnerCubixMeterTimeline.segments(db,records,from,to)
-        values:=EnerCubixValue[,]
-        sections.each |section|
-        {
-          if (section["known"] != true) { values.add(EnerCubixValue(null,"topologyUnknown")); return }
-          snapshot:=EnerCubixMath.maps(section["records"])
-          current:=snapshot.find |r| { r["id"] == record["id"] }
-          a:=DateTime.fromIso(section["from"].toStr); b:=DateTime.fromIso(section["to"].toStr)
-          if (current == null) values.add(EnerCubixValue(null,"missingSource"))
-          else values.add(calculate(db,current,snapshot,a,b))
-        }
-        value:=EnerCubixValue.sum(values)
+        value:=calculate(db,record,records,from,to)
         if (value.value != null && value.value < 0f) value=EnerCubixValue(null,"negative",value.sources)
         publish(db,point,state,from,to,value,now,record["expressionId"] != null)
       }
@@ -345,7 +324,8 @@ internal class EnerCubixMeterGeneration
     previous:=db.readById(key,false)
     rows:=previous == null ? [Str:Obj?][,] : EnerCubixMath.maps(JsonInStream(previous["enerCubixIntervals"].toStr.in).readJson)
     old:=rows.find |r| {DateTime.fromIso(r["from"].toStr).ticks == from.ticks}
-    configurationRevision:=EnerCubixMeterTimeline.revision(db,from,to)
+    currentConfiguration:=EnerCubixMeterTimeline.current(db).sort |a,b| {a["id"].toStr <=> b["id"].toStr}
+    configurationRevision:=JsonOutStream.writeJsonToStr(currentConfiguration).toBuf.toDigest("SHA-256").toHex
     sourceIds:=value.sources.dup.sort
     if (repair && matches.size <= 1 && old != null && EnerCubixMath.num(old["value"]) == value.value && old["valueType"] == value.valueType && old["quality"] == value.quality && old["configurationRevision"] == configurationRevision && EnerCubixMath.strings(old["generationSources"]).sort == sourceIds) return
     priorRevision:=EnerCubixMath.num(old?.get("revision")) ?: 0f

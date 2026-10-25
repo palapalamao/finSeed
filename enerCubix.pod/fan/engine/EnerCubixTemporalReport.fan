@@ -54,7 +54,7 @@ internal const class EnerCubixTemporalReport
       rs:=recordsFor(current,segment)
       available:=EnerCubixMath.strings(req["nodeIds"]).all |id| { rs.any |r| { r["id"] == id } }
       if (segment["known"] != true && request["kind"] == "energyFlow") rs=EnerCubixFlowOverview.inventory(request,current)
-      result:=segment["known"] == true && available ? EnerCubixEngine.report(req,rs,histories) : unknown(req,rs,histories)
+      result:=segment["known"] == true && available ? EnerCubixEngine.reportSection(req,rs,histories) : unknown(req,rs,histories)
       reports.add(result)
       entry:=Str:Obj?["from":start.toIso,"to":end.toIso,"known":segment["known"] == true]
       if (request["kind"] == "energyFlow")

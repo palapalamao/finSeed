@@ -1,25 +1,28 @@
 class EnerCubixLeakMembershipTest : Test
 {
-  Void testInactiveAndUnconfirmedParticipationHaveDifferentStates()
+  Void testInactiveAndUnconfirmedLogsDoNotChangeCurrentParticipation()
   {
     rs:=records;req:=request;req["period"]="hour"
     req["meterHistorySegments"]=[segment(0,2,rs.findAll |r| {r["id"] != "c"}),segment(2,4,rs)]
     report:=EnerCubixEngine.report(req,rs,histories)
     branches:=EnerCubixMath.maps(((Map)report["extra"])["leakBranches"])
-    verifyEq(branches.find |r| {r["branchId"] == "c" && r["ts"] == ts(0)}["participationQuality"],"notParticipating")
+    branch:=branches.find |r| {r["branchId"] == "c" && r["ts"] == ts(0)}
+    verifyEq(branch["participationQuality"],"ok"); near(branch["knownValue"],999f)
     req["meterHistorySegments"]=[["from":ts(0),"to":ts(2),"known":false],segment(2,4,rs)]
     report=EnerCubixEngine.report(req,rs,histories)
     branches=EnerCubixMath.maps(((Map)report["extra"])["leakBranches"])
-    verifyEq(branches.find |r| {r["branchId"] == "c" && r["ts"] == ts(0)}["participationQuality"],"topologyUnknown")
+    branch=branches.find |r| {r["branchId"] == "c" && r["ts"] == ts(0)}
+    verifyEq(branch["participationQuality"],"ok"); near(branch["knownValue"],999f)
   }
-  Void testTwoDaysSumOnlyTheThirdChildsParticipatingDay()
+  Void testTwoDaysUseCurrentChildrenAcrossBothDays()
   {
     rs:=records;req:=request;req["to"]=ts(48);req["asOf"]=ts(48)
     req["meterHistorySegments"]=[segment(0,24,rs.findAll |r| {r["id"] != "c"}),segment(24,48,rs)]
     hs:=[history("pm",(0..<48).map |i->Float?| {100f}),history("pa",(0..<48).map |i->Float?| {10f}),history("pb",(0..<48).map |i->Float?| {5f}),history("pc",(0..<48).map |i->Float?| {i < 24 ? 999f : 3f})]
     report:=EnerCubixEngine.report(req,rs,hs);rows:=EnerCubixMath.maps(report["rows"])
-    near(rows[0]["knownSubmeter"],360f);near(rows[1]["knownSubmeter"],432f)
-    near(total(report)["knownSubmeter"],792f);near(total(report)["difference"],4008f)
+    near(rows[0]["knownSubmeter"],24336f);near(rows[1]["knownSubmeter"],432f)
+    near(total(report)["knownSubmeter"],24768f);near(total(report)["difference"],-19968f)
+    verifyEq(total(report)["lossEligible"],false)
   }
   Void testBucketAxisUsesTheRequestedProjectTimezone()
   {
@@ -36,36 +39,37 @@ class EnerCubixLeakMembershipTest : Test
     req["meterHistorySegments"]=[segment(0,4,rs.findAll |r| {r["kind"] == "category"})]
     report:=EnerCubixEngine.report(req,rs,histories)
     near(total(report)["knownTotal"],100f)
-    verifyNull(total(report)["knownSubmeter"]);verifyNull(total(report)["difference"])
+    near(total(report)["knownSubmeter"],2070f);near(total(report)["difference"],-1970f)
+    verifyEq(total(report)["membershipQuality"],"ok")
     verifyEq(EnerCubixMath.maps(report["rows"]).size,1)
   }
-  Void testUnknownPastKeepsOwnUsageWithoutInventingMembership()
+  Void testUnknownTopologyLogKeepsCurrentMembershipAndOwnUsage()
   {
     rs:=records
     req:=request
     req["meterHistorySegments"]=[["from":ts(0),"to":ts(2),"known":false],segment(2,4,rs)]
     report:=EnerCubixEngine.report(req,rs,histories)
     row:=total(report)
-    near(row["knownTotal"],100f); near(row["knownSubmeter"],42f)
-    verifyEq(row["membershipQuality"],"topologyUnknown")
-    verifyNull(row["difference"]); verifyNull(row["percentage"])
+    near(row["knownTotal"],100f); near(row["knownSubmeter"],2070f)
+    verifyEq(row["membershipQuality"],"ok")
+    near(row["difference"],-1970f); verifyEq(row["lossEligible"],false)
     own:=EnerCubixMath.maps(((Map)report["extra"])["leakOwnUsage"])
     near(own.find |r| {r["nodeId"] == "a"}["value"],40f)
     verifyEq(report["from"],req["from"]); verifyEq(report["to"],req["to"]); verifyEq(report["asOf"],req["asOf"])
     verifyEq(EnerCubixDimension.dependencies(req,rs)["points"],["pa","pb","pc","pm"])
   }
 
-  Void testNewChildOnlyContributesAfterJoiningAndInactiveTimeIsNotMissing()
+  Void testCurrentChildContributesForTheWholeRangeRegardlessOfJoiningLog()
   {
     rs:=records; before:=rs.findAll |r| {r["id"] != "c"}
     req:=request; req["meterHistorySegments"]=[segment(0,2,before),segment(2,4,rs)]
     report:=EnerCubixEngine.report(req,rs,histories)
     row:=total(report)
-    near(row["knownSubmeter"],72f) // A:40 + B:20 + C:5+7; C's earlier 999s are not members.
+    near(row["knownSubmeter"],2070f) // A:40 + B:20 + C:999+999+5+7.
     verifyEq(row["membershipQuality"],"ok")
-    near(row["difference"],28f)
+    near(row["difference"],-1970f)
     branches:=EnerCubixMath.maps(((Map)report["extra"])["leakBranches"])
-    near(branches.find |r| {r["branchId"] == "c"}["activeSeconds"],7200f)
+    near(branches.find |r| {r["branchId"] == "c"}["activeSeconds"],14400f)
   }
 
   Void testActiveMissingChildDoesNotHideOtherKnownAmountsOrBecomeLeakage()
@@ -83,17 +87,17 @@ class EnerCubixLeakMembershipTest : Test
     verifyNull(branches.find |r| {r["branchId"] == "b"}["knownValue"])
   }
 
-  Void testRemovedAndVirtualChildrenKeepOnlyActualParticipation()
+  Void testTopologyLogDoesNotReviveRemovedVirtualChildren()
   {
     before:=records
     before.find |r| {r["id"] == "c"}.setAll(["historyPointId":"pc","expressionId":"unused","includeInTotals":true])
     after:=before.findAll |r| {r["id"] != "c"}
     req:=request; req["meterHistorySegments"]=[segment(0,2,before),segment(2,4,after)]
     report:=EnerCubixEngine.report(req,after,histories)
-    near(total(report)["knownSubmeter"],2058f)
+    near(total(report)["knownSubmeter"],60f)
     own:=EnerCubixMath.maps(((Map)report["extra"])["leakOwnUsage"])
-    near(own.find |r| {r["nodeId"] == "c"}["value"],1998f)
-    verifyEq(own.find |r| {r["nodeId"] == "c"}["removed"],true)
+    verifyNull(own.find |r| {r["nodeId"] == "c"})
+    verifyEq(EnerCubixDimension.dependencies(req,after)["points"],["pa","pb","pm"])
   }
 
   Void testUnrelatedTopologyBoundaryDoesNotSplitOwnClosedIntervals()
@@ -124,16 +128,16 @@ class EnerCubixLeakMembershipTest : Test
     verifyEq(row["unit"],"kWh/m²")
   }
 
-  Void testZeroAndNaRemainDistinctAndARebindingUsesTheEffectiveSource()
+  Void testZeroAndNaRemainDistinctAndCurrentBindingAppliesAcrossTheRange()
   {
     before:=records.findAll |r| {r["id"] != "b" && r["id"] != "c"}
     [Str:Obj?][] after:=before.map |r->[Str:Obj?]| {r.dup}
     after.find |r| {r["id"] == "a"}["pointId"]="new"
     req:=request; req["meterHistorySegments"]=[segment(0,2,before),segment(2,4,after)]
-    hs:=[history("pm",[0f,0f,0f,0f]),history("pa",[0f,0f,999f,999f]),history("new",[999f,999f,3f,7f])]
+    hs:=[history("pm",[0f,0f,0f,0f]),history("pa",[999f,999f,999f,999f]),history("new",[0f,0f,3f,7f])]
     row:=total(EnerCubixEngine.report(req,after,hs))
     near(row["knownTotal"],0f); near(row["knownSubmeter"],10f)
-    verifyEq(EnerCubixDimension.dependencies(req,after)["points"],["new","pa","pm"])
+    verifyEq(EnerCubixDimension.dependencies(req,after)["points"],["new","pm"])
     hs[0]=history("pm",[null,null,null,null])
     EnerCubixMath.maps(hs[0]["intervals"]).each |r| {r["quality"]="na";r["valueType"]="na"}
     row=total(EnerCubixEngine.report(req,after,hs))
