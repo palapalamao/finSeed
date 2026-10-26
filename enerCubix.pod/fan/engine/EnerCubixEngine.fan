@@ -18,12 +18,15 @@ class EnerCubixEngine
     // bounds remain the user's selection, including missing and future buckets.
     cutoff:=EnerCubixKnownUsage.cutoff(request)
     frozen:=request.dup.set("asOf",cutoff.toIso)
+    if (EnerCubixComparisonScope.active(frozen)) frozen["_comparisonScope"]=EnerCubixComparisonScope.of(frozen,records)
     clipped:=EnerCubixKnownUsage.clip(histories,cutoff)
     result:=calculate(frozen,records,clipped,section)
     if (frozen["kind"] == "leak" && !section && EnerCubixDimension.active(frozen))
       EnerCubixLeakUsage.attach(result,frozen,records,clipped)
     extra:=(Str:Obj?)(result["extra"] ?: Str:Obj?[:])
     extra["relationBasis"]="current"
+    comparison:=frozen["_comparisonScope"] as EnerCubixComparisonScope
+    if (comparison != null) extra["comparisonScopes"]=comparison.snapshots
     result["extra"]=extra
     result["asOf"]=cutoff.toIso
     return result
@@ -76,6 +79,7 @@ class EnerCubixEngine
       records=dimension.records; request=dimension.normalizeRequest(request)
     }
     ctx:=EnerCubixContext(records,histories,tz,dimension)
+    ctx.comparison=request["_comparisonScope"] as EnerCubixComparisonScope
     if (kind == "energyFlow") return EnerCubixEnergyFlow(ctx,request,from,to).report
     if (dimension?.nativeSpace == true) records.findAll |r| { r["nativeSourceMissing"] == true }.each |r| { label:=r["name"] ?: r["id"]; ctx.warn("$label : nativeSourceMissing") }
     selected:=EnerCubixMath.strings(request["nodeIds"]).unique

@@ -27,7 +27,7 @@ class EnerCubixRepo
   [Str:Obj?][] records()
   { EnerCubixNativeEquipRepo(this).records(rawRecords) }
 
-  [Str:Obj?][] rawRecords(Bool recovery := false)
+  [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false)
   {
     mustRead
     if (!revisionRead)
@@ -37,11 +37,11 @@ class EnerCubixRepo
     }
     return cx.db.readAllList(Filter.has("enerCubixKind").and(Filter.has("enerCubix").or(Filter.has("equip")))).findAll |r|
     {
-      if (!cx.canRead(r)) return false
+      if (!comparison && !cx.canRead(r)) return false
       // Recovery bodies are not application data. Avoid parsing every archived
       // snapshot on every report/catalog read; rollback opts in explicitly.
       return recovery || !(r["enerCubixConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")
-    }.map |r->[Str:Obj?]| { decode(r) }
+    }.map |r->[Str:Obj?]| { out:=decode(r); if (comparison) out["_comparisonReadable"]=cx.canRead(r); return out }
   }
 
   [Str:Obj?] catalog()
@@ -382,11 +382,65 @@ class EnerCubixRepo
     request.remove("legacyMembership")
     request.remove("meterHistorySegments")
     request.remove("leakSegment")
+    request.remove("_comparisonScope")
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
     all := (input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin" ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
+    if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
     request=EnerCubixEngine.flowScope(request,all)
-    return EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
+    result:=EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
+    if (EnerCubixComparisonScope.active(request))
+    {
+      readable:=Str:Bool[:]
+      result=(Str:Obj?)EnerCubixComparisonScope.readableSources(result) |id->Bool|
+      {
+        if (!readable.containsKey(id))
+        {
+          source:=cx.db.readById(Ref(id),false)
+          readable[id]=source != null && cx.canRead(source)
+        }
+        return readable[id]
+      }
+    }
+    return result
+  }
+
+  ** Preview is read-only. The report resolves and checks this scope again.
+  [Str:Obj?] comparisonScopes(Str nodeIds)
+  {
+    mustRead
+    Str[] ids:=nodeIds.split(',').map |id->Str| {id.trim}
+    ids=ids.findAll |id| {!id.isEmpty}.unique
+    if (ids.isEmpty || ids.size > 200) throw ArgErr("comparisonMasterRequired")
+    req:=Str:Obj?["kind":"leak","comparisonBasis":"physicalBoundary","nodeIds":ids]
+    if (nativeModel) req=EnerCubixNativeEquip.request(req,EnerCubixNativeEquipRepo(this).mapping)
+    return ["scopes":comparisonScope(req).snapshots]
+  }
+
+  private EnerCubixComparisonScope comparisonScope(Str:Obj? request,[Str:Obj?][] visible := [Str:Obj?][,])
+  {
+    // Resolve hidden boundaries internally, returning only an opaque limitation.
+    // Neither preview nor report may silently treat an unreadable child as absent.
+    all:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
+    points:=Str:Bool[:]
+    all.each |r|
+    {
+      if (r["_comparisonReadable"] == false) return
+      ["historyPointId","pointId"].each |key|
+      {
+        id:=r[key] as Str
+        if (id == null) return
+        if (!points.containsKey(id))
+        {
+          source:=cx.db.readById(Ref(id),false)
+          points[id]=source != null && cx.canRead(source)
+        }
+        if (points[id] == false) r["_comparisonPointReadable"]=false
+      }
+      target:=visible.find |v| {v["id"] == r["id"]}
+      if (target != null && r["_comparisonPointReadable"] == false) target["_comparisonPointReadable"]=false
+    }
+    return EnerCubixComparisonScope(request,all)
   }
 
   [Str:Obj?] treeView(Str dimension)

@@ -1,6 +1,6 @@
 import {serverMessage,t} from './i18n';
 import {finCsrfFetch} from 'haystack-nclient';
-import type {Catalog,FinPoint,ReportRequest,ReportResult,EnerCubixRecord} from './types';
+import type {Catalog,ComparisonScope,FinPoint,ReportRequest,ReportResult,EnerCubixRecord} from './types';
 import type {CleaningPreview} from './cleaning';
 import type {ChangeMessagePage} from './changeMessages';
 export class ApiError extends Error {constructor(public code:string,message:string){super(message);this.name='ApiError';}}
@@ -34,6 +34,7 @@ export class EnerCubixApi {
  migrationPreview=()=>this.request<MigrationPreview>('migration/preview');
  migration=(body:Record<string,unknown>)=>this.request<{job:EnerCubixRecord|null;applied?:number}>('migration',body);
  report=(request:ReportRequest,signal?:AbortSignal)=>this.request<ReportResult>('report',request,signal);
+ comparisonScopes=(nodeIds:string[],signal?:AbortSignal)=>this.request<{scopes:ComparisonScope[]}>(`comparison-scopes?nodeIds=${encodeURIComponent(nodeIds.join(','))}`,undefined,signal);
  alarms=()=>this.request<EnerCubixRecord[]>('alarms');
  changeMessages=(offset=0,limit=30,signal?:AbortSignal)=>this.request<ChangeMessagePage>(`messages/changes?offset=${offset}&limit=${limit}`,undefined,signal);
  ack=(record:EnerCubixRecord,note:string)=>this.request<EnerCubixRecord>('alarms/ack',{id:record.id,mod:record.mod,note});

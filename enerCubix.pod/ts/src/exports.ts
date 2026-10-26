@@ -1,6 +1,6 @@
 import {t} from './i18n';
 import {productName} from './brand';
-import type {FinPoint,ReportRequest,ReportResult,ReportSnapshot,EnerCubixRecord} from './types';
+import type {ComparisonScope,FinPoint,ReportRequest,ReportResult,ReportSnapshot,EnerCubixRecord} from './types';
 import {displaySeriesName,buildReportDisplay,readableReportValue,reportCellText,reportLabel,profileStats} from './reportDisplay';
 import {reportQualityText,reportWarnings} from './reportQuality';
 import {coverageGroups,coverageStatusText} from './knownUsageCoverage';
@@ -9,6 +9,7 @@ import {applyKnownUsageDisplay} from './usageDisplay';
 export function makeSnapshot(request:ReportRequest,result:ReportResult,title:string,project:string,now=new Date(),records:EnerCubixRecord[]=[],points:FinPoint[]=[]):ReportSnapshot {
  const effective={...request,...(result.asOf?{asOf:result.asOf}:{})};
  const snapshot=structuredClone({request:effective,result,title,project,generatedAt:now.toISOString(),display:buildReportDisplay(records,points)});
+ for(const scope of (snapshot.result.extra?.comparisonScopes||[]) as ComparisonScope[])for(const member of scope.availableMembers)snapshot.display.objects[member.nodeId]=member.name;
  applyKnownUsageDisplay(snapshot.result);
  if(result.kind==='profile'){
   snapshot.result.extra={...snapshot.result.extra,profileStatistics:snapshot.result.series.filter(series=>!series.id.endsWith('|reference')&&!request.referenceIds?.includes(series.nodeId||series.id)).map(series=>({id:series.id,name:series.name,categoryId:series.categoryId,unit:series.unit,...profileStats(snapshot,series)}))};

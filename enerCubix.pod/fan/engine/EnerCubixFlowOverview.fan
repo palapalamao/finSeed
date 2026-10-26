@@ -65,11 +65,14 @@ internal const class EnerCubixFlowOverview
       return latest != null && oldPoint == newPoint ? latest : record
     }
     strict:=EnerCubixContext(shared,histories,from.tz)
+    strict.comparison=EnerCubixComparisonScope.of(request,shared)
     known:=EnerCubixContext.known(strict,limit)
     duration:=(to-from).ticks.toFloat/1sec.ticks.toFloat
     [Str:Obj?][] result:=candidates.keys.sort.map |id->[Str:Obj?]|
     {
       meter:=candidates[id]
+      if (strict.comparison != null && meter["_comparisonPointReadable"] == false)
+        return ["id":id,"nodeId":id,"name":meter["name"],"categoryId":meter["categoryId"],"unit":meter["unit"] ?: "","value":null,"valueType":"null","quality":"forbidden","completeValue":null,"completeQuality":"forbidden","sourceIds":Str[,],"activeSeconds":duration,"coveredSeconds":0f,"coverage":0f,"complete":false,"periods":[Str:Obj?][,],"meterIds":[id]]
       latest:=current.find |r| {r["id"] == id && ["meter","totalMeter"].contains(r["kind"])}
       point:=meter["historyPointId"] as Str ?: (meter["pointId"] as Str ?: "")
       latestPoint:=latest?.get("historyPointId") as Str ?: (latest?.get("pointId") as Str ?: "")

@@ -113,6 +113,17 @@ const class EnerCubixNativeEquip
       if (current != prior) out[key]=current
     }
     ["xId","yId","baselineId"].each |key| { id:=out[key] as Str; if (id != null) out[key]=mapping[id] ?: id }
+    if (out["comparisonMembers"] is Map)
+    {
+      members:=Str:Obj?[:]
+      ((Map)out["comparisonMembers"]).each |value,key|
+      {
+        id:=mapping[key.toStr] ?: key.toStr
+        if (members.containsKey(id)) throw ArgErr("comparisonInvalidMembers")
+        members[id]=value is List ? ((List)value).map |item->Obj?| {item is Str ? (mapping[item] ?: item) : item} : value
+      }
+      out["comparisonMembers"]=members
+    }
     return out
   }
 

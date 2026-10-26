@@ -5,6 +5,8 @@ internal const class EnerCubixLeakUsage
   static Str[] meterIds(Str:Obj? request, [Str:Obj?][] current)
   {
     masters:=EnerCubixMath.strings(EnerCubixDimension("metering",current).normalizeRequest(request)["nodeIds"])
+    comparison:=EnerCubixComparisonScope.of(request,current)
+    if (comparison != null) return masters.dup.addAll(masters.map |id->Str[]| {comparison.members(id).map |r->Str| {r["id"].toStr}}.flatten).unique
     all:=current.dup
     EnerCubixMath.maps(request["meterHistorySegments"]).findAll |s| {s["known"] == true}.each |s| {all.addAll(EnerCubixTemporalReport.recordsFor(current,s))}
     ids:=all.findAll |r| { ["meter","totalMeter"].contains(r["kind"]) && r["canonicalId"] == null && (masters.contains(r["id"]) || masters.contains(r["meterParentId"]?.toStr ?: "")) }.map |r->Str| {r["id"].toStr}
@@ -19,6 +21,7 @@ internal const class EnerCubixLeakUsage
     EnerCubixLegacyMembership.validate(recovered)
     ensureRows(result,request,current)
     totals:=EnerCubixMath.maps(extra["leakTotals"])
+    comparison:=EnerCubixComparisonScope.of(request,current)
     from:=DateTime.fromIso(request["from"].toStr); to:=DateTime.fromIso(request["to"].toStr)
     period:=request["period"] as Str ?: "day"
     segments:=EnerCubixMath.maps(request["meterHistorySegments"])
@@ -46,7 +49,7 @@ internal const class EnerCubixLeakUsage
         if (segment["known"] != true) {unknown=true; return}
         rs:=EnerCubixTemporalReport.recordsFor(current,segment)
         dim:=EnerCubixDimension("metering",rs)
-        dim.directChildren(master).findAll |r| {r["categoryId"] == category}.each |child|
+        (comparison?.members(master) ?: dim.directChildren(master)).findAll |r| {r["categoryId"] == category}.each |child|
         {
           id:=child["id"].toStr
           last:=windows.findAll |w| {w["id"] == id}.last
@@ -106,6 +109,7 @@ internal const class EnerCubixLeakUsage
         start:=bucket < from ? from : bucket
         end:=EnerCubixMath.nextBucket(bucket,period); if (end > to) end=to
         apply(row,main,contributions,start,end,unknownIn(segments,start,end))
+        if (comparison != null) row["membershipQuality"]=comparison.quality(master) ?: "ok"
         if (EnerCubixLegacyMembership.used(recoveredWindows,start,end)) row["membershipQuality"]="snapshotRecovered"
         ids.findAll |id| {id != master}.each |id|
         {
@@ -124,10 +128,42 @@ internal const class EnerCubixLeakUsage
         }
       }
       apply(total,main,contributions,from,to,unknown)
+      if (comparison != null) total["membershipQuality"]=comparison.quality(master) ?: "ok"
       if (EnerCubixLegacyMembership.used(recoveredWindows,from,to)) total["membershipQuality"]="snapshotRecovered"
     }
     extra["leakOwnUsage"]=ownRows
     extra["leakBranches"]=branches
+    if (comparison != null)
+    {
+      union:=[Str:Obj?][,];members:=comparison.unionMembers
+      members.map |m->Str| {m["categoryId"].toStr}.unique.sort.each |category|
+      {
+        ids:=members.findAll |m| {m["categoryId"] == category}.map |m->Str| {m["id"].toStr}
+        // Reuse the already-read own-use rows. A shared member is counted once,
+        // without another history calculation or summing overlapping groups.
+        [Str:Obj?][] selected:=ids.map |id->[Str:Obj?]| {existing:=ownRows.find |row| {row["nodeId"] == id && row["categoryId"] == category};return existing ?: ["quality":"missing","completeQuality":"missing"]}
+        known:=EnerCubixKnownUsage.combine(selected.map |r->EnerCubixValue| {EnerCubixValue(EnerCubixMath.num(r["value"]),r["quality"].toStr,EnerCubixMath.strings(r["sourceIds"]))})
+        strict:=EnerCubixValue.sum(selected.map |r->EnerCubixValue| {EnerCubixValue(EnerCubixMath.num(r["completeValue"]),r["completeQuality"].toStr,EnerCubixMath.strings(r["sourceIds"]))})
+        unit:=selected.first?.get("unit") as Str ?: ""
+        combinedRow:=Str:Obj?["categoryId":category,"unit":unit,"meterIds":ids,"sourceIds":known.sources,"value":strict.value,"quality":strict.quality]
+        combinedRow.setAll(EnerCubixKnownUsage.fields(known))
+        rows:=[combinedRow]
+        rows.each |row|
+        {
+          limits:=comparison.snapshots.findAll |s| {s["categoryId"] == category}.map |s->Str| {s["quality"].toStr}.findAll |q| {q != "ok"}
+          row["scopeQuality"]=limits.isEmpty ? "ok" : limits.first
+          if (!limits.isEmpty) {row["value"]=null;row["quality"]=limits.first}
+          if (limits.contains("comparisonUnresolved")) {row["knownValue"]=null;row["knownQuality"]="comparisonUnresolved"}
+          if (request["perArea"] == true)
+          {
+            row["value"]=null;row["knownValue"]=null;row["quality"]="ambiguousArea";row["knownQuality"]="ambiguousArea"
+            row["unit"]=unit
+          }
+          union.add(row)
+        }
+      }
+      extra["comparisonUnion"]=union
+    }
     if (!recovered.isEmpty) extra["legacyMembership"]=recovered.map |e->[Str:Obj?]| {e.findAll |v,k| {["childId","parentId","name","from","to","proofId","basis"].contains(k)}}
   }
 

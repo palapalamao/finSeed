@@ -13,7 +13,7 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["catalog","points","alarms","messages/changes","tree","migration/preview"].contains(route)
+      readOnly := ["catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
@@ -30,6 +30,7 @@ const class EnerCubixRest : WebMod
       {
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
+        case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
         case "migration/preview": data=repo.migration(["action":"preview"])
         case "migration": data=repo.migration(body)
         case "points": data=repo.points(req.uri.query["q"] ?: "",Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "200"))

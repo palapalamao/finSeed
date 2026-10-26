@@ -38,7 +38,7 @@ internal class EnerCubixReport
     if (out.leak && ctx.dimension != null) out.balanceMode=EnerCubixBalance.mode(ctx,id)
     if (out.ratio) out.unit="COP"
     Str? directQuality:=null
-    if (ctx.dimension != null && out.leak) directQuality=ctx.dimension.leakQuality(id)
+    if (ctx.dimension != null && out.leak) directQuality=ctx.comparison == null ? ctx.dimension.leakQuality(id) : ctx.comparison.quality(id)
     else if (ctx.dimension?.dimension == "organization" && r != null && ["meter","totalMeter"].contains(r["kind"]?.toStr ?: "")) directQuality=ctx.dimension.quality([r])
     cursor:=start
     while (cursor < end)
@@ -62,7 +62,7 @@ internal class EnerCubixReport
       {
         if (ctx.dimension != null)
         {
-          members:=ctx.dimension.directChildren(id).findAll |m| { (m["categoryId"]?.toStr ?: "") == category }
+          members:=leakMembers(id,category)
           numerator=ctx.node(id,category,cursor,next,metric)
           denominator=members.isEmpty ? EnerCubixValue(null,"missingBranches") : EnerCubixValue.sum(members.map |m->EnerCubixValue| { ctx.node(m["id"].toStr,category,cursor,next,metric) })
           value=EnerCubixValue.sum([numerator,denominator.scale(-1f)])
@@ -235,7 +235,7 @@ internal class EnerCubixReport
       if (members.isEmpty && own != null && ["meter","totalMeter"].contains(own["kind"]?.toStr ?: "")) members=[own]
       if (kind == "leak")
       {
-        members=ctx.dimension.directChildren(l.nodeId).dup
+        members=leakMembers(l.nodeId,l.category).dup
         if (own != null) members.insert(0,own)
       }
       countedMembers:=members
@@ -459,8 +459,8 @@ internal class EnerCubixReport
         sub:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.denominator ?: EnerCubixValue() })
         row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=v.value
         row["totalQuality"]=total.quality; row["submeterQuality"]=sub.quality
-        row["balanceMode"]=l.balanceMode; row["lossEligible"]=v.value != null && v.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
-        row["percentage"]=l.balanceMode == "independent" ? EnerCubixValue.divide(v,total).scale(100f).value : null
+        row["balanceMode"]=l.balanceMode; row["lossEligible"]=physicalMetric && v.value != null && v.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
+        row["percentage"]=physicalMetric && l.balanceMode == "independent" ? EnerCubixValue.divide(v,total).scale(100f).value : null
         if (v.value != null && v.value < 0f) ctx.warn("${l.name}: 分表合计大于总表，差额为负，请核对计量关系与数据")
         branchRows:=extra["leakBranches"] as List
         if (branchRows == null) { branchRows=[Str:Obj?][,]; extra["leakBranches"]=branchRows }
@@ -483,6 +483,7 @@ internal class EnerCubixReport
 
   private [Str:Obj?][] leakMembers(Str id, Str category)
   {
+    if (ctx.comparison != null) return ctx.comparison.members(id).findAll |m| {(m["categoryId"] as Str ?: "") == category}
     if (ctx.dimension != null) return ctx.dimension.directChildren(id).findAll |m| { (m["categoryId"]?.toStr ?: "") == category }
     return (ctx.children[id] ?: [Str:Obj?][,]).findAll |m| { ctx.included(m) && m["kind"] != "totalMeter" && ctx.categories(m["id"].toStr).contains(category) }
   }
@@ -497,11 +498,13 @@ internal class EnerCubixReport
       row:=baseRow(l,"summary",difference)
       row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=difference.value
       row["totalQuality"]=total.quality; row["submeterQuality"]=sub.quality
-      row["balanceMode"]=l.balanceMode; row["lossEligible"]=difference.value != null && difference.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
-      row["percentage"]=l.balanceMode == "independent" ? EnerCubixValue.divide(difference,total).scale(100f).value : null
+      row["balanceMode"]=l.balanceMode; row["lossEligible"]=physicalMetric && difference.value != null && difference.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
+      row["percentage"]=physicalMetric && l.balanceMode == "independent" ? EnerCubixValue.divide(difference,total).scale(100f).value : null
       return row
     }
   }
+
+  private Bool physicalMetric() {ctx.comparison == null || metric == "energy"}
 
   private Void totals(EnerCubixLine[] lines)
   {

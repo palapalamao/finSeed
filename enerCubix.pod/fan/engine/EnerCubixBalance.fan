@@ -4,8 +4,9 @@ internal const class EnerCubixBalance
 {
   static Str mode(EnerCubixContext ctx, Str id)
   {
+    if (ctx.comparison?.derived(id) == true) return "consistency"
     own:=lineage(ctx,id,Str[,])
-    children:=ctx.dimension?.directChildren(id) ?: [Str:Obj?][,]
+    children:=ctx.comparison?.members(id) ?: (ctx.dimension?.directChildren(id) ?: [Str:Obj?][,])
     branch:=Str[,]
     children.each |r| { branch.addAll(lineage(ctx,r["id"].toStr,Str[,])) }
     if (own.isEmpty || branch.isEmpty) return "unknown"

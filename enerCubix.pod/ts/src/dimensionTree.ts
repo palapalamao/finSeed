@@ -3,11 +3,11 @@ import type {Dimension,FinPoint,EnerCubixRecord} from './types';
 export const meterKinds=['meter','totalMeter','sensor'];
 export const isMeter=(row:EnerCubixRecord)=>meterKinds.includes(row.kind);
 export function canonicalMeters(records:EnerCubixRecord[]){return records.filter(row=>isMeter(row)&&(!row.canonicalId||row.canonicalId===row.id));}
-export function leakMasterIds(records:EnerCubixRecord[],dimension:Dimension){
+export function leakMasterIds(records:EnerCubixRecord[],dimension:Dimension,basis?:'physicalBoundary'){
  if(dimension==='legacy')return new Set(records.filter(row=>row.kind==='group').map(row=>row.id));
  const meters=canonicalMeters(records).filter(row=>['meter','totalMeter'].includes(row.kind));
  const canonical=(id:unknown)=>{const seen=new Set<unknown>();while(id&&!seen.has(id)){seen.add(id);const next=records.find(row=>row.id===id)?.canonicalId;if(!next)break;id=next;}return id;};
- return new Set(meters.filter(master=>meters.some(child=>canonical(child.meterParentId)===master.id&&child.categoryId===master.categoryId&&(child.includeInTotals??!child.expressionId))).map(row=>row.id));
+ return new Set(meters.filter(master=>basis==='physicalBoundary'&&(master.autoSum===true||!!master.expressionId)||meters.some(child=>canonical(child.meterParentId)===master.id&&child.categoryId===master.categoryId&&(basis==='physicalBoundary'||(child.includeInTotals??!child.expressionId)))).map(row=>row.id));
 }
 export const hasNativeSpace=(records:EnerCubixRecord[])=>records.some(row=>row.nativeReadonly===true||row.nativeSpaceReadonly===true);
 export const isNativeSource=(row:EnerCubixRecord)=>row.nativeReadonly===true||row.kind==='nativePoint';

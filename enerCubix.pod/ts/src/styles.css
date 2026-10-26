@@ -31,3 +31,4 @@
 
 .comparison-controls{width:100%;min-width:0}.comparison-range-summary{display:flex;flex-wrap:wrap;gap:8px 28px;margin:12px 0;color:var(--text-secondary,#536776)}.comparison-controls>.ant-alert{margin-top:10px}.comparison-overview>.comparison-range-summary{padding:12px 16px;background:#f3f7fa;border-radius:8px}
 @media(max-width:760px){.language-switcher .language-label{display:none}}
+.comparison-members{margin:12px 0;padding:12px;border:1px solid #d9e7e6;border-radius:8px;min-width:0}.comparison-members p{margin:6px 0;color:#64748b}.comparison-member-field{display:grid;gap:8px;margin-top:12px;min-width:0}.comparison-members .ant-select{min-width:0}.comparison-members .ant-select-selection-item{max-width:100%}

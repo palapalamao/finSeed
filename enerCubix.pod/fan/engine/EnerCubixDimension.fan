@@ -194,6 +194,21 @@ class EnerCubixDimension
     selected=selected.dup.addAll(EnerCubixMath.strings(req["referenceIds"]))
     ["xId","yId"].each |key| { id:=req[key]?.toStr; if (id != null) selected.add(id) }
     points:=Str[,]; nodes:=Str[,]
+    comparison:=EnerCubixComparisonScope.of(req,dim.records)
+    if (comparison != null)
+    {
+      selected=EnerCubixMath.strings(req["nodeIds"]).dup.addAll(comparison.memberIds).unique
+      selected.each |id|
+      {
+        r:=dim.byId[id]
+        if (r == null || r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false) return
+        nodes.add(id)
+        point:=r["historyPointId"] as Str
+        if (point == null && r["expressionId"] == null) point=r["pointId"] as Str
+        if (point != null) points.add(point)
+      }
+      return ["points":points.unique.sort,"nodes":nodes.unique]
+    }
     selected.unique.each |id|
     {
       dim.collect(id,req["kind"] == "leak",nodes,points)

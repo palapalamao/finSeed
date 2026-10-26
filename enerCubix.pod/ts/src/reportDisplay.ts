@@ -1,4 +1,4 @@
-import {locale,t} from './i18n';
+import {locale,serverMessage,t} from './i18n';
 import {meterOrigin,meterOriginLabel} from './meterOrigin';
 import dayjs from 'dayjs';
 import {dimensionNames} from './types';
@@ -46,14 +46,20 @@ function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{
  return snapshot.display?.objects[id]||snapshot.display?.sources[id]||names.join(' / ')||(key==='categoryId'?t("能源类型名称不可用"):t("对象名称不可用"));
 }
 Object.assign(reportLabels,{relationBasis:t('关系计算依据')});
+Object.assign(reportLabels,{comparisonBasis:t('比较依据'),comparisonMembers:t('临时比较分表'),comparisonScopes:t('已解析比较范围'),availableMembers:t('可选分表'),defaultMemberIds:t('默认分表'),selectedMemberIds:t('已选分表'),via:t('解析路径'),limitations:t('范围限制')});
+Object.assign(reportLabels,{comparisonUnion:t('物理分表并集合计（已去重）'),completeSelection:t('完整边界选择')});
 export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>):unknown{
+ if((key==='comparisonBasis'||key==='basis')&&value==='physicalBoundary')return t('物理计量边界');
+ if(key==='comparisonMembers'&&value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([id,ids])=>[referenceName(snapshot,id,'nodeId'),readableReportValue(snapshot,'selectedMemberIds',ids)]));
+ if(key==='limitations'&&Array.isArray(value))return value.map(item=>serverMessage(String(item)));
+ if(key==='via'&&Array.isArray(value))return value.map(id=>referenceName(snapshot,String(id),'nodeId')).join(' / ');
  if(key==='relationBasis'&&value==='current')return t('当前关系');
  if(value===null||value===undefined)return value;
  if(['usageBasis','usagePolicy','percentageBasis','rankBasis','comparability'].includes(key))return ({knownUsage:key==='percentageBasis'?t('已有用量占比'):key==='rankBasis'?t('已有用量排名'):t('已有用量'),complete:t('完整可比'),incompleteCoverage:t('覆盖不完整，不计算可比指标'),overlappingScopes:t('范围重叠，保留各对象用量，不计算占比'),zeroKnownTotal:t('已有用量合计为零，无法计算占比'),noKnownUsage:t('没有可用于占比的已有用量'),negativeConsumption:t('存在负用量，无法计算占比'),incompatibleBaseline:t('基准的能源类型或单位不一致'),missingCalendar:t('未配置工作日历'),billingRequiresCompleteCoverage:t('费用按费率规则计算；缺测或阶梯基线不足时不生成完整账单。'),completeTrainingHistoryRequired:t('预测仅使用满足完整率和回测条件的训练历史。'),completePairsRequired:t('回归只使用有效且完整的成对观测。'),comparableCoverageRequired:t('效率、比率与损耗需要完整且可比较的数据覆盖。')} as Record<string,string>)[String(value)]||value;
  if(key==='proofId')return value;
  if(key==='basis'&&value==='snapshotRecovered')return t('按旧备份恢复');
  if(key==='balanceMode')return ({independent:t('独立计量平衡'),consistency:t('计算一致性检查'),mixed:t('混合计算口径'),unknown:t('未知历史关系')} as Record<string,string>)[String(value)]||value;
- if(['complete','removed'].includes(key))return value===true?t('是'):t('否');
+ if(['complete','removed','completeSelection'].includes(key))return value===true?t('是'):t('否');
  if(['coverage','currentCoverage','referenceCoverage'].includes(key)&&typeof value==='number')return numberText(value*100)+'%';
  if(key==='lossEligible')return value===true?t('是'):t('否');
  if(key==='processingScope')return cleaningScopeText(value);

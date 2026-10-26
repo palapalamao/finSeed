@@ -1,4 +1,4 @@
-# EnerCubix application contract 0.7.0
+# EnerCubix application contract 0.12.0
 
 FIN 5.3.0.2761. Same-origin authenticated JSON API at `/api/{project}/ext/enerCubix/v1`.
 Success `{ok:true,data:...}`; failure `{ok:false,error:{code,msg}}` and non-2xx HTTP status. Never fall back to demo data. FIN native identity; admin-only mutations. Use `finCsrfFetch` from haystack-nclient for requests.
@@ -213,9 +213,23 @@ GET `alarms` 每次持续超限返回一行，包括 episodeStartTs、lastTs、r
 
 `includeInTotals: false` 继续排除范围合计；显式选择该虚拟设备时，趋势、排名、占比和对比仍可读取自身已归档用量。缺失归档继续返回缺测，不回退为实时表达式值。
 
-### 当前关系计算（开发分支，未部署）
+### 当前关系计算（0.12.0）
 
 用户于2026-10-26明确选择：所有报告及虚拟表后续生成、显式重算均使用当前关系和当前来源绑定。关系变更的历史仅作审计日志，不参与计算。本条替代上文历史关系回放、未知关系门槛及恢复关系参与报告的旧版本约定。
+
+### 局部对照选择（0.12.0）
+
+新泄漏报告传 `comparisonBasis:"physicalBoundary"`，并选择原生主表 ID；仅用于 `kind:"leak"`。不传此字段的旧模板保留原自动合计成员规则。三种视角均使用当前配置，`includeInTotals` 只控制自动汇总，不限制明确的自身用量查询或新局部对照。
+
+只读 `GET comparison-scopes?nodeIds=<逗号分隔且URL编码的主表ID>` 返回 `{scopes:[{nodeId,categoryId,basis,availableMembers:[{nodeId,name,unit,via,sourceIds}],defaultMemberIds,selectedMemberIds,quality,completeSelection,limitations}]}`。`via` 是可读中间计算节点 ID；来源是本次配置绑定的实际历史点。最多200个主表，普通已登录只读用户可查询。服务端报告重新解析成员及权限，预览不是授权凭据。
+
+`comparisonMembers?:Record<string,string[]>` 按主表指定：缺少该主表键表示全部当前可用边界，`[]` 明确不选任何分表，非空名单只能是该主表边界的子集；错误主表键、外部分表及无效类型返回400。兼容映射先规范化主表及分表 ID，同源别名只读一次。临时名单不写回资产。
+
+解析穿透同能源、兼容单位的加法计算节点，遇到独立物理表停止，不同时累加它与下级。带权、减法及其他非加法节点保留其自有历史并返回范围限制，不临时展开重算。虚拟总表始终使用自身归档，缺失时为空，不以分表和补造。成员不完整、循环、缺少来源、单位不兼容或不可读时保留可读成员已有量，严格差额及比例为空，`lossEligible:false`；不返回隐藏成员的名称、ID和源点。
+
+完整的独立实测总表在物理用量指标下才可获得泄漏资格；计算总表是计算汇总校核。费用及折算可显示差额校核，不输出物理漏损比例。单个分表缺测不清空其他分表堆积段。
+
+响应 `extra.comparisonScopes` 固定实际成员、绑定和限制，`extra.comparisonUnion` 按能源及单位展示各主表所选分表的来源并集，去掉同源别名和物理父子重复；各主表组分别保留，不能直接把组和相加。不能安全相加的未解析边界合计为空；跨范围面积分母不明确时归一化并集合计为空。图、明细和导出使用同一冻结结果，模板保存依据及明确名单；分类筛选保留上述范围证据。
 
 - 每次查询固定当前配置，并读取原请求日期内各表自身的历史；不按日志开始时间、旧父引用或旧点绑定切分查询。当前关系修改后的新查询会重新归组，已生成报告和导出保持原快照。
 - 服务端与纯引擎入口忽略外部 `meterHistorySegments`、`legacyMembership`、`leakSegment`。日志缺失、晚于查询日期或包含旧关系均不改变成员、数值、覆盖或漏损资格。

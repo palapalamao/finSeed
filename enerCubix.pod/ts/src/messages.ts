@@ -1,4 +1,5 @@
 // Application-owned text only. Project names and source data remain unchanged.
+// Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
  "对象类型":"Object type",
  "主档案":"Canonical record",
@@ -1512,3 +1513,29 @@ Object.assign(englishMessages, {
   "保存时会为主能耗点添加累计读数标签（hisTotalized），原始历史值保持不变。": "Saving adds the cumulative-reading marker (hisTotalized) to the primary energy point and preserves raw history values.",
   "；": "; "
 });
+
+Object.assign(englishMessages,{
+ '本次总分表比较范围':'Total and submeter comparison scope',
+ '比较分表由服务端按物理计量边界解析，不受“计入合计”开关限制。临时选择仅用于本次查询和模板，不修改表计配置。':'The server resolves submeters from the physical metering boundary, regardless of Include in totals. Temporary selections apply to this query and its template without changing meter configuration.',
+ '比较范围读取失败，请重新选择对象或查询。':'Could not load the comparison scope. Reselect the objects or query again.',
+ '未解析到可比较的分表；仍可查询各表自身已有用量。':'No comparable submeters were resolved. Each meter’s own available consumption can still be queried.',
+ '已自选 {0} 个分表':'{0} submeters selected manually',
+ '已明确不选分表':'No submeters explicitly selected',
+ '默认全部 {0} 个分表':'All {0} default submeters',
+ '{0}的比较分表':'Comparison submeters for {0}',
+ '不选分表':'Select no submeters',
+ '恢复默认全部':'Restore default members',
+ '已保存的选择包含当前不可用的分表，请重新选择；系统不会自动扩大比较范围。':'The saved selection includes currently unavailable submeters. Select again; the comparison scope will not expand automatically.',
+ '未覆盖完整物理边界时，仅展示已有用量，不据此判定泄漏。':'An incomplete physical boundary shows available consumption only and cannot establish leakage.',
+ '只选择主表，再按服务端解析的物理边界选择本次比较分表。':'Select a master meter, then choose comparison submeters from the physical boundary resolved by the server.',
+ '物理计量边界':'Physical metering boundary',
+ '比较依据':'Comparison basis',
+ '临时比较分表':'Temporary comparison members',
+ '已解析比较范围':'Resolved comparison scope',
+ '可选分表':'Available submeters',
+ '默认分表':'Default submeters',
+ '已选分表':'Selected submeters',
+ '解析路径':'Resolution path',
+ '范围限制':'Scope limitations'
+});
+Object.assign(englishMessages,{'物理分表并集合计（已去重）':'Physical submeter union total (deduplicated)','完整边界选择':'Complete boundary selection'});

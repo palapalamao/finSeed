@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {makeSnapshot,reportTables} from './exports';
+import {filterSnapshot,makeSnapshot,reportTables} from './exports';
 import {chartOptions,shareChartOptions} from './chartOptions';
 import {buildReportDisplay,reportCellText,profileStats,profileGroups,readableReportValue} from './reportDisplay';
 import type {ReportRequest,ReportResult,EnerCubixRecord} from './types';
@@ -8,6 +8,24 @@ const request:ReportRequest={kind:'profile',dimension:'metering',nodeIds:['m','b
 const result:ReportResult={kind:'profile',from:request.from,to:request.to,period:'day',warnings:[],rows:[{key:'opaque-key',nodeId:'m',categoryId:'c',sourceIds:['p'],value:12.12345}],summary:{totals:[{id:'m|c',name:'10F总表',value:30}]},series:[{id:'m|c',nodeId:'m',name:'10F总表',categoryId:'c',unit:'kWh',points:[{ts:request.from,value:10,quality:'ok',sourceIds:['p']},{ts:'2026-10-02T00:00:00+08:00',value:20,quality:'ok',sourceIds:['p']}]}]};
 const snapshot=()=>({...makeSnapshot(request,result,'能耗概况','zeda'),display:buildReportDisplay(records)});
 describe('readable report presentation',()=>{
+ it('exports a frozen deduplicated comparison union with a readable basis and completeness flag',()=>{
+  const s=snapshot();s.request.kind=s.result.kind='leak';s.result.extra={comparisonUnion:[{categoryId:'c',unit:'kWh',meterIds:['m','b'],sourceIds:['p'],value:17.25,quality:'ok',knownValue:17.25,knownQuality:'ok',scopeQuality:'comparisonPartial',basis:'physicalBoundary',completeSelection:false}]};
+  const before=structuredClone(s),readable=readableReportValue(s,'',s.result.extra) as Record<string,Record<string,unknown>[]>;
+  expect(Object.keys(readable)).toContain('物理分表并集合计（已去重）');
+  expect(readable['物理分表并集合计（已去重）'][0]).toMatchObject({'有效表计集合':'10F总表、10F分表','统计口径':'物理计量边界','完整边界选择':'否','值':17.25,'已有用量':17.25});
+  expect(reportCellText(s,'completeSelection',true)).toBe('是');expect(s).toEqual(before);
+ });
+ it('freezes physical comparison members and exports their resolved names without reading a later catalog',()=>{
+  const data=structuredClone(result),input={...request,kind:'leak' as const,comparisonBasis:'physicalBoundary' as const,comparisonMembers:{m:[]}};data.kind='leak';data.extra={comparisonScopes:[{nodeId:'m',categoryId:'c',availableMembers:[{nodeId:'b',name:'Frozen branch',unit:'kWh'}],defaultMemberIds:['b'],selectedMemberIds:[],quality:'comparisonEmpty'}]};
+  const frozen=makeSnapshot(input,data,'Balance','test',new Date(),records.map(row=>row.id==='b'?{...row,name:'Later catalog branch'}:row));
+  expect(frozen.request.comparisonMembers).toEqual({m:[]});
+  expect(reportCellText(frozen,'defaultMemberIds',['b'])).toBe('Frozen branch');
+  expect(reportCellText(frozen,'via',['b'])).toBe('Frozen branch');
+  expect(reportCellText(frozen,'comparisonBasis','physicalBoundary')).toBe('物理计量边界');
+  expect(JSON.stringify(readableReportValue(frozen,'comparisonMembers',{m:[]}))).not.toContain('"m"');
+  const filtered=filterSnapshot(frozen,['c'],['Electric'])!;expect(filtered.result.extra?.comparisonScopes).toEqual(data.extra.comparisonScopes);
+  (data.extra.comparisonScopes as {availableMembers:{name:string}[]}[])[0].availableMembers[0].name='Changed after query';expect(reportCellText(frozen,'defaultMemberIds',['b'])).toBe('Frozen branch');
+ });
  it('retains bounded legacy proof and exact quantities in export tables',()=>{const s=snapshot();s.request.kind=s.result.kind='leak';s.result.rows=[{nodeId:'m',knownSubmeter:258153,difference:null,membershipQuality:'snapshotRecovered'}];s.result.extra={legacyMembership:[{proofId:'verified-proof',childId:'b',from:request.from,to:request.to,basis:'snapshotRecovered'}]};const before=structuredClone(s);expect(reportCellText(s,'proofId','verified-proof')).toBe('verified-proof');expect(reportCellText(s,'basis','snapshotRecovered')).toBe('按旧备份恢复');const tables=JSON.stringify(reportTables(s));expect(tables).toContain('258153');expect(JSON.stringify(readableReportValue(s,'',s.result.extra))).toContain('verified-proof');expect(s).toEqual(before);});
  it('resolves objects, categories and expanded FIN source names without changing query IDs or precision',()=>{const s=snapshot();expect(reportCellText(s,'nodeId','m')).toBe('10F总表');expect(reportCellText(s,'categoryId','c')).toBe('电能');expect(reportCellText(s,'sourceIds',['p'])).toBe('人才基地 +ld-F10-AL总表 正向有功电能');expect(reportCellText(s,'value',12.12345)).toBe('12.12');const tables=reportTables(s);expect(JSON.stringify(tables)).not.toContain('opaque-key');expect(tables.rows[0]).toEqual(['10F总表','电能','人才基地 +ld-F10-AL总表 正向有功电能','12.12345']);expect(s.result.rows[0].nodeId).toBe('m');expect(s.request.nodeIds).toEqual(['m','b']);});
  it('never exposes an unresolved reference or raw disMacro template',()=>{const s=snapshot();expect(reportCellText(s,'sourceIds',['p:zeda:r:missing'])).toBe('源点名称不可用');expect(reportCellText(s,'categoryId','unknown')).toBe('能源类型名称不可用');expect(reportCellText(s,'nodeId','unknown')).toBe('对象名称不可用');expect(reportCellText(s,'normalizationArea',{value:100,nodeId:'m'})).not.toContain('"m"');});

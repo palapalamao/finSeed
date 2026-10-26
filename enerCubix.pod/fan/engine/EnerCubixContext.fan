@@ -3,12 +3,12 @@ internal class EnerCubixContext
   ** A separate report-only context keeps strict calculation and caches untouched.
   new known(EnerCubixContext strict, DateTime queryEnd)
   {
-    tz=strict.tz; dimension=strict.dimension; byId=strict.byId; byPoint=strict.byPoint
+    tz=strict.tz; dimension=strict.dimension; comparison=strict.comparison; byId=strict.byId; byPoint=strict.byPoint
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
   }
   new bound(EnerCubixContext source, Str id, Str:Obj? record)
   {
-    tz=source.tz; dimension=source.dimension; byId=source.byId.dup.set(id,record)
+    tz=source.tz; dimension=source.dimension; comparison=source.comparison; byId=source.byId.dup.set(id,record)
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
   }
   new make([Str:Obj?][] records, [Str:Obj?][] histories, TimeZone tz, EnerCubixDimension? dimension := null)
@@ -35,6 +35,7 @@ internal class EnerCubixContext
   }
   TimeZone tz
   EnerCubixDimension? dimension
+  EnerCubixComparisonScope? comparison
   Str:[Str:Obj?] byId := [:]
   Str:EnerCubixHistoryData byPoint := [:]
   Str:[Str:Obj?][] children := [:]
@@ -164,6 +165,7 @@ internal class EnerCubixContext
     if (path.isEmpty && cache.containsKey(key)) return cache[key]
     r := byId[id]
     if (r == null) return EnerCubixValue(null,"unknownNode")
+    if (comparison != null && (r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false)) return EnerCubixValue(null,"forbidden")
     if (r["configurationError"] != null)
     {
       warn(r["name"].toStr+"："+r["configurationError"])
@@ -262,6 +264,7 @@ internal class EnerCubixContext
     exprId := archived == null ? r["expressionId"]?.toStr : null
     if (exprId != null)
     {
+      if (comparison != null) return EnerCubixValue(null,"missing")
       if (strictContext != null) return strictContext.rawNode(r,from,to,path)
       expr := byId[exprId]
       if (expr == null) return EnerCubixValue(null,"missingExpression")

@@ -381,3 +381,30 @@ Object.assign(serverMessages, {
   "能流图对象必须是所选能源的计量表": "The energy flow object must be a meter of the selected energy type.",
   "存在待确认计量关系的表计，未作为能源入口计入合计": "Some meters have unconfirmed metering relationships and are excluded from the input total."
 });
+
+Object.assign(serverMessages,{
+ comparisonInvalidBasis:'The comparison basis is invalid.',
+ comparisonMasterRequired:'Select a meter with a physical comparison boundary.',
+ comparisonInvalidMembers:'The comparison member selection is invalid or unavailable. Select the members again.',
+ comparisonEmpty:'No comparison submeters are selected or available; each meter’s own available consumption remains visible.',
+ comparisonPartial:'The selected submeters cover only part of the physical boundary; the difference cannot establish leakage.',
+ comparisonUnavailable:'Required comparison data is unavailable; each meter’s own available consumption remains visible.',
+ comparisonUnresolved:'The physical comparison boundary cannot be fully resolved; the difference cannot establish leakage.',
+ comparisonNonAdditive:'A non-additive formula cannot define a physical comparison boundary.',
+ comparisonMissingSource:'A required meter source is not configured.',
+ comparisonCycle:'The comparison boundary contains a circular dependency.',
+ comparisonIncompatible:'The comparison boundary contains incompatible energy types or units.'
+});
+Object.assign(chineseServerMessages,{
+ comparisonInvalidBasis:'比较依据无效。',
+ comparisonMasterRequired:'请选择具有物理比较边界的表计。',
+ comparisonInvalidMembers:'比较分表选择无效或当前不可用，请重新选择。',
+ comparisonEmpty:'未选择或没有可用的比较分表；各表自身已有用量仍可显示。',
+ comparisonPartial:'所选分表仅覆盖部分物理边界，差额不用于判定泄漏。',
+ comparisonUnavailable:'比较所需数据当前不可用；各表自身已有用量仍可显示。',
+ comparisonUnresolved:'物理比较边界未能完整解析，差额不用于判定泄漏。',
+ comparisonNonAdditive:'非加法公式无法定义物理比较边界。',
+ comparisonMissingSource:'比较所需表计未配置数据源。',
+ comparisonCycle:'比较边界包含循环依赖。',
+ comparisonIncompatible:'比较边界包含不兼容的能源类型或单位。'
+});
