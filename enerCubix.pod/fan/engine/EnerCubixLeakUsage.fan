@@ -65,6 +65,12 @@ internal const class EnerCubixLeakUsage
       windows.each |window|
       {
         id:=window["id"].toStr; child:=(Str:Obj?)window["record"]
+        if (comparison != null)
+        {
+          ownUse:=own.find |row| {row["nodeId"] == id}
+          if (ownUse != null) contributions.add(ownUse.dup.set("from",from.toIso).set("to",to.toIso))
+          return
+        }
         source:=current.findAll |r| {r["id"] != id}.dup.add(child)
         part:=req.dup; part.remove("meterHistorySegments"); part["from"]=window["from"]; part["to"]=window["to"]; part["nodeIds"]=[id]
         row:=EnerCubixMath.maps(EnerCubixFlowOverview.build(part,source,histories,[id])["rows"]).first
