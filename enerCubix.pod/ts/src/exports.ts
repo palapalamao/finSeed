@@ -6,6 +6,7 @@ import {reportQualityText,reportWarnings} from './reportQuality';
 import {coverageGroups,coverageStatusText} from './knownUsageCoverage';
 import {meterOriginDescription,meterOriginLabel} from './meterOrigin';
 import {applyKnownUsageDisplay} from './usageDisplay';
+import type {Workbook} from 'exceljs';
 export function makeSnapshot(request:ReportRequest,result:ReportResult,title:string,project:string,now=new Date(),records:EnerCubixRecord[]=[],points:FinPoint[]=[]):ReportSnapshot {
  const effective={...request,...(result.asOf?{asOf:result.asOf}:{})};
  const snapshot=structuredClone({request:effective,result,title,project,generatedAt:now.toISOString(),display:buildReportDisplay(records,points)});
@@ -47,6 +48,28 @@ export function meterOriginExportRows(snapshot:ReportSnapshot):string[][]{
  return [...ids].flatMap(id=>{const origin=snapshot.display?.meterOrigins?.[id];return snapshot.display?.meterKinds[id]==='totalMeter'&&origin?[[t('表计来源'),t('{0}：{1}；{2}',snapshot.display.objects[id]||id,meterOriginLabel(origin),meterOriginDescription(origin))]]:[];});
 }
 const meta=(s:ReportSnapshot)=>[[t("产品"),productName],[t("项目"),s.project],[t("报表"),s.title],[t("分类筛选"),s.categoryNames?.join('、')||t("全部能源类型")],[t("区间起始（含）"),s.result.from],[t("区间结束（不含）"),s.result.to],...(s.result.rangeAdjustment?[[t("原查询起始（含）"),s.result.rangeAdjustment.requestedFrom],[t("原查询结束（不含）"),s.result.rangeAdjustment.requestedTo]]:[]),[t("生成时间"),s.generatedAt],[t("数据截止"),s.result.asOf||s.request.asOf||s.generatedAt],[t("查询条件"),JSON.stringify(readableReportValue(s,'',s.request))],[t("汇总"),JSON.stringify(readableReportValue(s,'',s.result.summary))],[t("分析结果"),JSON.stringify(readableReportValue(s,'',s.result.extra||{}))],[t("提示"),reportWarnings(s).join('\n')],...meterOriginExportRows(s)];
+function fitXlsxText(book:Workbook){
+ const detailsName=t('长文本明细'),details:(string|number)[][]=[];
+ book.eachSheet(sheet=>sheet.eachRow(row=>row.eachCell(cell=>{
+  if(typeof cell.value!=='string'||cell.value.length<=32767)return;
+  const text=cell.value,parts:string[]=[];
+  for(let start=0;start<text.length;){
+   let end=Math.min(start+32767,text.length);
+   // Keep supplementary Unicode characters intact at Excel's UTF-16 boundary.
+   if(end<text.length&&text.charCodeAt(end-1)>=0xd800&&text.charCodeAt(end-1)<=0xdbff&&text.charCodeAt(end)>=0xdc00&&text.charCodeAt(end)<=0xdfff)end--;
+   parts.push(text.slice(start,end));start=end;
+  }
+  cell.value=parts[0];
+  cell.note=t('内容已分为 {0} 段，完整内容见“{1}”工作表的 {2} / {3}。此单元格显示第 1 段。',parts.length,detailsName,sheet.name,cell.address);
+  parts.forEach((part,index)=>details.push([sheet.name,cell.address,index+1,parts.length,part]));
+ })));
+ if(!details.length)return;
+ const sheet=book.addWorksheet(detailsName);
+ sheet.addRows([[t('原工作表'),t('原单元格'),t('段号'),t('总段数'),t('文本内容')],...details]);
+ sheet.views=[{state:'frozen',ySplit:1}];sheet.getRow(1).font={bold:true};
+ sheet.columns.forEach((column,index)=>column.width=index===4?100:index<2?26:12);
+ sheet.eachRow(row=>row.alignment={vertical:'top',wrapText:true});
+}
 export async function exportCoverageXlsx(snapshot:ReportSnapshot){
  const {Workbook}=await import('exceljs');const book=new Workbook();book.creator=productName;book.created=new Date(snapshot.generatedAt);const groups=coverageGroups(snapshot);
  const value=(n:number|null,type:string)=>type==='na'?'NA':n===null?'—':n;
@@ -55,11 +78,13 @@ export async function exportCoverageXlsx(snapshot:ReportSnapshot){
  sheet(t('覆盖摘要'),[[t('计量对象'),t('源点'),t('单位'),t('有数值覆盖秒数'),t('有数值记录开始'),t('有数值记录结束'),t('原始区间数'),t('已返回原始明细数'),t('诊断明细已截断')],...groups.map(g=>[g.name||t('对象名称不可用'),g.source||t('源点名称不可用'),t(g.unit),g.coveredSeconds??'—',g.firstReading||'—',g.lastReading||'—',g.intervalCount??'—',g.intervals.length,g.detailsTruncated?t('是'):t('否')])]);
  sheet(t('连续时段'),[[t('计量对象'),t('源点'),t('开始时间'),t('结束时间'),t('状态'),t('已有用量'),t('单位'),t('有数值覆盖秒数'),t('原始区间数')],...groups.flatMap(g=>g.periods.map(p=>[g.name||t('对象名称不可用'),g.source||t('源点名称不可用'),p.from,p.to,coverageStatusText(p.status),value(p.value,p.valueType),t(g.unit),p.coveredSeconds,p.intervalCount]))]);
  sheet(t('原始区间'),[[t('计量对象'),t('源点'),t('区间开始'),t('区间结束（不含）'),t('值'),t('单位'),t('质量')],...groups.flatMap(g=>g.intervals.map(p=>[g.name||t('对象名称不可用'),g.source||t('源点名称不可用'),p.intervalStart,p.intervalEnd,value(p.value,p.valueType),t(g.unit),reportQualityText(snapshot,p.quality)]))]);
+ fitXlsxText(book);
  download(new Blob([await book.xlsx.writeBuffer() as BlobPart],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),filename({...snapshot,title:t('用量覆盖明细')},'xlsx'));
 }
 export async function exportXlsx(snapshot:ReportSnapshot){
  const {Workbook}=await import('exceljs');const book=new Workbook();book.creator=productName;book.created=new Date(snapshot.generatedAt);const tables=reportTables(snapshot);
  for(const [name,data]of [[t("报表信息"),meta(snapshot)],[t("统计明细"),[tables.headers,...tables.rows]],[t("时序与质量"),tables.series]] as [string,string[][]][]){const sheet=book.addWorksheet(name);sheet.addRows(data);sheet.views=[{state:'frozen',ySplit:1}];sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF137F7A'}};sheet.columns.forEach(column=>column.width=24);sheet.eachRow(row=>row.alignment={vertical:'top',wrapText:true});}
+ fitXlsxText(book);
  const buffer=await book.xlsx.writeBuffer();download(new Blob([buffer as BlobPart],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),filename(snapshot,'xlsx'));
 }
 export async function exportDocx(snapshot:ReportSnapshot){

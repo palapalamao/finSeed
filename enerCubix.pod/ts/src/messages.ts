@@ -1539,3 +1539,12 @@ Object.assign(englishMessages,{
  '范围限制':'Scope limitations'
 });
 Object.assign(englishMessages,{'物理分表并集合计（已去重）':'Physical submeter union total (deduplicated)','完整边界选择':'Complete boundary selection'});
+Object.assign(englishMessages,{
+ '长文本明细':'Long text details',
+ '原工作表':'Original worksheet',
+ '原单元格':'Original cell',
+ '段号':'Part',
+ '总段数':'Total parts',
+ '文本内容':'Text content',
+ '内容已分为 {0} 段，完整内容见“{1}”工作表的 {2} / {3}。此单元格显示第 1 段。':'The content has {0} parts. See worksheet “{1}”, {2} / {3}, for the complete text. This cell shows part 1.'
+});
