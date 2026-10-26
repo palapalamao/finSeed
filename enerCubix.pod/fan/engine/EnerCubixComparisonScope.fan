@@ -32,7 +32,9 @@ internal class EnerCubixComparisonScope
 
   new make(Str:Obj? request,[Str:Obj?][] source)
   {
-    dim=EnerCubixDimension("metering",source)
+    // Hidden aliases must not expose a target Ref through constructor errors.
+    try {dim=EnerCubixDimension("metering",source)}
+    catch (ArgErr e) {throw ArgErr("comparisonUnresolved")}
     dim.records.each |r| {byId[r["id"].toStr]=r}
     masters=EnerCubixMath.strings(request["nodeIds"]).map |id->Str| {canonical(id)}.unique
     if (masters.isEmpty) throw ArgErr("comparisonMasterRequired")

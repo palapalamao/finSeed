@@ -12,7 +12,7 @@ class Build : BuildFinPod
   {
     podName = "enerCubix"
     summary = "EnerCubix - multidimensional energy analytics"
-    version = Version("0.12.0")
+    version = Version("0.12.1")
     meta = ["proj.name":podName, "org.name":"EnerCubix", "license.name":"Commercial"]
     depends = [
       "sys 1.0+", "concurrent 1.0+", "web 1.0+", "util 1.0+",

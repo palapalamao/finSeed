@@ -173,6 +173,26 @@ class EnerCubixComparisonScopeTest : Test
     verify(!text.contains("hidden"));verify(text.contains("allowed"));verify(text.contains("Business original"))
   }
 
+  Void testInvalidHiddenAliasUsesAnOpaqueErrorInPreviewAndReport()
+  {
+    rs:=records
+    rs.add(["id":"hidden-alias","kind":"meter","name":"Private meter name","categoryId":"e","canonicalId":"private-target-sentinel","_comparisonReadable":false])
+    [false,true].each |preview|
+    {
+      try
+      {
+        if (preview) EnerCubixComparisonScope(request,rs).snapshots
+        else EnerCubixEngine.report(request,rs,histories)
+        fail("Expected invalid canonical configuration")
+      }
+      catch (ArgErr e)
+      {
+        verifyEq(e.msg,"comparisonUnresolved")
+        ["hidden-alias","Private meter name","private-target-sentinel"].each |privateValue| {verify(!e.msg.contains(privateValue))}
+      }
+    }
+  }
+
   private Str:Obj? request() { ["kind":"leak","dimension":"metering","nodeIds":["m"],"comparisonBasis":"physicalBoundary","from":ts(0),"to":ts(1),"asOf":ts(2),"period":"day","metric":"energy"] }
   private [Str:Obj?][] records()
   { [["id":"e","kind":"category","name":"Electricity","unit":"kWh"],["id":"m","kind":"totalMeter","name":"Main","categoryId":"e","pointId":"pm","includeInTotals":true],["id":"a","kind":"meter","name":"A","categoryId":"e","pointId":"pa","meterParentId":"m","includeInTotals":false],["id":"b","kind":"meter","name":"B","categoryId":"e","pointId":"pb","meterParentId":"m","includeInTotals":true]] }
