@@ -300,6 +300,66 @@ class EnerCubixMeterGenerationTest : Test
     }
   }
 
+  Void testProjectPrefixReplayUpdatesTheTargetBatchOnce()
+  { checkProjectPrefixedPublication(false,false) }
+
+  Void testProjectPrefixOverflowReplayUpdatesExistingMinuteBatchOnce()
+  { checkProjectPrefixedPublication(true,false) }
+
+  Void testProjectPrefixRepairDeduplicatesHourAndMinuteBatches()
+  { checkProjectPrefixedPublication(true,true) }
+
+  private Void checkProjectPrefixedPublication(Bool overflow, Bool repair)
+  {
+    withDbPrefix("p:generationTest:r:") |db|
+    {
+      at:=DateTime.fromIso("2026-10-24T00:00:00Z")
+      owner:=db.commit(Diff.makeAdd(Etc.makeDict(["equip":Marker.val,"dis":"publication fixture"]),Ref("pub-meter"))).newRec
+      point:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","kind":"Number","tz":"UTC","equipRef":owner.id]),Ref("pub-main"))).newRec
+      usage:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"unit":"kWh","kind":"Number","tz":"UTC","equipRef":owner.id,"enerCubixComputed":Marker.val,"enerCubixIntervalSourceRef":point.id]),Ref("pub-usage"))).newRec
+      cursor:=repair ? at+2min : at
+      cumulative:=Number(repair ? 99 : 0,Unit("kWh"))
+      state:=db.commit(Diff.makeAdd(Etc.makeDict(["enerCubixMeterGeneration":Marker.val,"enerCubixMainRef":point.id,"enerCubixOwnerRef":owner.id,"enerCubixUsageRef":usage.id,"enerCubixArchiveUnit":"kWh","enerCubixGenerationStart":at,"enerCubixGenerationCursor":cursor,"enerCubixGeneratedCumulative":cumulative,"enerCubixGenerationHasGap":false]),EnerCubixMeterHistory.stateId(point.id))).newRec
+      raw:=[HisItem(at,Number(100,Unit("kWh"))),HisItem(at+1min,Number(102,Unit("kWh"))),HisItem(at+2min,Number(105,Unit("kWh")))]
+      db.his.write(point.id,raw,null).get(30sec)
+      old:=Str:Obj?["from":at.toIso,"to":(at+1min).toIso,"value":1f,"valueType":"number","quality":"derived","revision":1]
+      rows:=[old]; sources:=Str[point.id.id]
+      if (overflow)
+      {
+        padding:=StrBuf(); for (i:=0;i<27000;i++) padding.addChar('x')
+        retained:=old.dup;retained["from"]=(at+1min).toIso;retained["to"]=(at+2min).toIso;retained["value"]=3f;retained["retainedEvidence"]=padding.toStr;rows.add(retained)
+        sources.clear
+        for (i:=0;i<100;i++) sources.add("fixture-source-$i-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+      }
+      json:=JsonOutStream.writeJsonToStr(rows);verify(json.size < 30000)
+      key:=EnerCubixMeterHistory.batchId(point.id,at)
+      tags:=Str:Obj?["enerCubixIntervalBatch":Marker.val,"enerCubixMainRef":point.id,"enerCubixUsageRef":usage.id,"enerCubixBatchHour":at,"enerCubixIntervals":json]
+      hour:=db.commit(Diff.makeAdd(Etc.makeDict(tags),key)).newRec
+      verifyNotEq(hour.id,key)
+      if (overflow)
+      {
+        minuteTags:=tags.dup;minuteTags["enerCubixIntervals"]=JsonOutStream.writeJsonToStr([old])
+        db.commit(Diff.makeAdd(Etc.makeDict(minuteTags),EnerCubixMeterHistory.minuteBatchId(point.id,at)))
+      }
+      EnerCubixMeterGeneration.publish(db,point,state,at,at+1min,EnerCubixValue(2f,"derived",sources),at+3min,false,repair)
+      published:=EnerCubixMeterHistory.loadDb(db,point,at,overflow ? at+2min : at+1min)
+      verifyEq(EnerCubixMath.maps(published["intervals"]).size,overflow ? 2 : 1)
+      verifyEq(EnerCubixHistoryData(published).read(at,overflow ? at+2min : at+1min).value,overflow ? 5f : 2f)
+      after:=db.readById(state.id)
+      verifyEq(after["enerCubixGenerationCursor"],repair ? cursor : at+1min)
+      verifyEq(after["enerCubixGeneratedCumulative"],repair ? cumulative : Number(2,Unit("kWh")))
+      if (overflow)
+      {
+        kept:=EnerCubixMath.maps(JsonInStream(db.readById(hour.id)["enerCubixIntervals"].toStr.in).readJson)
+        verifyEq(kept.size,1);verifyEq(kept.first["retainedEvidence"],rows.last["retainedEvidence"])
+        minute:=db.readById(EnerCubixMeterHistory.minuteBatchId(point.id,at))
+        verifyEq(EnerCubixMath.maps(JsonInStream(minute["enerCubixIntervals"].toStr.in).readJson).size,1)
+      }
+      preserved:=HisItem[,];db.his.read(point.id,null,null) |item| {preserved.add(item)}
+      verifyEq(preserved.map |item->Str| {item.ts.toIso+"|"+item.val.toStr},raw.map |item->Str| {item.ts.toIso+"|"+item.val.toStr})
+    }
+  }
+
   private Void meter(Folio db, Str id, Str? parent, Bool calculated:=false)
   {
     tags:=Str:Obj?["equip":Marker.val,"enerCubix":Marker.val,"enerCubixKind":"meter","enerCubixAlias":id,"dis":id,"enerCubixPointRef":Ref(id+"-p"),"enerCubixCategoryRef":Ref("cat"),"enerCubixUnit":"kWh","enerCubixAutoSum":calculated]
@@ -315,9 +375,12 @@ class EnerCubixMeterGenerationTest : Test
     db.his.write(Ref(id+"-p"),rows,null).get(30sec)
   }
   private Void withDb(|Folio| work)
+  { withDbPrefix(null,work) }
+
+  private Void withDbPrefix(Str? prefix,|Folio| work)
   {
     dir:=Env.cur.tempDir+`enerCubix-generation-test-${Uuid()}/`; dir.create
-    db:=(Folio)Type.find("hxFolio::HxFolio").method("open").call(FolioConfig {name="generationTest";it.dir=dir;log=Log.get("generationTest")})
+    db:=(Folio)Type.find("hxFolio::HxFolio").method("open").call(FolioConfig {name="generationTest";it.dir=dir;idPrefix=prefix;log=Log.get("generationTest")})
     try {work(db)} finally {db.close; dir.delete}
   }
 }

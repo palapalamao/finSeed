@@ -352,7 +352,8 @@ internal class EnerCubixMeterGeneration
     diffs:=[previous == null ? Diff.makeAdd(tags,key) : Diff(previous,tags),Diff(state,stateTags)]
     matches.each |batch|
     {
-      if (batch.id == key) return
+      // The computed key may be relative; both stored records use the same namespace.
+      if (previous != null && batch.id == previous.id) return
       retained:=EnerCubixMath.maps(JsonInStream(batch["enerCubixIntervals"].toStr.in).readJson).findAll |r| {DateTime.fromIso(r["from"].toStr).ticks != from.ticks}
       diffs.add(Diff(batch,Etc.makeDict(["enerCubixIntervals":JsonOutStream.writeJsonToStr(retained)])))
     }
