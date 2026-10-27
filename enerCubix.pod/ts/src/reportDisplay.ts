@@ -48,6 +48,7 @@ function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{
  return snapshot.display?.objects[id]||snapshot.display?.sources[id]||names.join(' / ')||(key==='categoryId'?t("能源类型名称不可用"):t("对象名称不可用"));
 }
 Object.assign(reportLabels,{relationBasis:t('关系计算依据')});
+Object.assign(reportLabels,{utilityMembers:t('分项表计明细'),utilityName:t('所属分项'),memberIds:t('分项成员'),flowMode:t('能流展示方式')});
 Object.assign(reportLabels,{comparisonBasis:t('比较依据'),comparisonMembers:t('临时比较分表'),comparisonScopes:t('已解析比较范围'),availableMembers:t('可选分表'),defaultMemberIds:t('默认分表'),selectedMemberIds:t('已选分表'),via:t('解析路径'),limitations:t('范围限制')});
 Object.assign(reportLabels,{comparisonUnion:t('物理分表并集合计（已去重）'),completeSelection:t('完整边界选择')});
 export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>):unknown{
@@ -56,6 +57,11 @@ export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unk
  if(key==='limitations'&&Array.isArray(value))return value.map(item=>serverMessage(String(item)));
  if(key==='via'&&Array.isArray(value))return value.map(id=>referenceName(snapshot,String(id),'nodeId')).join(' / ');
  if(key==='relationBasis'&&value==='current')return t('当前关系');
+ if(key==='utilityName'&&context&&!context.utilityId)return t('未指定分项');
+ if(key==='utilityId'&&value==='')return t('未指定分项');
+ if(key==='name'&&snapshot.result.kind==='utility'&&context?.utilityId===''&&!context.nodeId)return t('未指定分项');
+ if(key==='percentageBasis'&&value==='areaNormalized')return t('面积归一化结果用于强度对比，不计算分项占比。');
+ if(key==='flowMode')return value==='endUse'?t('按能耗分项'):t('按当前关系');
  if(value===null||value===undefined)return value;
  if(['usageBasis','usagePolicy','percentageBasis','rankBasis','comparability'].includes(key))return ({knownUsage:key==='percentageBasis'?t('已有用量占比'):key==='rankBasis'?t('已有用量排名'):t('已有用量'),complete:t('完整可比'),incompleteCoverage:t('覆盖不完整，不计算可比指标'),overlappingScopes:t('范围重叠，保留各对象用量，不计算占比'),zeroKnownTotal:t('已有用量合计为零，无法计算占比'),noKnownUsage:t('没有可用于占比的已有用量'),negativeConsumption:t('存在负用量，无法计算占比'),incompatibleBaseline:t('基准的能源类型或单位不一致'),missingCalendar:t('未配置工作日历'),billingRequiresCompleteCoverage:t('费用按费率规则计算；缺测或阶梯基线不足时不生成完整账单。'),completeTrainingHistoryRequired:t('预测仅使用满足完整率和回测条件的训练历史。'),completePairsRequired:t('回归只使用有效且完整的成对观测。'),comparableCoverageRequired:t('效率、比率与损耗需要完整且可比较的数据覆盖。')} as Record<string,string>)[String(value)]||value;
  if(key==='proofId')return value;
@@ -79,9 +85,9 @@ export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unk
  if(key==='model')return ({seasonalNaive:t("上周同期"),weekdayMean:t("近期同星期均值"),dampedTrend:t("周周期＋衰减趋势")} as Record<string,string>)[String(value)]||value;
  if(key==='phase')return value==='forecast'?t("预测"):t("历史");
  if(key==='simulated'||key==='forecastRolling'||key==='detailsTruncated'||key==='externalFunctionManaged'||key==='emitted'||key==='substituted')return value===true?t("是"):t("否");
- if(key==='nodeType')return ({meter:t("表计"),space:t('空间'),organization:t('组织'),summary:t("统计汇总"),difference:t("计量差额")} as Record<string,string>)[String(value)]||value;
+ if(key==='nodeType')return ({meter:t("表计"),space:t('空间'),organization:t('组织'),utility:t('分项'),summary:t("统计汇总"),difference:t("计量差额")} as Record<string,string>)[String(value)]||value;
  if(key==='hasChildren'||key==='additive'||key==='canAdd')return value===true?t("是"):t("否");
- if(snapshot.result.kind==='energyFlow'&&key==='basis')return ({metering:t('当前计量关系'),calculation:t('公式引用'),space:t('空间能耗分布'),organization:t('组织能耗分布'),physicalBoundary:t('计量边界'),classificationUnion:t('分类成员并集'),unavailable:t('无统一统计边界')} as Record<string,string>)[String(value)]||t('统计依据不可用');
+ if(snapshot.result.kind==='energyFlow'&&key==='basis')return ({endUse:t('按能耗分项'),metering:t('当前计量关系'),calculation:t('公式引用'),space:t('空间能耗分布'),organization:t('组织能耗分布'),physicalBoundary:t('计量边界'),classificationUnion:t('分类成员并集'),unavailable:t('无统一统计边界')} as Record<string,string>)[String(value)]||t('统计依据不可用');
  if(snapshot.result.kind==='energyFlow'&&key==='relationKind')return ({metering:t('当前计量关系'),calculation:t('公式引用'),grouping:t('统计归属')} as Record<string,string>)[String(value)]||t('关系类型未知');
  if(snapshot.result.kind==='energyFlow'&&(key==='boundaryQuality'||key==='unionQuality')&&!['ok','good','derived','estimated','filtered','substituted','missing','incompleteInterval'].includes(String(value)))return value==='overlappingScopes'?t('来源重叠'):t('贡献范围无法完整解析');
  if((key==='quality'||key==='balanceQuality')&&snapshot.result.kind==='energyFlow')return ({ok:t("正常"),derived:t("计算值"),estimated:t("估算值"),missing:t("缺测"),negativeBalance:t("分表大于总表"),topologyIncomplete:t("计量关系不完整"),topologyUnknown:t('历史计量关系尚未确认'),incompatibleUnit:t("单位不兼容")} as Record<string,string>)[String(value)]||reportQualityText(snapshot,String(value),context);

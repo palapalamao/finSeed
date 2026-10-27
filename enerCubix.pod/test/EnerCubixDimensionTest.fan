@@ -56,6 +56,7 @@ class EnerCubixDimensionTest : Test
     r:=EnerCubixEngine.report(req,rs,histories)
     verifyEq(((List)r["series"]).size,1)
     req=request("legacy",["legacy"])
+    req["asOf"]="2026-01-02T00:00:00Z"
     r=EnerCubixEngine.report(req,rs,histories)
     near(value(r),60f)
     req.remove("dimension")

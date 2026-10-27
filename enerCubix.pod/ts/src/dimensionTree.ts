@@ -21,8 +21,8 @@ export function dimensionParent(row:EnerCubixRecord,dimension:Dimension,nativeSp
 export function dimensionPath(records:EnerCubixRecord[],id:string|undefined,dimension:Dimension,nativeSpace=hasNativeSpace(records)):EnerCubixRecord[]{const rows=new Map(dimensionRecords(records,dimension,nativeSpace).map(row=>[row.id,row])),path:EnerCubixRecord[]=[],seen=new Set<string>();let current=id;while(current&&!seen.has(current)){seen.add(current);const row=rows.get(current);if(!row)break;path.unshift(row);current=dimensionParent(row,dimension,nativeSpace);}return path;}
 export function utilityScopeAllowed(records:EnerCubixRecord[],id:string|undefined,dimension:Dimension,nativeSpace=hasNativeSpace(records)){
  const row=records.find(record=>record.id===id);if(!row)return false;
- if(dimension==='metering')return ['meter','totalMeter'].includes(row.kind)&&!row.canonicalId;
- return row.kind===(dimension==='legacy'?'group':dimension)&&dimensionPath(records,id,dimension,nativeSpace).length<=2;
+ if(['meter','totalMeter'].includes(row.kind))return !row.canonicalId;
+ return row.kind===(dimension==='legacy'?'group':dimension)&&!row.nativeHidden;
 }
 export function dimensionBranch(records:EnerCubixRecord[],id:string,dimension:Dimension,nativeSpace=hasNativeSpace(records)){const rows=dimensionRecords(records,dimension,nativeSpace),ids=new Set([id]),queue=[id];for(let i=0;i<queue.length;i++)for(const row of rows)if(dimensionParent(row,dimension,nativeSpace)===queue[i]&&row.id&&!ids.has(row.id)){ids.add(row.id);queue.push(row.id);}return ids;}
 export interface DimensionNode {key:string;title:string;record?:EnerCubixRecord;bucket?:boolean;synthetic?:boolean;children:DimensionNode[]}

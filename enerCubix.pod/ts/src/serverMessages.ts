@@ -421,3 +421,12 @@ Object.assign(chineseServerMessages,{
  comparisonCycle:'比较边界包含循环依赖。',
  comparisonIncompatible:'比较边界包含不兼容的能源类型或单位。'
 });
+
+Object.assign(serverMessages,{endUseBoundaryEmpty:'No participating submeters could be resolved. Configure the current parent-meter relationships, primary energy points and end uses.',endUseInvalidMode:'Invalid energy flow display mode.',endUseMeterRequired:'Select a main meter or meter for end-use energy flow.'});
+Object.assign(chineseServerMessages,{endUseBoundaryEmpty:'没有可解析的参与分表，请检查当前上级表关系、主能耗点及分项配置。',endUseInvalidMode:'能流展示方式无效。',endUseMeterRequired:'分项能流请选择总表或表计。'});
+
+Object.assign(serverMessages,{utilityMeterOrScopeRequired:'Select an energy meter or a valid space or organization scope for end-use analysis.'});
+Object.assign(chineseServerMessages,{utilityMeterOrScopeRequired:'分项能耗请选择能耗表计或有效的空间、组织范围。'});
+
+Object.assign(serverMessages,{negativeBalance:'Submeter usage exceeds the main meter. The balance is negative; check metering relationships and data.'});
+Object.assign(chineseServerMessages,{negativeBalance:'分表合计大于总表，差额为负，请核对计量关系与数据。'});

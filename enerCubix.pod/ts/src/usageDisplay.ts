@@ -17,7 +17,7 @@ export function applyKnownUsageDisplay(result:ReportResult):void{
  const known=new Map((Array.isArray(result.summary.knownTotals)?result.summary.knownTotals as Row[]:[]).map(row=>[String(row.id),row]));
  if(Array.isArray(result.summary.totals))result.summary.totals=result.summary.totals.map((row:Row)=>{const subtotal=known.get(String(row.id));return display(subtotal?{...row,knownValue:subtotal.value,knownValueType:subtotal.valueType,knownQuality:subtotal.quality}:row);});
  result.summary.selectionTotals=rows(result.summary.selectionTotals);
- if(result.extra){for(const key of ['details','scopeTotals','grandTotals','overview','loadBands','comparisons','utilityShares','selectionTotals'])if(Array.isArray(result.extra[key]))result.extra[key]=rows(result.extra[key]);
+ if(result.extra){for(const key of ['details','scopeTotals','grandTotals','overview','loadBands','comparisons','utilityShares','utilityMembers','selectionTotals'])if(Array.isArray(result.extra[key]))result.extra[key]=rows(result.extra[key]);
   if(result.kind==='leak'&&Array.isArray(result.extra.leakTotals))result.extra.leakTotals=(result.extra.leakTotals as Row[]).map(row=>{
    if(!Object.hasOwn(row,'knownTotal'))return row;
    const main=typeof row.knownTotal==='number'&&Number.isFinite(row.knownTotal)?row.knownTotal:null;

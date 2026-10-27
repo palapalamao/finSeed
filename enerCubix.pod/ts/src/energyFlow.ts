@@ -4,7 +4,9 @@ export interface EnergyFlowNode {
  id:string;
  nodeId?:string;
  name:string;
- nodeType:'meter'|'summary'|'difference'|'space'|'organization';
+ nodeType:'meter'|'summary'|'difference'|'space'|'organization'|'utility';
+ utilityId?:string;
+ memberIds?:string[];
  parentId?:string;
  categoryId:string;
  unit:string;
@@ -34,12 +36,12 @@ export interface EnergyFlowLink {
  quality:string;
  sourceIds:string[];
  percentage:number|null;
- relationKind?:'metering'|'calculation'|'grouping';
+ relationKind?:'metering'|'calculation'|'grouping'|'classification';
 }
 export interface EnergyFlowData {
  graphId?:string;
  objectId?:string;
- basis?:'metering'|'calculation'|'space'|'organization';
+ basis?:'metering'|'calculation'|'space'|'organization'|'endUse';
  contributionMemberIds?:string[];
  sharedMemberIds?:string[];
  additive?:boolean;
@@ -211,7 +213,7 @@ export function energyFlowLayout(data:EnergyFlowData):EnergyFlowLayout {
  const tree=(node:EnergyFlowNode,depth:number,color:string):Branch=>{
   visited.add(node.id);const branch:Branch={node,depth,color:node.nodeType==='difference'?differenceColor:color,children:[],height:0,span:0};branches.push(branch);
   if(depth<2){const next=node.nodeType==='summary'?data.rootIds.map(id=>byId.get(id)).filter((child):child is EnergyFlowNode=>!!child):children.get(node.id)||[];
-   for(const [index,child]of next.entries())if(!visited.has(child.id))branch.children.push(tree(child,depth+1,node.nodeType==='summary'?energyFlowColors[index%energyFlowColors.length]:color));
+   for(const [index,child]of next.entries())if(!visited.has(child.id))branch.children.push(tree(child,depth+1,node.nodeType==='summary'||data.basis==='endUse'&&depth===0?energyFlowColors[index%energyFlowColors.length]:color));
   }
   return branch;
  };

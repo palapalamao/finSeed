@@ -1632,6 +1632,38 @@ Object.assign(englishMessages,{
  '左柱为总表已有用量，右柱按当前关系堆叠各分表已有量。已有用量差值仅作对照；缺测不补零，覆盖不一致时不据此判断泄漏。':'The left bar shows available main-meter usage; the right bar stacks available submeter usage using current relationships. The available usage difference is for comparison only. Missing data is not zero-filled, and unequal coverage cannot establish leakage.'
 });
 Object.assign(englishMessages,{
+ '所选表计的分项构成':'End uses of selected meters',
+ '所选表计的分项构成，详细数值见下方明细表':'End uses of selected meters; detailed values are in the table below',
+ '按所选表计自身用量归入当前分项，同分项合并计算占比。':'Each selected meter’s own consumption is assigned to its current end use. Meters with the same end use share one slice.',
+ '已有用量占比；各表覆盖可能不同，不代表完整区间构成。':'Shares of available usage; coverage may differ between meters and does not establish the complete-period mix.',
+ '每块表读取自身主能耗点历史；总表不会自动展开分表。':'Each meter uses its own primary energy-point history. Selecting a main meter does not expand its submeters.',
+ '计量范围重叠，相关对象无法计算占比。请取消总表或其下级表，选择互不包含的表计；各表自身用量仍保留。':'The selected scopes overlap; shares cannot be calculated. Deselect the parent meter or its descendants and choose nonoverlapping meters. Each meter’s own usage remains visible.',
+ '面积归一化结果用于强度对比，不计算分项占比。':'Area-normalized values compare intensities; end-use shares are not calculated.',
+ '存在负用量，不计算分项占比；请核对表计数据。':'Negative consumption prevents end-use shares from being calculated. Check the meter data.',
+ '此快照使用旧分项口径，请重新查询。':'This snapshot uses the previous end-use calculation. Run the query again.',
+ '已有用量合计':'Available usage total',
+ '各表自身用量与分项':'Each meter’s own usage and end use',
+ '显示全部表计':'Show all meters',
+ '所属分项':'Assigned end use',
+ '自身用量':'Own consumption',
+ '此分项没有可显示的表计':'No meters to display for this end use',
+ '此范围没有可显示的分项用量':'No end-use consumption to display in this scope',
+ '所选表计用量趋势':'Consumption trends of selected meters',
+ '分项能流':'End-use energy flow',
+ '按能耗分项':'By end use',
+ '按当前关系':'By current relationships',
+ '能流展示方式':'Energy flow display mode',
+ '展示方式':'Display mode',
+ '能耗分项':'Energy end uses',
+ '表计数量':'Meter count',
+ '分项已有用量合计':'Available end-use usage total',
+ '按当前计量边界将分表自身用量归入分项；总表自身用量独立保留，差额不自动分摊。':'Submeters’ own usage is grouped by end use within the current metering boundary. Main-meter usage remains separate; differences are not allocated automatically.',
+ '参与分表按当前分项归类；缺测不补零':'Participating submeters use their current end-use assignments; missing values are not zero-filled',
+ '分项能流请选择总表或表计，按当前计量边界查看分流。':'Select a main meter or meter to view end-use flows within the current metering boundary.',
+ '选择总表后，按当前计量边界将参与分表归入照明、动力等分项；总表用量独立保留。':'Select a main meter to group participating submeters into lighting, power and other end uses using current boundaries. Main-meter usage remains separate.',
+ '分项表计明细':'End-use meter details',
+ '分项标识':'End-use identifier',
+ '分项成员':'End-use members',
  '长文本明细':'Long text details',
  '原工作表':'Original worksheet',
  '原单元格':'Original cell',
@@ -1640,3 +1672,5 @@ Object.assign(englishMessages,{
  '文本内容':'Text content',
  '内容已分为 {0} 段，完整内容见“{1}”工作表的 {2} / {3}。此单元格显示第 1 段。':'The content has {0} parts. See worksheet “{1}”, {2} / {3}, for the complete text. This cell shows part 1.'
 });
+
+Object.assign(englishMessages,{'范围分项已有合计（已去重）':'Available end-use total in scope (deduplicated)','该合计只统计参与分表；总表自身用量在各图中单独展示。':'This total includes participating submeters only. Each main meter’s own usage is shown separately in its graph.'});
