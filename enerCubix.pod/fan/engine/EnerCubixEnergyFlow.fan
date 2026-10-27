@@ -187,10 +187,13 @@ internal class EnerCubixEnergyFlow
     children.each |child|
     {
       c:=ctx.byId[child]
-      if (!meter(c) || derived(c)) return
-      physical:=physicalId(c)
-      if (seenPoints.contains(physical)) suppressed.add(child)
-      else seenPoints.add(physical)
+      if (!meter(c)) return
+      if (!derived(c))
+      {
+        physical:=physicalId(c)
+        if (seenPoints.contains(physical)) suppressed.add(child)
+        else seenPoints.add(physical)
+      }
       if (grouping && children.any |other| {other != child && (dim.scope(other) ? EnerCubixMath.strings(boundaries(other)["members"]) : [other]).any |member| {ancestor(child,member)}}) suppressed.add(child)
     }
     displayed:=children.findAll |child| {!suppressed.contains(child)}
@@ -326,7 +329,11 @@ internal class EnerCubixEnergyFlow
   private Str? membership(Str:Obj? r)
   {
     if (dim.dimension == "organization") return r["organizationId"] as Str
-    if (dim.nativeSpace && r["nativeEquip"] == true) return r["nativeTreeParentId"] as Str
+    if (dim.nativeSpace && r["nativeEquip"] == true)
+    {
+      coverage:=r["spaceId"] as Str
+      return coverage != null && coverage != r["id"] ? coverage : r["nativeTreeParentId"] as Str
+    }
     if (dim.nativeSpace && r["pointId"] != null && r["expressionId"] == null) return r["nativeSpaceId"] as Str
     return r["spaceId"] as Str
   }

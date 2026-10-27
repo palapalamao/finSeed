@@ -158,6 +158,26 @@ class EnerCubixFlowViewsTest : Test
     verify(!EnerCubixMath.maps(g["nodes"]).any |n| {n["nodeId"] == "b"})
   }
 
+  Void testNativeAutoSumDoesNotDuplicateItsGroupedChildDistribution()
+  {
+    [false,true].each |selfCoverage|
+    {
+      rs:=records
+      rs.findAll |r| {["t","a","b"].contains(r["id"])}.each |r|
+      {
+        r["nativeEquip"]=true;r["nativeSpaceId"]=r["id"];r["nativeTreeParentId"]="site"
+        if (selfCoverage) r["spaceId"]=r["id"]
+      }
+      rs.find |r| {r["id"] == "t"}["autoSum"]=true
+      req:=request(["site"]);req["dimension"]="space";req["spaceSource"]="fin"
+      g:=graph(EnerCubixEngine.report(req,rs,histories),"site")
+      near(node(g,"site")["knownValue"],110f)
+      near(node(g,"site")["knownSubmeter"],100f)
+      near(node(g,"t")["knownValue"],110f)
+      verify(!EnerCubixMath.maps(g["links"]).any |l| {l["source"] == "site" && l["target"] == "t"})
+    }
+  }
+
   Void testLegacyScopeBridgePreservesSelectedObjectsAndTheirView()
   {
     req:=request(Str[,]); req["scopeDimension"]="space"; req["scopeNodeIds"]=["f1"]
