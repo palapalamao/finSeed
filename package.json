@@ -1,6 +1,6 @@
 {
   "name": "enercubix",
-  "version": "0.12.4",
+  "version": "0.12.6",
   "private": true,
   "description": "EnerCubix multidimensional energy analytics",
   "scripts": {
