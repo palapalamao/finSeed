@@ -39,7 +39,7 @@ internal class EnerCubixReport
     if (out.ratio) out.unit="COP"
     Str? directQuality:=null
     if (ctx.dimension != null && out.leak) directQuality=ctx.comparison == null ? ctx.dimension.leakQuality(id) : ctx.comparison.quality(id)
-    else if (ctx.dimension?.dimension == "organization" && r != null && ["meter","totalMeter"].contains(r["kind"]?.toStr ?: "")) directQuality=ctx.dimension.quality([r])
+    else if (kind != "utility" && ctx.dimension?.dimension == "organization" && r != null && ["meter","totalMeter"].contains(r["kind"]?.toStr ?: "")) directQuality=ctx.dimension.quality([r])
     cursor:=start
     while (cursor < end)
     {
@@ -84,6 +84,7 @@ internal class EnerCubixReport
         if (activeKnown != null && !out.gauge)
         {
           known=activeKnown.node(id,category,cursor,next,metric,Str[,],utility)
+          if (kind == "utility" && value.value == null && value.quality == "missing" && known.quality == "na") value=EnerCubixValue(null,"na",value.sources)
         }
       }
       if (out.leak && (numerator?.reliable == false || denominator?.reliable == false))
@@ -190,7 +191,7 @@ internal class EnerCubixReport
 
   Str:Obj? finish(EnerCubixLine[] lines)
   {
-    if (!["cop","leak"].contains(kind)) summary["selectionTotals"]=selectionTotals(lines)
+    if (!["cop","leak"].contains(kind)) summary["selectionTotals"]=kind == "utility" ? utilityTotals(lines) : selectionTotals(lines)
     if (kind == "ranking" || kind == "proportion") totals(lines)
     else if (kind == "workingHours" || kind == "workingDays") working(lines)
     else if (kind == "daily") daily(lines)
@@ -220,7 +221,8 @@ internal class EnerCubixReport
       extra["knownUsage"]=["basis":"closedSourceIntervals","asOf":dataCutoff.toIso,"sourceUsage":reads,"detailsTruncated":reads.any |row| { row["detailsTruncated"] == true }]
     }
     if (kind == "leak") leakTotals(lines)
-    if (ctx.dimension != null) dimensionDetails(lines)
+    if (kind == "utility") extra["details"]=extra["utilityMembers"]
+    else if (ctx.dimension != null) dimensionDetails(lines)
     return result
   }
 
@@ -365,64 +367,73 @@ internal class EnerCubixReport
     return ["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"knownValue":value.value,"knownQuality":value.quality,"coveredSeconds":amount,"expectedSeconds":seconds,"coverage":seconds > 0f ? (amount/seconds).min(1f) : 0f,"coverageStart":starts.isEmpty ? null : ((DateTime)starts.min).toIso,"coverageEnd":ends.isEmpty ? null : ((DateTime)ends.max).toIso,"complete":line.total.value != null && line.total.reliable && amount >= seconds,"meterIds":meters.map |m->Str| {m["id"].toStr}]
   }
 
+  private [Str:Obj?][] utilityTotals(EnerCubixLine[] lines)
+  {
+    out:=[Str:Obj?][,]
+    lines.map |l->Str| {l.category+"|"+l.unit}.unique.sort.each |Str key|
+    {
+      group:=lines.findAll |l| {l.category+"|"+l.unit == key}
+      out.add(utilityAggregate(group).setAll(["id":key,"categoryId":group.first.category,"unit":group.first.unit]))
+    }
+    return out
+  }
+
+  private Str:Obj? utilityAggregate(EnerCubixLine[] group)
+  {
+    readings:=group.map |l->EnerCubixValue| {l.total}
+    meters:=group.map |l->[Str:Obj?]| {ctx.byId[l.nodeId]}
+    overlap:=EnerCubixEndUse.overlap(ctx,meters,readings)
+    value:=EnerCubixValue.sum(readings)
+    known:=EnerCubixKnownUsage.combine(group.map |l->EnerCubixValue| {l.knownTotal})
+    if (overlap)
+    {
+      value=EnerCubixValue(null,"overlappingScopes",value.sources)
+      known=EnerCubixValue(null,"overlappingScopes",known.sources)
+    }
+    else if (request["perArea"] == true)
+    {
+      value=EnerCubixValue(null,"areaNormalized",value.sources)
+      known=EnerCubixValue(null,"areaNormalized",known.sources)
+    }
+    row:=Str:Obj?["value":value.value,"valueType":value.valueType,"quality":value.quality,"scopeQuality":overlap ? "overlappingScopes" : null,"sourceIds":value.sources,"meterIds":group.map |l->Str| {l.nodeId}]
+    if (knownCtx != null) row.setAll(EnerCubixKnownUsage.fields(known))
+    return row
+  }
+
   private Void utilityShares(EnerCubixLine[] lines)
   {
-    grouped:=Str:EnerCubixValue[][:]
+    members:=[Str:Obj?][,];shares:=[Str:Obj?][,]
     lines.each |l|
     {
-      key:="${l.nodeId}|${l.category}|${l.unit}"
-      if (!grouped.containsKey(key)) grouped[key]=EnerCubixValue[,]
-      grouped[key].add(l.total)
-    }
-    shares:=[Str:Obj?][,]
-    lines.each |l|
-    {
-      key:="${l.nodeId}|${l.category}|${l.unit}"
+      record:=ctx.byId[l.nodeId]; utility:=record["utilityId"] as Str ?: ""
       value:=l.total
-      percentage:=EnerCubixValue.divide(value,EnerCubixValue.sum(grouped[key])).scale(100f)
-      row:=Str:Obj?["id":l.id,"name":l.name,"nodeId":l.nodeId,"categoryId":l.category,"unit":l.unit,"value":value.value,"percentage":percentage.value,"quality":value.quality,"percentageQuality":percentage.quality,"sourceIds":value.sources]
-      if (displaysKnown(l))
-      {
-        group:=lines.findAll |member| {member.nodeId == l.nodeId && member.category == l.category && member.unit == l.unit}
-        known:=l.knownTotal; denominator:=EnerCubixKnownUsage.combine(group.map |member->EnerCubixValue| {member.knownTotal})
-        basis:=shareBasis(group,denominator)
-        row.setAll(EnerCubixKnownUsage.fields(known))
-        row["knownPercentage"]=basis == "knownUsage" && known.value != null ? known.value/denominator.value*100f : null
-        row["percentageBasis"]=basis
-      }
-      shares.add(row)
+      row:=Str:Obj?["id":l.id,"nodeId":l.nodeId,"name":ctx.displayName(l.nodeId),"utilityId":utility,"utilityName":ctx.byId[utility]?.get("name") ?: "","categoryId":l.category,"unit":l.unit,"value":value.value,"valueType":value.valueType,"quality":value.quality,"sourceIds":value.sources,"counted":true]
+      if (knownCtx != null) row.setAll(EnerCubixKnownUsage.fields(l.knownTotal)).setAll(coverage(l))
+      members.add(row)
     }
-    extra["utilityShares"]=shares
-    if (ctx.dimension != null)
+    lines.map |l->Str| {l.category+"|"+l.unit}.unique.sort.each |Str key|
     {
-      scopeTotals:=[Str:Obj?][,]
-      grouped.each |values,key|
+      group:=lines.findAll |l| {l.category+"|"+l.unit == key}
+      total:=utilityAggregate(group)
+      strict:=EnerCubixMath.num(total["value"]); known:=knownCtx == null ? strict : EnerCubixMath.num(total["knownValue"])
+      overlap:=total["scopeQuality"] == "overlappingScopes"
+      negative:=group.any |l| {l.total.quality == "negative" || l.knownTotal.quality == "negative" || (l.total.value != null && l.total.value < 0f) || (l.knownTotal.value != null && l.knownTotal.value < 0f)}
+      basis:=overlap ? "overlappingScopes" : (request["perArea"] == true ? "areaNormalized" : (negative ? "negativeConsumption" : (known == null ? "noKnownUsage" : (known == 0f ? "zeroKnownTotal" : "knownUsage"))))
+      group.map |l->Str| {ctx.byId[l.nodeId]?.get("utilityId") as Str ?: ""}.unique.sort.each |utility|
       {
-        representative:=lines.find |l| { "${l.nodeId}|${l.category}|${l.unit}" == key }
-        if (representative == null) return
-        total:=meterTotal(representative.nodeId,representative.category)
-        if (request["perArea"] == true)
-        {
-          area:=EnerCubixMath.num(ctx.byId[representative.nodeId]?.get("area"))
-          total=area == null || area <= 0f ? EnerCubixValue(null,"missingArea",total.sources) : total.scale(1f/area)
-        }
-        measured:=EnerCubixValue.sum(values)
-        if (total.value == null || measured.value == null || (total.value-measured.value).abs > 0.000001f) ctx.warn("${ctx.displayName(representative.nodeId)}: 分项覆盖不完整")
-        row:=Str:Obj?["nodeId":representative.nodeId,"categoryId":representative.category,"value":total.value,"quality":total.quality,"unit":representative.unit,"sourceIds":total.sources]
-        if (knownCtx != null)
-        {
-          known:=meterTotal(representative.nodeId,representative.category,true)
-          if (request["perArea"] == true)
-          {
-            area:=EnerCubixMath.num(ctx.byId[representative.nodeId]?.get("area"))
-            known=area == null || area <= 0f ? EnerCubixValue(null,"missingArea",known.sources) : known.scale(1f/area)
-          }
-          row.setAll(EnerCubixKnownUsage.fields(known))
-        }
-        scopeTotals.add(row)
+        subset:=group.findAll |l| {(ctx.byId[l.nodeId]?.get("utilityId") as Str ?: "") == utility}
+        row:=utilityAggregate(subset)
+        row.setAll(["id":key+"|"+utility,"name":ctx.byId[utility]?.get("name") ?: utility,"utilityId":utility,"categoryId":group.first.category,"unit":group.first.unit,"percentageBasis":basis])
+        v:=EnerCubixMath.num(row["value"]);k:=EnerCubixMath.num(row["knownValue"])
+        percentage:=EnerCubixValue.divide(EnerCubixValue(v,row["quality"].toStr),EnerCubixValue(strict,total["quality"].toStr)).scale(100f)
+        row["percentage"]=basis == "knownUsage" ? percentage.value : null
+        row["knownPercentage"]=basis == "knownUsage" && k != null ? k/known*100f : null
+        row["percentageQuality"]=basis == "knownUsage" ? percentage.quality : basis
+        shares.add(row)
       }
-      extra["scopeTotals"]=scopeTotals
     }
+    extra["utilityShares"]=shares;extra["utilityMembers"]=members
+    extra["scopeTotals"]=summary["selectionTotals"]
   }
 
   private Void append(EnerCubixLine l, Str gran)

@@ -19,20 +19,17 @@ class EnerCubixUtilityMeteringTest : Test
     verifyEq(master["includeInTotals"],false)
   }
 
-  Void testMeterScopeUsesUsageLeavesAndRetainsMeasuredTotal()
+  Void testMeterScopeUsesOnlyItsOwnMeasuredTotal()
   {
-    rs:=records
-    req:=request("master")
+    rs:=records; req:=request("master")
     report:=EnerCubixEngine.report(req,rs,histories)
     shares:=EnerCubixMath.maps(((Map)report["extra"])["utilityShares"])
-    verifyEq(shares.size,3)
-    sum:=0f; shares.each |s| { sum+=(Float)s["value"] }; verifyEq(sum,35f)
-    verifyEq(((Float)shares.find |s| { s["name"].toStr.contains("lighting") }["percentage"]-20f/35f*100f).abs < 0.000001f,true)
-    details:=EnerCubixMath.maps(((Map)report["extra"])["details"])
-    verifyEq(details.findAll |r| { r["counted"] == true }.map |r->Str| { r["nodeId"].toStr }.sort,["a","b","c"])
+    verifyEq(shares.size,1);verifyEq(shares.first["utilityId"],"")
+    verifyEq(shares.first["value"],100f);verifyEq(shares.first["percentage"],100f)
+    verifyEq(shares.first["meterIds"],["master"])
+    details:=EnerCubixMath.maps(((Map)report["extra"])["utilityMembers"])
+    verifyEq(details.map |r->Str| {r["nodeId"].toStr},["master"])
     verifyEq(EnerCubixMath.maps(((Map)report["extra"])["scopeTotals"]).first["value"],100f)
-    verify(((Str[])report["warnings"]).any |w| { w.contains("分项覆盖不完整") })
-    // Ordinary profiles keep the selected meter's own measurement.
     req["kind"]="profile"
     verifyEq(EnerCubixMath.maps(EnerCubixMath.maps(EnerCubixEngine.report(req,rs,histories)["series"]).first["points"]).first["value"],100f)
   }
@@ -43,7 +40,7 @@ class EnerCubixUtilityMeteringTest : Test
     report:=EnerCubixEngine.report(req,records,histories)
     verifyEq(EnerCubixMath.maps(report["series"]).size,1)
     verifyEq(EnerCubixMath.maps(EnerCubixMath.maps(report["series"]).first["points"]).first["value"],20f)
-    verifyEq(EnerCubixDimension.dependencies(request("master"),records)["points"],["pa","pb","pc","pm","pmed"])
+    verifyEq(EnerCubixDimension.dependencies(request("master"),records)["points"],["pm"])
     hs:=histories.findAll |h| { h["pointId"] != "pa" }
     report=EnerCubixEngine.report(req,records,hs)
     p:=EnerCubixMath.maps(EnerCubixMath.maps(report["series"]).first["points"]).first

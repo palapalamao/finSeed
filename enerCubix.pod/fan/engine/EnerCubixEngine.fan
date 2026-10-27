@@ -50,6 +50,7 @@ class EnerCubixEngine
     if (!["hour","day","week","month","year"].contains(period)) throw ArgErr("Invalid period")
     if (!["energy","cost","coal","co2","rawcoal","oil"].contains(metric)) throw ArgErr("Invalid metric")
     if (!["profile","ranking","proportion","utility","daily","comparison","primary","cop","leak","workingHours","workingDays","regression","forecast","trend","dashboard","energyFlow"].contains(kind)) throw ArgErr("Invalid report kind")
+    if (request["flowMode"] != null && !["relations","endUse"].contains(request["flowMode"])) throw ArgErr("endUseInvalidMode")
     if (kind == "forecast") histories=EnerCubixForecast.clip(histories,to)
     if (kind == "comparison" && request["comparisonAlignment"] != null)
     {
@@ -86,6 +87,11 @@ class EnerCubixEngine
     if (kind == "trend") return report.trend(selected)
     if (kind == "regression") return report.regression(selected)
     lines:=EnerCubixLine[,]
+    if (kind == "utility")
+    {
+      EnerCubixEndUse.resolve(ctx,selected).each |meter| {lines.add(report.line(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
+      return report.finish(lines)
+    }
     selected.each |id|
     {
       record:=ctx.byId[id]
@@ -98,30 +104,12 @@ class EnerCubixEngine
       if (record["kind"] == "nativePoint") throw ArgErr("FIN 原生点位仅用于空间浏览，请先绑定计量档案")
       if (kind == "forecast" && ["sensor","cop","binding"].contains(record["kind"]?.toStr ?: "")) throw ArgErr("请选择能耗表计或空间、组织范围进行预测")
       if (dimension != null && ["space","organization","group"].contains(record["kind"]?.toStr ?: "") && !dimension.scope(id)) throw ArgErr("Selected node does not belong to the report dimension")
-      if (kind == "utility")
-      {
-        if (dimension != null)
-        {
-          if (!dimension.utilityAllowed(id)) throw ArgErr("Utility analysis supports only root and first-level dimension scopes")
-        }
-        else
-        {
-          if (record["kind"] != "group") throw ArgErr("Utility analysis requires a group")
-          parent:=ctx.byId[record["parentId"]?.toStr ?: ""]
-          if (parent != null && parent["parentId"] != null) throw ArgErr("Utility analysis supports only root and first-level groups")
-        }
-      }
       if (dimension != null && kind == "leak" && !["meter","totalMeter"].contains(record["kind"]?.toStr ?: "")) throw ArgErr("Leak analysis requires a master meter")
       cats:=ctx.categories(id)
       if (cats.isEmpty) cats=[""]
       cats.each |cat|
       {
-        if (kind == "utility")
-        {
-          utilities:=ctx.utilities(id,cat)
-          utilities.each |u| { lines.add(report.line(id,cat,u)) }
-        }
-        else lines.add(report.line(id,cat))
+        lines.add(report.line(id,cat))
       }
     }
     if (kind == "profile") EnerCubixMath.strings(request["referenceIds"]).unique.each |id| { lines.add(report.referenceLine(id,true)) }

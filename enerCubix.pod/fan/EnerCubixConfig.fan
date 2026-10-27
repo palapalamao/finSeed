@@ -16,6 +16,8 @@ const class EnerCubixConfig
   static Void validate([Str:Obj?] rec, [Str:Obj?][] all)
   {
     kind := rec["kind"] as Str ?: ""
+    templateRequest:=kind == "template" ? (rec["request"] as Map) : null
+    if (templateRequest?.get("flowMode") != null && !["relations","endUse"].contains(templateRequest["flowMode"])) throw ArgErr("endUseInvalidMode")
     if (rec["autoSum"] != null && rec["autoSum"] isnot Bool) throw ArgErr("autoSum 必须为布尔值")
     if (rec["autoSum"] == true && rec["expressionId"] != null) throw ArgErr("分表合计与计算公式不能同时启用")
     name := (rec["name"] as Str ?: "").trim

@@ -84,10 +84,10 @@ class EnerCubixDimensionTest : Test
     req:=request("space",["floor"]); req["kind"]="utility"
     r:=EnerCubixEngine.report(req,rs,histories)
     near(value(r),30f)
-    verify(((Str)(([Str:Obj?][])r["series"]).first["name"]).contains("未指定分项"))
+    verifyEq(EnerCubixMath.maps(((Map)r["extra"])["utilityShares"]).first["utilityId"],"")
     room:=[Str:Obj?]["id":"room","kind":"space","name":"room","parentId":"floor"]
     rs.add(room); req["nodeIds"]=["room"]
-    verifyErr(ArgErr#) { EnerCubixEngine.report(req,rs,histories) }
+    verifyEq(EnerCubixMath.maps(EnerCubixEngine.report(req,rs,histories)["series"]).size,0)
     req=request("organization",["tenant"]); req["kind"]="utility"
     near(value(EnerCubixEngine.report(req,rs,histories)),30f)
   }
@@ -103,7 +103,7 @@ class EnerCubixDimensionTest : Test
     near(value(run(rs,histories.dup.add(["pointId":"pv","unit":"kWh","mode":"interval","samples":[[Str:Obj?]["ts":"2026-01-01T00:00:00Z","value":60f]]]),"space",["floor"])),90f)
   }
 
-  Void testUtilityUsesMeasuredBranchesAndWarnsAboutCoverage()
+  Void testUtilityScopeKeepsTheCommonAuthoritativeMeter()
   {
     rs:=base
     rs.find |m| { m["id"] == "floorMeter" }["utilityId"]="lighting"
@@ -111,8 +111,8 @@ class EnerCubixDimensionTest : Test
     req:=request("space",["building"]); req["kind"]="utility"
     r:=EnerCubixEngine.report(req,rs,histories)
     ss:=([Str:Obj?][])r["series"]
-    verifyEq(ss.size,1); verify(ss.first["name"].toStr.contains("照明")); near(value(r),30f)
-    verify(((Str[])r["warnings"]).any |w| { w.contains("分项覆盖不完整") })
+    verifyEq(ss.size,1); near(value(r),100f)
+    verifyEq(EnerCubixMath.maps(((Map)r["extra"])["utilityMembers"]).first["nodeId"],"master")
     totals:=([Str:Obj?][])((Str:Obj?)r["extra"])["scopeTotals"]
     near((Float?)totals.first["value"],100f)
   }

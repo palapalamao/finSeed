@@ -369,7 +369,7 @@ class EnerCubixEngineTest : Test
     extra=(Str:Obj?)r["extra"]; verify((([Str:Obj?][])extra["fitLine"]).isEmpty); verifyEq(extra["count"],1)
   }
 
-  Void testUtilitySharesStayWithinEachSelectedNode()
+  Void testUtilitySharesCombineTheDeduplicatedSelection()
   {
     g:=rec("g","group"); sub:=rec("sub","group"); sub["parentId"]="g"
     a:=meter("a","pa","sub"); a["utilityId"]="u"
@@ -378,20 +378,16 @@ class EnerCubixEngineTest : Test
     records:=[g,sub,a,b,u,v]
     req:=request(); req["kind"]="utility"; req["nodeIds"]=["g","sub"]
     r:=run(records,[history("pa","interval",[10f]),history("pb","interval",[30f])],req)
-    extra:=(Str:Obj?)r["extra"]; shares:=([Str:Obj?][])extra["utilityShares"]; verifyEq(shares.size,4)
-    ["g","sub"].each |node|
-    {
-      rows:=shares.findAll |s| { s["nodeId"] == node }
-      verifyEq(rows.size,2)
-      first:=rows.find |s| { s["value"] == 10f }; second:=rows.find |s| { s["value"] == 30f }
-      near((Float?)first["percentage"],25f); near((Float?)second["percentage"],75f)
-      verifyEq(first["unit"],"kWh"); verifyEq(first["categoryId"],"electric"); verifyEq(first["quality"],"ok")
-    }
-    r=run(records,[history("pa","interval",[10f])],req); extra=(Str:Obj?)r["extra"]; shares=([Str:Obj?][])extra["utilityShares"]
-    shares.each |s| { verifyNull(s["percentage"]); verifyEq(s["percentageQuality"],"missing") }
-    verifyEq(shares.findAll |s| { s["value"] == 10f }.size,2)
-    r=run(records,[history("pa","interval",[0f]),history("pb","interval",[0f])],req); extra=(Str:Obj?)r["extra"]; shares=([Str:Obj?][])extra["utilityShares"]
-    shares.each |s| { verifyEq(s["value"],0f); verifyNull(s["percentage"]); verifyEq(s["percentageQuality"],"divisionByZero") }
+    extra:=(Str:Obj?)r["extra"]; shares:=([Str:Obj?][])extra["utilityShares"]; verifyEq(shares.size,2)
+    first:=shares.find |s| {s["utilityId"] == "u"};second:=shares.find |s| {s["utilityId"] == "v"}
+    near((Float?)first["percentage"],25f);near((Float?)second["percentage"],75f)
+    verifyEq(first["unit"],"kWh");verifyEq(first["categoryId"],"electric");verifyEq(first["quality"],"ok")
+    verifyEq(first["meterIds"],["a"])
+    r=run(records,[history("pa","interval",[10f])],req);extra=(Str:Obj?)r["extra"];shares=([Str:Obj?][])extra["utilityShares"]
+    shares.each |row| {verifyNull(row["percentage"]);verifyEq(row["percentageQuality"],"missing")}
+    verifyEq(shares.findAll |row| {row["value"] == 10f}.size,1)
+    r=run(records,[history("pa","interval",[0f]),history("pb","interval",[0f])],req);extra=(Str:Obj?)r["extra"];shares=([Str:Obj?][])extra["utilityShares"]
+    shares.each |row| {verifyEq(row["value"],0f);verifyNull(row["percentage"]);verifyEq(row["percentageBasis"],"zeroKnownTotal")}
   }
 
   Void testUtilityMastersAndUnrelatedSubgroups()
@@ -404,23 +400,16 @@ class EnerCubixEngineTest : Test
     records:=[g,child,branch,master,childMaster,utility]
     hs:=[history("pb","interval",[144f]),history("pm","interval",[240f]),history("pc","interval",[72f])]
     req:=request(); req["kind"]="utility"; req["nodeIds"]=["g"]
-    // An unrelated master-only child must neither contribute nor invalidate lighting.
-    r:=run(records,hs,req); near(value(r),144f); verifyEq(quality(r),"ok")
-    verifyEq(points(r)[0]["sourceIds"],["pb"])
-    // A child master explicitly assigned to lighting is authoritative for that child.
+    // Scope membership is identical to ordinary profile selection: its own
+    // authoritative master is never replaced by utility-tagged child histories.
+    r:=run(records,hs,req);near(value(r),240f);verifyEq(points(r)[0]["sourceIds"],["pm"])
     childMaster["utilityId"]="lighting"
-    r=run(records,hs,req); near(value(r),216f); verifyEq(quality(r),"ok")
-    verifyEq(((Str[])points(r)[0]["sourceIds"]).sort,["pb","pc"])
-    // Matching source absence remains missing; it is not skipped as unrelated.
-    r=run(records,hs[0..<2],req); verifyNull(value(r)); verifyEq(quality(r),"missing")
-    verifyEq(((Str[])points(r)[0]["sourceIds"]).sort,["pb","pc"])
-    // A master for the selected utility overrides all its branches.
+    r=run(records,hs[0..<2],req);near(value(r),240f)
     master["utilityId"]="lighting"
-    r=run(records,hs,req); near(value(r),240f); verifyEq(points(r)[0]["sourceIds"],["pm"])
-    r=run(records,[hs[0],hs[2]],req); verifyNull(value(r)); verifyEq(quality(r),"missing")
+    r=run(records,hs,req);near(value(r),240f);verifyEq(points(r)[0]["sourceIds"],["pm"])
+    r=run(records,[hs[0],hs[2]],req);verifyNull(value(r));verifyEq(quality(r),"missing")
     verifyEq(points(r)[0]["sourceIds"],["pm"])
-    // A configured master alone must still discover its utility.
-    r=run([g,master,utility],[hs[1]],req); near(value(r),240f)
+    r=run([g,master,utility],[hs[1]],req);near(value(r),240f)
     req["kind"]="profile"; r=run(records,hs,req); near(value(r),240f)
     req["kind"]="leak"; r=run(records,hs,req); near(value(r),24f)
   }

@@ -182,6 +182,12 @@ class EnerCubixDimension
     if (request["kind"] == "energyFlow") records=EnerCubixEnergyFlow.normalizeRecords(records)
     dim:=EnerCubixDimension(request["dimension"]?.toStr ?: "",records,request["spaceSource"] == "fin")
     req:=dim.normalizeRequest(request)
+    if (req["kind"] == "utility")
+    {
+      selected:=EnerCubixEndUse.resolve(EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim),EnerCubixMath.strings(req["nodeIds"]))
+      points:=selected.map |r->Str| {r["pointId"] as Str ?: ""}
+      return ["points":points.findAll |Str id->Bool| {!id.isEmpty}.unique.sort,"nodes":selected.map |r->Str| {r["id"].toStr}]
+    }
     if (req["kind"] == "energyFlow")
     {
       flow:=EnerCubixEnergyFlow.scope(req,dim)
@@ -212,7 +218,6 @@ class EnerCubixDimension
     selected.unique.each |id|
     {
       dim.collect(id,req["kind"] == "leak",nodes,points)
-      if (req["kind"] == "utility" && dim.dimension == "metering") dim.usageMembers(id).each |m| { dim.collect(m["id"].toStr,false,nodes,points) }
     }
     return ["points":points.unique.sort,"nodes":nodes.unique]
   }

@@ -62,10 +62,10 @@ class EnerCubixAcceptance
     }
     q["nodeIds"]=[root["id"]]; q["kind"]="utility"
     utilityReport:=report(q)
-    value("native utility excludes unrelated master-only child",firstPoint(utilityReport),144f,[branchPoint.id.id])
+    value("native utility uses the common authoritative master",firstPoint(utilityReport),240f,[masterPoint.id.id])
     shares:=EnerCubixMath.maps(((Map)utilityReport["extra"])["utilityShares"])
-    if (shares.size != 1 || shares.first["nodeId"] != root["id"]) throw Err("Utility grouping failed")
-    value("native utility share amount",shares.first,144f,[branchPoint.id.id])
+    if (shares.size != 1 || shares.first["meterIds"] != [master["id"]]) throw Err("Utility grouping failed")
+    value("native utility share amount",shares.first,240f,[masterPoint.id.id])
     check("native utility share percentage",shares.first["percentage"],100f)
     q["nodeIds"]=[root["id"]]; q["kind"]="daily"
     daily:=report(q); dailyPoints:=EnerCubixMath.maps(EnerCubixMath.maps(daily["series"]).first["points"])

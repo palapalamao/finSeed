@@ -574,6 +574,12 @@ class EnerCubixHistory
     if (EnerCubixDimension.active(request)) return EnerCubixDimension.dependencies(request,records)
     ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc)
     selected:=EnerCubixMath.strings(request["nodeIds"])
+    if (request["kind"] == "utility")
+    {
+      meters:=EnerCubixEndUse.resolve(ctx,selected)
+      points:=meters.map |r->Str| {r["pointId"] as Str ?: ""}
+      return ["points":points.findAll |Str id->Bool| {!id.isEmpty}.unique,"nodes":meters.map |r->Str| {r["id"].toStr}]
+    }
     if (selected.isEmpty && request["kind"] == "dashboard")
     {
       selected=records.findAll |r| { r["kind"] == "group" && r["parentId"] == null }.map |r->Str| { r["id"].toStr }
