@@ -386,10 +386,11 @@ class EnerCubixRepo
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
     all := (input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin" ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
+    if (request["kind"] == "energyFlow") all=flowRecords(all)
     if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
     request=EnerCubixEngine.flowScope(request,all)
     result:=EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
-    if (EnerCubixComparisonScope.active(request))
+    if (EnerCubixComparisonScope.active(request) || request["kind"] == "energyFlow")
     {
       readable:=Str:Bool[:]
       result=(Str:Obj?)EnerCubixComparisonScope.readableSources(result) |id->Bool|
@@ -403,6 +404,23 @@ class EnerCubixRepo
       }
     }
     return result
+  }
+
+  private [Str:Obj?][] flowRecords([Str:Obj?][] visible)
+  {
+    all:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
+    out:=EnerCubixEnergyFlow.visible(visible,all)
+    out.each |r|
+    {
+      ["historyPointId","pointId"].each |key|
+      {
+        id:=r[key] as Str
+        if (id == null) return
+        point:=cx.db.readById(Ref(id),false)
+        if (point == null || !cx.canRead(point)) r["_comparisonPointReadable"]=false
+      }
+    }
+    return out
   }
 
   ** Preview is read-only. The report resolves and checks this scope again.

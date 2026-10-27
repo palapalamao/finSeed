@@ -33,10 +33,10 @@ class EnerCubixTemporalBalanceTest : Test
     near(main["value"],40f); near(main["coverage"],0.75f)
     verifyEq(main["complete"],false); near(main["coveredSeconds"],10800f)
     near(rows.find |r| { r["nodeId"] == "a" }["value"],20f)
-    graph:=(Map)EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"]).first["energyFlow"]
+    graph:=(Map)((Map)result["extra"])["energyFlow"]
     verify(EnerCubixMath.maps(graph["nodes"]).any |n| { n["id"] == "a" })
     verify(!EnerCubixMath.maps(graph["links"]).isEmpty)
-    verify(EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"]).all |s| { s["known"] == true })
+    verifyNull(((Map)result["extra"])["energyFlowSegments"])
     verifyEq(graph["unit"],"kWh")
     verifyEq(EnerCubixMath.strings(EnerCubixDimension.dependencies(req,rs)["points"]),["pa","pm"])
   }
@@ -91,29 +91,25 @@ class EnerCubixTemporalBalanceTest : Test
     rs.add(["id":"old-a","kind":"meter","name":"Old branch","pointId":"pa","categoryId":"electric","unit":"kWh","meterParentId":"old-m"])
     req:=request("energyFlow",1); req["nodeIds"]=Str[,]; req["meterHistorySegments"]=[segment(0,1,rs)]
     result:=EnerCubixEngine.report(req,rs,[closedHistory("pm",[100f]),closedHistory("pa",[80f])])
-    graph:=(Map)EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"]).first["energyFlow"]
+    graph:=(Map)((Map)result["extra"])["energyFlow"]
     verifyEq(EnerCubixMath.maps(graph["unassigned"]).size,0)
     verifyFalse(EnerCubixMath.maps(graph["nodes"]).any |n| { n["id"] == "old-m" || n["id"] == "old-a" })
     near(EnerCubixMath.maps(graph["nodes"]).first["value"],100f)
   }
 
-  Void testCurrentTreeKeepsDataGapsSeparateFromCompleteFlowWindows()
+  Void testCurrentTreeUsesOneWholeQueryGraphAndPreservesKnownAmountsAcrossGaps()
   {
     rs:=records.findAll |r| { r["id"] != "c" }
     req:=request("energyFlow",4); req["from"]=ts(-1); req["to"]=(DateTime.fromIso(ts(4))+50sec).toIso
     req["meterHistorySegments"]=[["from":ts(-1),"to":ts(0),"known":false], ["from":ts(0),"to":req["to"],"known":true,"records":rs]]
     hs:=[closedHistory("pm",[100f,null,60f,70f]),closedHistory("pa",[80f,null,50f,60f])]
     result:=EnerCubixEngine.report(req,rs,hs)
-    parts:=EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"])
-    verifyEq(parts.size,5)
-    verify(parts.all |s| { s["known"] == true })
-    verifyEq(parts[1]["from"],ts(0)); verifyEq(parts[1]["to"],ts(1))
-    verifyEq(parts[2]["from"],ts(1)); verifyEq(parts[2]["to"],ts(2))
-    verifyEq(parts[3]["from"],ts(2)); verifyEq(parts[3]["to"],ts(4))
-    graph:=(Str:Obj?)parts[3]["energyFlow"]
-    near(EnerCubixMath.maps(graph["nodes"]).find |n| { n["id"] == "m" }["value"],130f)
+    verifyNull(((Map)result["extra"])["energyFlowSegments"])
+    graph:=(Str:Obj?)((Map)result["extra"])["energyFlow"]
+    main:=EnerCubixMath.maps(graph["nodes"]).find |n| { n["id"] == "m" }
+    verifyNull(main["value"]); near(main["knownValue"],230f)
+    verifyNull(main["difference"])
     verify(!EnerCubixMath.maps(graph["links"]).isEmpty)
-    verifyEq(parts.last["to"],req["to"])
     verifyEq(result["from"],ts(-1)); verifyEq(result["to"],req["to"])
   }
 
@@ -126,9 +122,8 @@ class EnerCubixTemporalBalanceTest : Test
     main:=closedHistory("pm",[0f])
     child:=[Str:Obj?]["pointId":"pa","unit":"kWh","mode":"interval","intervals":[["from":a.toIso,"to":(a+30min).toIso,"value":0f,"quality":"cleaned"],["from":(a+30min).toIso,"to":(a+1hr).toIso,"value":0f,"quality":"cleaned"]]]
     result:=EnerCubixEngine.report(req,rs,[main,child])
-    parts:=EnerCubixMath.maps(((Map)result["extra"])["energyFlowSegments"])
-    verifyEq(parts.size,1)
-    graph:=(Str:Obj?)parts.first["energyFlow"]
+    verifyNull(((Map)result["extra"])["energyFlowSegments"])
+    graph:=(Str:Obj?)((Map)result["extra"])["energyFlow"]
     near(EnerCubixMath.maps(graph["nodes"]).find |n| { n["id"] == "m" }["value"],0f)
     verifyEq(EnerCubixMath.maps(graph["links"]).size,0)
   }
@@ -165,22 +160,17 @@ class EnerCubixTemporalBalanceTest : Test
     verifyEq(EnerCubixMath.maps(report["rows"]).size,1)
   }
 
-  Void testFlowUsesTheCurrentTreeInEveryDataCoverageSection()
+  Void testFlowUsesTheCurrentTreeAcrossTheWholeRange()
   {
     rs:=records; before:=rs.findAll |r| { r["id"] != "c" }
     req:=request("energyFlow",2); req["meterHistorySegments"]=[segment(0,1,before),segment(1,2,rs)]
     report:=EnerCubixEngine.report(req,rs,histories)
-    segments:=EnerCubixMath.maps(((Str:Obj?)report["extra"])["energyFlowSegments"])
-    verifyEq(segments.size,2)
-    first:=EnerCubixMath.maps(((Str:Obj?)segments[0]["energyFlow"])["nodes"])
-    last:=EnerCubixMath.maps(((Str:Obj?)segments[1]["energyFlow"])["nodes"])
-    verify(first.any |r| { r["id"] == "c" })
-    verify(last.any |r| { r["id"] == "c" })
-    verifyNull(first.find |r| { r["id"] == "c" }["value"])
-    near(last.find |r| { r["id"] == "c" }["value"],40f)
-    verify(segments.all |s| { s["known"] == true })
-    near(first.find |r| { r["id"] == "m" }["value"],100f)
-    near(last.find |r| { r["id"] == "m" }["value"],120f)
+    verifyNull(((Map)report["extra"])["energyFlowSegments"])
+    nodes:=EnerCubixMath.maps(((Map)((Map)report["extra"])["energyFlow"])["nodes"])
+    verify(nodes.any |r| {r["id"] == "c"})
+    verifyNull(nodes.find |r| {r["id"] == "c"}["value"])
+    near(nodes.find |r| {r["id"] == "c"}["knownValue"],40f)
+    near(nodes.find |r| {r["id"] == "m"}["value"],220f)
   }
 
   Void testUnknownTopologyLogDoesNotHideCurrentBranchesOrInventMissingData()
@@ -189,7 +179,7 @@ class EnerCubixTemporalBalanceTest : Test
     report:=EnerCubixEngine.report(req,records,histories)
     flow:=(Str:Obj?)((Str:Obj?)report["extra"])["energyFlow"]
     ns:=EnerCubixMath.maps(flow["nodes"])
-    verifyEq(EnerCubixMath.maps(flow["links"]).size,0)
+    verifyEq(EnerCubixMath.maps(flow["links"]).size,1)
     verify(ns.any |r| { r["id"] == "a" })
     verify(ns.any |r| { r["id"] == "c" })
     verifyNull(ns.find |r| { r["id"] == "c" }["value"])

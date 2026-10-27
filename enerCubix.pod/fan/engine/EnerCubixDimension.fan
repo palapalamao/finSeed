@@ -179,6 +179,7 @@ class EnerCubixDimension
   ** Shared with history planning so native reads use precisely the new membership.
   static Str:Obj? dependencies(Str:Obj? request, [Str:Obj?][] records)
   {
+    if (request["kind"] == "energyFlow") records=EnerCubixEnergyFlow.normalizeRecords(records)
     dim:=EnerCubixDimension(request["dimension"]?.toStr ?: "",records,request["spaceSource"] == "fin")
     req:=dim.normalizeRequest(request)
     if (req["kind"] == "energyFlow")

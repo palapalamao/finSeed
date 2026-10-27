@@ -162,7 +162,7 @@ internal class EnerCubixComparisonScope
 
   ** Only sums of distinct named inputs are safely flattened. Other arithmetic
   ** keeps its stored node as an opaque boundary instead of inventing weights.
-  private Str[]? additive([Str:Obj?]? expression)
+  internal static Str[]? additive([Str:Obj?]? expression)
   {
     if (expression == null || expression["_comparisonReadable"] == false) return null
     formula:=expression["formula"] as Str ?: ""

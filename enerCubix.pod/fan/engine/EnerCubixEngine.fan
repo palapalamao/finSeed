@@ -34,15 +34,8 @@ class EnerCubixEngine
 
   private static Str:Obj? calculate(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
   {
+    if (request["kind"] == "energyFlow") records=EnerCubixEnergyFlow.normalizeRecords(records)
     request=flowScope(request,records)
-    if (request["kind"] == "energyFlow" && !section)
-    {
-      if (EnerCubixMath.strings(request["nodeIds"]).any |id| { !records.any |r| {r["id"] == id} })
-        throw ArgErr("能流图对象必须是所选能源的计量表")
-      // Only data coverage divides flow sections. Configuration history is audit-only.
-      current:=request.dup.set("meterHistorySegments",[["from":request["from"],"to":request["to"],"known":true,"records":records]])
-      return EnerCubixTemporalReport.report(current,records,histories)
-    }
     EnerCubixForecast.validate(request)
     from:=DateTime.fromIso(request["from"]?.toStr ?: "")
     to:=DateTime.fromIso(request["to"]?.toStr ?: "")
@@ -80,7 +73,7 @@ class EnerCubixEngine
     }
     ctx:=EnerCubixContext(records,histories,tz,dimension)
     ctx.comparison=request["_comparisonScope"] as EnerCubixComparisonScope
-    if (kind == "energyFlow") return EnerCubixEnergyFlow(ctx,request,from,to).report
+    if (kind == "energyFlow") return EnerCubixEnergyFlow(ctx,request,from,to,histories).report
     if (dimension?.nativeSpace == true) records.findAll |r| { r["nativeSourceMissing"] == true }.each |r| { label:=r["name"] ?: r["id"]; ctx.warn("$label : nativeSourceMissing") }
     selected:=EnerCubixMath.strings(request["nodeIds"]).unique
     if (kind == "comparison" && request["otherFrom"] == null && request["otherTo"] == null) selected=selected.dup.addAll(EnerCubixMath.strings(request["referenceIds"])).unique
@@ -143,12 +136,9 @@ class EnerCubixEngine
     out:=request.dup; out.remove("scopeNodeIds"); out.remove("scopeDimension")
     if (ids.isEmpty) return out
     dimension:=request["scopeDimension"] as Str ?: "metering"
-    dim:=dimension == "legacy" ? null : EnerCubixDimension(dimension,records,request["spaceSource"] == "fin")
-    ctx:=EnerCubixContext(dim?.records ?: records,[Str:Obj?][,],DateTime.fromIso(request["from"].toStr).tz,dim)
-    category:=request["categoryId"].toStr
-    meters:=ctx.selectionMeters(ids.map |id->[Str:Obj?][]| {ctx.scopeMeters(id,category)}.flatten)
-    if (meters.isEmpty) throw ArgErr("所选范围没有该能源的有效表计")
-    out["nodeIds"]=meters.map |m->Str| {m["id"].toStr}
+    if (!["metering","space","organization"].contains(dimension)) throw ArgErr("Invalid report dimension")
+    out["dimension"]=dimension
+    out["nodeIds"]=ids
     out["selectionScope"]=["dimension":dimension,"nodeIds":ids]
     return out
   }

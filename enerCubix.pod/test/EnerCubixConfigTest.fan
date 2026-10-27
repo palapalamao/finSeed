@@ -67,5 +67,15 @@ class EnerCubixConfigTest : Test
     records.add(expr)
     verifyErr(ArgErr#) { EnerCubixConfig.validate(map(["id":"m","kind":"meter","name":"表","parentId":"g","categoryId":"c","expressionId":"e"]),records) }
   }
+  Void testNativeMetersUseIdentityAndAllowTheSameDisplayNameOnDifferentFloors()
+  {
+    a:=map(["id":"a","kind":"meter","name":"总电表","nativeEquip":true,"pointId":"pa","spaceId":"f1","categoryId":"c"])
+    b:=a.dup.set("id","b").set("pointId","pb").set("spaceId","f2")
+    rs:=[a,map(["id":"f1","kind":"space","name":"1F"]),map(["id":"f2","kind":"space","name":"2F"]),map(["id":"c","kind":"category","name":"Electric","unit":"kWh"])]
+    EnerCubixConfig.validate(b,rs)
+    verifyErr(ArgErr#) {EnerCubixConfig.validate(b.dup.set("maximum",-1f),rs)}
+    legacy:=b.dup;legacy.remove("nativeEquip")
+    verifyErr(ArgErr#) {EnerCubixConfig.validate(legacy,rs)}
+  }
   private [Str:Obj?] map([Str:Obj?] m) { m }
 }

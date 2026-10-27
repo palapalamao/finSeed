@@ -22,7 +22,7 @@ const class EnerCubixConfig
     if (!kinds.contains(kind)) throw ArgErr("不支持的配置类型")
     if (name.isEmpty || name.size > 160) throw ArgErr("名称不能为空，且不得超过160个字符")
     id := rec["id"] as Str
-    if (all.any |r| { r["kind"] != "nativePoint" && r["id"] != id && r["name"] == name && (["space","organization"].contains(kind) ? (r["kind"] == kind && r["parentId"] == rec["parentId"]) : (!["space","organization"].contains(r["kind"]) && ((nodeKinds.contains(kind) && nodeKinds.contains(r["kind"])) || r["kind"] == kind))) })
+    if (all.any |r| { r["kind"] != "nativePoint" && r["id"] != id && r["name"] == name && !(rec["nativeEquip"] == true && r["nativeEquip"] == true && EnerCubixRelations.meterKinds.contains(kind) && EnerCubixRelations.meterKinds.contains(r["kind"])) && (["space","organization"].contains(kind) ? (r["kind"] == kind && r["parentId"] == rec["parentId"]) : (!["space","organization"].contains(r["kind"]) && ((nodeKinds.contains(kind) && nodeKinds.contains(r["kind"])) || r["kind"] == kind))) })
       throw ArgErr("名称已存在")
     ["area", "maximum", "coalFactor", "co2Factor", "rawcoalFactor", "oilFactor", "actualEfficiency", "baselineEfficiency", "alarmLimit", "rate"].each |key|
     {

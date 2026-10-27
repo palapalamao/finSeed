@@ -32,13 +32,14 @@ class EnerCubixEnergyFlowTest : Test
     verify(!nodes(r).any |n| { n["id"] == "alias" })
   }
 
-  Void testMissingChildKeepsReadingAndSuppressesOnlyItsFork()
+  Void testMissingChildKeepsTheAvailableSiblingLink()
   {
     hs:=histories; hs.find |h| { h["pointId"] == "pb" }["samples"]=[["ts":ts(0),"value":null]]
     r:=EnerCubixEngine.report(request,records,hs)
     near(node(r,"main")["value"],100f); verifyNull(node(r,"main")["difference"])
     verifyNull(node(r,"b")["value"])
-    verify(!links(r).any |l| { l["source"] == "main" })
+    verify(links(r).any |l| { l["source"] == "main" && l["target"] == "a" })
+    verify(!links(r).any |l| { l["source"] == "main" && l["target"] == "b" })
     verify(links(r).any |l| { l["source"] == "other" })
     verify(!nodes(r).any |n| { n["id"] == "__energyFlowDifference__:main" })
   }
@@ -49,7 +50,7 @@ class EnerCubixEnergyFlowTest : Test
     r:=EnerCubixEngine.report(request,records,hs)
     near(node(r,"b")["knownValue"],30f)
     verifyNull(node(r,"main")["difference"])
-    verify(!links(r).any |l| {l["source"] == "main"})
+    verify(links(r).any |l| {l["source"] == "main" && l["target"] == "b" && l["value"] == 30f})
   }
 
   Void testNegativeDifferenceIsNeverAnInventedFlow()
@@ -58,7 +59,9 @@ class EnerCubixEnergyFlowTest : Test
     r:=EnerCubixEngine.report(request,records,hs)
     near(node(r,"main")["difference"],-40f)
     verifyEq(node(r,"main")["balanceQuality"],"negativeBalance")
-    verify(!links(r).any |l| { l["source"] == "main" })
+    verifyEq(node(r,"main")["lossEligible"],false)
+    verify(links(r).any |l| { l["source"] == "main" && l["target"] == "a" })
+    verify(!nodes(r).any |n| {n["nodeType"] == "difference" && n["parentId"] == "main"})
     near(node(r,"a")["value"],60f)
     verify(((Str[])r["warnings"]).any |w| { w.contains("分表合计大于总表") })
   }
@@ -123,7 +126,7 @@ class EnerCubixEnergyFlowTest : Test
     verifyEq(EnerCubixMath.strings(data(selected)["rootIds"]).sort,["main","other"])
     req=request; req["nodeIds"]=["main","a"]
     selected=EnerCubixEngine.report(req,records,histories)
-    verifyEq(EnerCubixMath.strings(data(selected)["rootIds"]),["main"])
+    verifyEq(EnerCubixMath.strings(data(selected)["rootIds"]),["a","main"])
     req=request; req["categoryId"]="unknown"; verifyErr(ArgErr#) { EnerCubixEngine.report(req,records,histories) }
   }
 

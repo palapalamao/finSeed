@@ -105,7 +105,7 @@ const class EnerCubixNativeEquip
   static [Str:Obj?] request([Str:Obj?] input, Str:Str mapping)
   {
     out:=input.dup
-    ["nodeIds","referenceIds"].each |key|
+    ["nodeIds","referenceIds","scopeNodeIds"].each |key|
     {
       if (out[key] isnot List) return
       prior:=EnerCubixMath.strings(out[key])
