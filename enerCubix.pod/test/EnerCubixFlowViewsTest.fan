@@ -142,6 +142,22 @@ class EnerCubixFlowViewsTest : Test
     near(totals.first["knownValue"],110f)
   }
 
+  Void testNativeSpaceUsesEquipmentTreeParentForVisibleMeterBranches()
+  {
+    rs:=records
+    rs.findAll |r| {["t","a","b"].contains(r["id"])}.each |r|
+    {
+      r["nativeEquip"]=true;r["nativeSpaceId"]=r["id"];r["nativeTreeParentId"]=r["spaceId"]
+    }
+    req:=request(["f1"]);req["dimension"]="space";req["spaceSource"]="fin"
+    g:=graph(EnerCubixEngine.report(req,rs,histories),"f1")
+    near(node(g,"f1")["knownValue"],40f)
+    near(node(g,"a")["knownValue"],40f)
+    verifyEq(node(g,"a")["parentId"],"f1")
+    verify(EnerCubixMath.maps(g["links"]).any |l| {l["source"] == "f1" && l["target"] == "a"})
+    verify(!EnerCubixMath.maps(g["nodes"]).any |n| {n["nodeId"] == "b"})
+  }
+
   Void testLegacyScopeBridgePreservesSelectedObjectsAndTheirView()
   {
     req:=request(Str[,]); req["scopeDimension"]="space"; req["scopeNodeIds"]=["f1"]

@@ -326,6 +326,7 @@ internal class EnerCubixEnergyFlow
   private Str? membership(Str:Obj? r)
   {
     if (dim.dimension == "organization") return r["organizationId"] as Str
+    if (dim.nativeSpace && r["nativeEquip"] == true) return r["nativeTreeParentId"] as Str
     if (dim.nativeSpace && r["pointId"] != null && r["expressionId"] == null) return r["nativeSpaceId"] as Str
     return r["spaceId"] as Str
   }
