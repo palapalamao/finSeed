@@ -22,6 +22,9 @@ class EnerCubixFlowViewsTest : Test
     verifyEq(g1["basis"],"calculation"); verifyEq(g1["additive"],true)
     verifyEq(g1["contributionMemberIds"],["a"])
     verifyEq(g1["sharedMemberIds"],["a"])
+    verifyNull(node(g1,"a")["percentage"])
+    near(node(g1,"a")["coveredSeconds"],3600f)
+    near(node(g1,"a")["coverage"],1f)
     verifyEq(EnerCubixMath.maps(g2["links"]).size,2)
     account:=(Map)extra(r)["energyFlowAccounting"]
     verifyEq(account["canAdd"],false); near(account["unionValue"],100f)
@@ -62,6 +65,16 @@ class EnerCubixFlowViewsTest : Test
     near(node(g,"b")["knownValue"],60f);near(node(g,"t")["knownSubmeter"],60f)
     verifyNull(node(g,"t")["difference"])
     verify(EnerCubixMath.maps(g["links"]).any |l| {l["target"] == "b" && l["value"] == 60f})
+  }
+
+  Void testAutoSumArchiveUsesCalculationReferencesWithoutContributionPercentages()
+  {
+    rs:=records;rs.find |m| {m["id"] == "t"}["autoSum"]=true
+    r:=EnerCubixEngine.report(request(["t"]),rs,histories);g:=graph(r,"t")
+    verifyEq(g["basis"],"calculation");near(node(g,"t")["knownValue"],110f)
+    near(node(g,"t")["knownSubmeter"],100f)
+    verifyNull(node(g,"t")["difference"]);verifyNull(node(g,"a")["percentage"])
+    verify(EnerCubixMath.maps(g["links"]).all |l| {l["relationKind"] == "calculation" && l["percentage"] == null})
   }
 
   Void testMixedMeasuredAndVirtualObjectsDoNotCreateAFalseGrandTotal()

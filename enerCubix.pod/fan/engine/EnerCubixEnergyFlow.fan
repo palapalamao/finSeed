@@ -25,6 +25,7 @@ internal class EnerCubixEnergyFlow
   private [Str:Obj?][] nodes:=[,]
   private [Str:Obj?][] links:=[,]
   private Str graphId:=""
+  private Bool calculationGraph:=false
   private Str[] allowed:=Str[,]
 
   internal static [Str:Obj?][] normalizeRecords([Str:Obj?][] records)
@@ -120,6 +121,7 @@ internal class EnerCubixEnergyFlow
     {
       id:=root["id"].toStr; graphId=dim.dimension+"|"+id; nodes=[Str:Obj?][,]; links=[Str:Obj?][,]
       grouped:=dim.scope(id)
+      calculationGraph=!grouped && derived(root)
       allowed=grouped ? dim.members(id).findAll |r| {r["categoryId"] == category}.map |r->Str| {r["id"].toStr} : ownIds
       build(id,null,null,Str[,],grouped)
       boundary:=grouped ? boundaries(id) : contribution(id,Str[,])
@@ -140,7 +142,11 @@ internal class EnerCubixEnergyFlow
       {
         row:=n.dup
         own:=EnerCubixMath.maps(overview["rows"]).find |r| {r["id"] == n["nodeId"]}
-        if (own != null) row.setAll(own).set("id",n["id"]).set("graphId",g["graphId"])
+        if (own != null)
+        {
+          ["coverage","coveredSeconds","activeSeconds","complete","completeValue","completeQuality"].each |key| {n[key]=own[key]}
+          row.setAll(own).set("id",n["id"]).set("graphId",g["graphId"])
+        }
         rows.add(row)
         point:=Str:Obj?["ts":from.toIso,"value":n["value"],"quality":n["quality"],"sourceIds":n["sourceIds"],"knownValue":n["knownValue"],"knownValueType":n["knownValueType"],"knownQuality":n["knownQuality"]]
         series.add(["id":n["id"],"nodeId":n["nodeId"],"graphId":g["graphId"],"name":n["name"],"categoryId":category,"unit":unit,"points":[point]])
@@ -159,8 +165,8 @@ internal class EnerCubixEnergyFlow
     occurrence:=nodes.any |n| {n["id"] == id} ? id+"|"+nodes.size : id
     value:=usage(id);known:=knownUsage(id)
     row:=base(occurrence,id,ctx.displayName(id),dim.scope(id) ? dim.dimension : "meter",parent,value,known)
-    row["percentage"]=percentage(value,parentValue);nodes.add(row)
-    children:=Str[,];relation:=grouping ? "grouping" : (r["expressionId"] != null ? "calculation" : "metering")
+    row["percentage"]=calculationGraph ? null : percentage(value,parentValue);nodes.add(row)
+    children:=Str[,];relation:=grouping ? "grouping" : (derived(r) ? "calculation" : "metering")
     if (grouping && dim.scope(id))
     {
       children.addAll(dim.records.findAll |n| {dim.scope(n["id"].toStr) && n["parentId"] == id}.map |n->Str| {n["id"].toStr})
@@ -210,6 +216,7 @@ internal class EnerCubixEnergyFlow
       before:=nodes.size;build(child,occurrence,value,path.dup.add(id),grouping)
       if (nodes.size == before) return
       target:=nodes[before]["id"].toStr;amount:=knownUsage(child)
+      if (suppressed.contains(child)) nodes[before]["percentage"]=null
       if (!suppressed.contains(child) && amount.value != null && amount.value > 0f) addLink(occurrence,target,amount,known,relation)
     }
     if (difference != null && difference > 0f && good(value) && good(subtotal))
