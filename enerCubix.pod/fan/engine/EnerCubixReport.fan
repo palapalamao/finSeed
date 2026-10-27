@@ -427,7 +427,7 @@ internal class EnerCubixReport
         v:=EnerCubixMath.num(row["value"]);k:=EnerCubixMath.num(row["knownValue"])
         percentage:=EnerCubixValue.divide(EnerCubixValue(v,row["quality"].toStr),EnerCubixValue(strict,total["quality"].toStr)).scale(100f)
         row["percentage"]=basis == "knownUsage" ? percentage.value : null
-        row["knownPercentage"]=basis == "knownUsage" && k != null ? k/known*100f : null
+        if (knownCtx != null) row["knownPercentage"]=basis == "knownUsage" && k != null ? k/known*100f : null
         row["percentageQuality"]=basis == "knownUsage" ? percentage.quality : basis
         shares.add(row)
       }

@@ -219,8 +219,14 @@ internal class EnerCubixEnergyFlow
       if (difference != null && difference < 0f && difference.abs <= (own.value.abs+1f)*0.000000001f) difference=0f
       balanceQuality:=quality == "ok" ? EnerCubixValue.worse(own.quality,subtotal.quality) : quality
       if (difference != null && difference < 0f) balanceQuality="negativeBalance"
+      negative:=own.quality == "negative" || known.quality == "negative" || readings.dup.addAll(observed).any |EnerCubixValue v->Bool| {v.quality == "negative" || (v.value != null && v.value < 0f)}
+      knownOverflow:=nonnegative(known) && nonnegative(knownSubtotal) && knownSubtotal.value > known.value+(known.value.abs+1f)*0.000000001f
+      weightedSafe:=quality == "ok" && !members.isEmpty && !negative && nonnegative(known) && observed.all |v| {nonnegative(v)} && nonnegative(knownSubtotal) && !knownOverflow
+      if (negative) balanceQuality="negative"
+      else if (knownOverflow) balanceQuality="negativeBalance"
+      strictComplete:=good(own) && readings.all |v| {good(v)} && [id].dup.addAll(members.map |m->Str| {m["id"].toStr}).all |meterId| {EnerCubixMath.maps(overview["rows"]).find |r| {r["id"] == meterId}?.get("complete") == true}
       row:=base(id,id,ctx.displayName(id),"meter",null,own,known)
-      row.setAll(["hasChildren":!members.isEmpty,"submeter":subtotal.value,"knownSubmeter":knownSubtotal.value,"knownSubmeterQuality":knownSubtotal.quality,"difference":difference,"balanceQuality":balanceQuality,"balanceMode":mode,"lossEligible":quality == "ok" && EnerCubixBalance.eligible(mode,own,subtotal)])
+      row.setAll(["hasChildren":!members.isEmpty,"submeter":subtotal.value,"knownSubmeter":knownSubtotal.value,"knownSubmeterQuality":knownSubtotal.quality,"difference":difference,"balanceQuality":balanceQuality,"balanceMode":mode,"lossEligible":weightedSafe && strictComplete && EnerCubixBalance.eligible(mode,own,subtotal)])
       nodes.add(row)
       members.map |m->Str| {m["utilityId"] as Str ?: ""}.unique.sort.each |utility|
       {
@@ -231,17 +237,17 @@ internal class EnerCubixEnergyFlow
         {strict=EnerCubixValue(null,"overlappingScopes",strict.sources);available=EnerCubixValue(null,"overlappingScopes",available.sources)}
         utilityNode:="__energyFlowUtility__:"+id+"|"+utility
         classified:=base(utilityNode,utilityNode,ctx.byId[utility]?.get("name")?.toStr ?: utility,"utility",id,strict,available)
-        classified.setAll(["utilityId":utility,"memberIds":subset.map |m->Str| {m["id"].toStr},"hasChildren":true,"percentage":overlap ? null : percentage(strict,own)])
+        classified.setAll(["utilityId":utility,"memberIds":subset.map |m->Str| {m["id"].toStr},"hasChildren":true,"percentage":weightedSafe ? percentage(strict,own) : null])
         nodes.add(classified)
-        if (available.value != null && available.value > 0f) addLink(id,utilityNode,available,overlap ? null : known,"classification")
+        if (weightedSafe && available.value != null && available.value > 0f) addLink(id,utilityNode,available,known,"classification")
         subset.each |member|
         {
           memberId:=member["id"].toStr
           v:=usage(memberId);k:=knownUsage(memberId)
           n:=base(memberId,memberId,ctx.displayName(memberId),"meter",utilityNode,v,k)
-          n.setAll(["utilityId":utility,"percentage":overlap ? null : percentage(v,strict)])
+          n.setAll(["utilityId":utility,"percentage":weightedSafe ? percentage(v,strict) : null])
           nodes.add(n)
-          if (k.value != null && k.value > 0f) addLink(utilityNode,memberId,k,overlap ? null : available,"classification")
+          if (weightedSafe && k.value != null && k.value > 0f) addLink(utilityNode,memberId,k,available,"classification")
         }
       }
       if (difference != null && difference > 0f && row["lossEligible"] == true)
@@ -525,5 +531,6 @@ internal class EnerCubixEnergyFlow
     return false
   }
   private static Bool good(EnerCubixValue? v) {v?.value != null && v.value >= 0f && ["ok","estimated","derived","cleaned","corrected"].contains(v.quality)}
+  private static Bool nonnegative(EnerCubixValue v) {EnerCubixMath.num(v.value) != null && v.value >= 0f}
   private static Float? percentage(EnerCubixValue v,EnerCubixValue? parent) {good(v) && good(parent) && v.value > 0f && parent.value > 0f ? v.value/parent.value*100f : null}
 }

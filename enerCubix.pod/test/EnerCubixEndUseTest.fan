@@ -140,6 +140,9 @@ class EnerCubixEndUseTest : Test
     verifyEq(ns.find |n| {n["nodeType"] == "utility" && n["utilityId"] == "lighting"}["value"],400f)
     verifyEq(ns.find |n| {n["nodeType"] == "utility" && n["utilityId"] == "power"}["value"],500f)
     verify(!ns.any |n| {n["nodeId"] == "grandchild"})
+    rootLinks:=EnerCubixMath.maps(graph["links"]).findAll |l| {l["source"] == "main"}
+    verifyEq(rootLinks.size,3)
+    verifyEq(rootLinks.reduce(0f) |Float sum,Str:Obj? link->Float| {sum+(Float)link["value"]},1000f)
     verifyEq(EnerCubixHistory.pointIds(request("energyFlow",["main"]),rs),["pa","pb","pc","pm"])
     req:=request("energyFlow",["main"]);req.remove("flowMode")
     old:=EnerCubixEngine.report(req,rs,hs);req["flowMode"]="relations"
@@ -190,6 +193,7 @@ class EnerCubixEndUseTest : Test
     req:=request("utility",["a","c"]);req["metric"]="cost"
     shares:=extra(EnerCubixEngine.report(req,rs,histories),"utilityShares")
     verifyEq(shares.find |s| {s["utilityId"] == "lighting"}["percentage"],25f)
+    verify(shares.all |s| {!s.containsKey("knownPercentage")})
     group:=Str:Obj?["id":"g","kind":"group","name":"Group"]
     rs=records.add(group);rs.findAll |m| {["main","a","b","c"].contains(m["id"])}.each |m| {m["parentId"]="g"}
     req=request("utility",["g"]);req.remove("dimension")
@@ -222,6 +226,66 @@ class EnerCubixEndUseTest : Test
     r=EnerCubixEngine.report(request("utility",["a"]),records,hs)
     verifyEq(extra(r,"utilityMembers").first["valueType"],"na");verifyEq(extra(r,"utilityShares").first["knownQuality"],"na")
     verify(((Str[])run("energyFlow",["a"])["warnings"]).contains("endUseBoundaryEmpty"))
+  }
+
+  Void testEndUseOverdrawnBranchesHaveNoWeightedRibbons()
+  {
+    hs:=[history("pm",500f),history("pa",400f),history("pb",200f),history("pc",0f)]
+    graph:=extra(EnerCubixEngine.report(request("energyFlow",["main"]),records,hs),"energyFlowGraphs").first
+    verify(EnerCubixMath.maps(graph["links"]).isEmpty)
+    ns:=EnerCubixMath.maps(graph["nodes"])
+    verifyEq(ns.first["value"],500f);verifyEq(ns.first["difference"],-100f);verifyEq(ns.first["balanceQuality"],"negativeBalance")
+    verifyEq(ns.find |n| {n["nodeId"] == "a"}["value"],400f)
+    verify(!ns.any |n| {n["nodeType"] == "difference"})
+  }
+
+  Void testEndUseMissingRootHasNoWeightedRibbons()
+  {
+    hs:=histories.findAll |h| {h["pointId"] != "pm"}
+    graph:=extra(EnerCubixEngine.report(request("energyFlow",["main"]),records,hs),"energyFlowGraphs").first
+    verify(EnerCubixMath.maps(graph["links"]).isEmpty)
+    ns:=EnerCubixMath.maps(graph["nodes"])
+    verifyNull(ns.first["value"]);verifyEq(ns.find |n| {n["nodeId"] == "a"}["knownValue"],100f)
+    verify(!ns.any |n| {n["nodeType"] == "difference"})
+  }
+
+  Void testEndUseOverlappingOrNonadditiveBoundaryHasNoWeightedRibbons()
+  {
+    rs:=records;rs.find |r| {r["id"] == "b"}["utilityId"]="power"
+    hs:=histories;hs[1]["sourceIds"]=["shared"];hs[2]["sourceIds"]=["shared"]
+    graph:=extra(EnerCubixEngine.report(request("energyFlow",["main"]),rs,hs),"energyFlowGraphs").first
+    verify(EnerCubixMath.maps(graph["links"]).isEmpty);verifyEq(graph["boundaryQuality"],"overlappingScopes")
+    verifyEq(EnerCubixMath.maps(graph["nodes"]).find |n| {n["nodeId"] == "a"}["value"],100f)
+    rs=records;rs.find |r| {r["id"] == "a"}["expressionId"]="expr"
+    rs.add(["id":"expr","kind":"expression","name":"Nonadditive","formula":"X*2","variables":["X":"b"]])
+    graph=extra(EnerCubixEngine.report(request("energyFlow",["main"]),rs,histories),"energyFlowGraphs").first
+    verify(EnerCubixMath.maps(graph["links"]).isEmpty);verify(graph["boundaryQuality"] != "ok")
+    verifyEq(EnerCubixMath.maps(graph["nodes"]).find |n| {n["nodeId"] == "a"}["value"],100f)
+  }
+
+  Void testEndUseNegativeMemberKeepsSignedReadingWithoutWeightedRibbons()
+  {
+    hs:=histories
+    hs[2]["intervals"]=[["from":"2026-01-01T00:00:00Z","to":"2026-01-01T01:00:00Z","value":-20f,"quality":"ok"]]
+    graph:=extra(EnerCubixEngine.report(request("energyFlow",["main"]),records,hs),"energyFlowGraphs").first
+    verify(EnerCubixMath.maps(graph["links"]).isEmpty)
+    ns:=EnerCubixMath.maps(graph["nodes"])
+    verifyEq(ns.find |n| {n["nodeId"] == "b"}["value"],-20f)
+    verifyEq(ns.find |n| {n["nodeId"] == "b"}["knownValue"],-20f)
+    verifyEq(ns.find |n| {n["nodeId"] == "a"}["value"],100f)
+    verify(!ns.any |n| {n["nodeType"] == "difference"})
+    verifyEq(ns.first["lossEligible"],false)
+  }
+
+  Void testEndUsePartialKnownReadingsNeverCreateResidual()
+  {
+    req:=request("energyFlow",["main"]);req["to"]="2026-01-01T02:00:00Z"
+    graph:=extra(EnerCubixEngine.report(req,records,histories),"energyFlowGraphs").first
+    ns:=EnerCubixMath.maps(graph["nodes"])
+    verifyNull(ns.first["value"]);verifyEq(ns.first["knownValue"],1000f)
+    verifyEq(ns.find |n| {n["nodeId"] == "a"}["knownValue"],100f)
+    verifyEq(ns.first["lossEligible"],false)
+    verify(!ns.any |n| {n["nodeType"] == "difference"})
   }
 
   private Str:Obj? run(Str kind,Str[] ids) {EnerCubixEngine.report(request(kind,ids),records,histories)}
