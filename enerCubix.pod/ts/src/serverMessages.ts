@@ -1,5 +1,7 @@
 // Only service-owned messages are translated. Captured names and identifiers are preserved.
 export const serverMessages:Record<string,string>={
+ "能流图仅支持区间能耗，不支持费用或面积归一化":"Energy flow supports period consumption, without cost or area normalization.",
+ "能流图对象必须是所选能源的表计或当前视角范围":"Choose meters of the selected energy type or scopes in the current perspective.",
  "legacyTopologyInvalidProof":"The historical relationship recovery evidence is invalid.",
  "legacyTopologyUnobservedRange":"The recovery range exceeds the backup or business revision evidence.",
  "legacyTopologyMissingSource":"The backup lacks the selected meter or an explicit primary point reference.",

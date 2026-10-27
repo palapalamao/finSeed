@@ -24,6 +24,8 @@ for(const locale of ['zh-CN','en-US'])for(const mobile of [false,true])test.desc
   result.rows=overviewRows;result.series=[];result.extra!.energyFlowOverview={from:start,to:end,unknownTopologySeconds:3600,rows:overviewRows};
   await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{state.requests.push({path:'report',body:route.request().postDataJSON()});await route.fulfill({json:{ok:true,data:result}});});
   await openView(page,'energyFlow');
+  await page.locator('.report-dimension-select .ant-radio-button-wrapper').filter({hasText:zh?'计量':'Metering'}).click();
+  await page.locator('.object-select-button').click();await page.locator('.object-panel .ant-tree-treenode').filter({hasText:'总电表'}).first().locator('.ant-tree-checkbox').click();await page.locator('.object-selector-drawer .ant-drawer-footer button').click();await page.locator('.filter-actions button').first().click();
   await expect(page.getByRole('heading',{name:zh?'全区间总览':'Full period overview',exact:true})).toBeVisible();
   await expect(page.locator('[data-overview-meter="total"]')).toContainText('400');
   await expect(page.locator('.report-surface')).toContainText(start);

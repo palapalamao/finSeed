@@ -18,7 +18,9 @@ export function applyKnownUsageDisplay(result:ReportResult):void{
  if(Array.isArray(result.summary.totals))result.summary.totals=result.summary.totals.map((row:Row)=>{const subtotal=known.get(String(row.id));return display(subtotal?{...row,knownValue:subtotal.value,knownValueType:subtotal.valueType,knownQuality:subtotal.quality}:row);});
  result.summary.selectionTotals=rows(result.summary.selectionTotals);
  if(result.extra){for(const key of ['details','scopeTotals','grandTotals','overview','loadBands','comparisons','utilityShares','selectionTotals'])if(Array.isArray(result.extra[key]))result.extra[key]=rows(result.extra[key]);
-  const graph=result.extra.energyFlow as {nodes?:Row[];unassigned?:Row[]}|undefined;if(graph){graph.nodes=rows(graph.nodes) as Row[];graph.unassigned=rows(graph.unassigned) as Row[];}
+  const graph=result.extra.energyFlow as {nodes?:Row[];unassigned?:Row[]}|undefined;
+  const graphs=(Array.isArray(result.extra.energyFlowGraphs)?result.extra.energyFlowGraphs:[]) as {nodes?:Row[];unassigned?:Row[]}[];
+  for(const item of new Set([graph,...graphs]))if(item){item.nodes=rows(item.nodes) as Row[];item.unassigned=rows(item.unassigned) as Row[];}
   const segments=result.extra.energyFlowSegments as {energyFlow?:{nodes?:Row[];unassigned?:Row[]};rows?:Row[];series?:ReportResult['series']}[]|undefined;
   for(const segment of segments||[]){if(segment.energyFlow){segment.energyFlow.nodes=rows(segment.energyFlow.nodes) as Row[];segment.energyFlow.unassigned=rows(segment.energyFlow.unassigned) as Row[];}segment.rows=rows(segment.rows) as Row[];segment.series?.forEach(series=>{series.points=series.points.map(point=>display(point as unknown as Row) as unknown as typeof point);});}
  }

@@ -18,8 +18,10 @@ export function makeSnapshot(request:ReportRequest,result:ReportResult,title:str
  for(const row of result.rows){const id=String(row.nodeId??row.id??'');if(id&&typeof row.name==='string'&&!snapshot.display.objects[id])snapshot.display.objects[id]=row.name;}
  if(result.kind==='energyFlow'){
   const graph=snapshot.result.extra?.energyFlow as {nodes:Record<string,unknown>[]} | undefined;
-  const synthetic=new Map((graph?.nodes||[]).filter(node=>node.nodeType==='summary'||node.nodeType==='difference').map(node=>[String(node.id),node.nodeType==='summary'?t("能源汇总"):t("计量差额")]));
-  for(const node of graph?.nodes||[])if(synthetic.has(String(node.id)))node.name=synthetic.get(String(node.id));
+  const graphs=(snapshot.result.extra?.energyFlowGraphs||[]) as {nodes:Record<string,unknown>[]}[];
+  const nodes=[...new Set([graph,...graphs])].flatMap(item=>item?.nodes||[]);
+  const synthetic=new Map(nodes.filter(node=>node.nodeType==='summary'||node.nodeType==='difference').map(node=>[String(node.id),node.nodeType==='summary'?t("能源汇总"):t("计量差额")]));
+  for(const node of nodes)if(synthetic.has(String(node.id)))node.name=synthetic.get(String(node.id));
   for(const row of snapshot.result.rows)if(synthetic.has(String(row.nodeId||row.id)))row.name=synthetic.get(String(row.nodeId||row.id));
   for(const series of snapshot.result.series)if(synthetic.has(series.nodeId||series.id))series.name=synthetic.get(series.nodeId||series.id)!;
   for(const [id,name]of synthetic)snapshot.display.objects[id]=name;

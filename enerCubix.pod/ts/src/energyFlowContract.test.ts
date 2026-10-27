@@ -10,8 +10,9 @@ describe('energy-flow workspace contract',()=>{
   expect(energyFlowRange('thisMonth',now)[1].valueOf()).toBe(now.valueOf());
   expect(energyFlowRange('lastMonth',now).map(date=>date.format('YYYY-MM-DD'))).toEqual(['2026-09-01','2026-10-01']);
  });
- it('locks metering scope and exposes energy flow under composition',()=>{
-  expect(reportDimension('energyFlow','space')).toBe('metering');
+ it('preserves the selected perspective and exposes energy flow under composition',()=>{
+  expect(reportDimension('energyFlow','space')).toBe('space');
+  expect(reportDimension('energyFlow','organization')).toBe('organization');
   expect(analysisGroups.find(group=>group.key==='structure')?.kinds).toContain('energyFlow');
   expect(reportNames.energyFlow).toBeDefined();
  });

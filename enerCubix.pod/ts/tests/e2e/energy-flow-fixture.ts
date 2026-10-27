@@ -49,7 +49,7 @@ function waterFlow():EnergyFlowData{
 
 function resultForFlow(request:ReportRequest,abnormal:boolean):ReportResult{
  const data=request.categoryId==='water'?waterFlow():electricFlow(abnormal);
- const focus=request.nodeIds[0];
+ const focus=request.nodeIds[0]==='flow-scope'?undefined:request.nodeIds[0];
  if(focus){
   const ids=new Set([focus]);let previous=0;
   while(previous!==ids.size){previous=ids.size;for(const item of data.nodes)if(item.parentId&&ids.has(item.parentId))ids.add(item.id);}
@@ -62,10 +62,10 @@ function resultForFlow(request:ReportRequest,abnormal:boolean):ReportResult{
   series:all.map(item=>({id:item.id,nodeId:item.id,name:item.name,categoryId:item.categoryId,unit:item.unit,points:[{ts:request.from,value:item.value,quality:item.quality,sourceIds:item.sourceIds}]})),extra:{energyFlow:data}};
 }
 
-export async function setupEnergyFlow(page:Page,{abnormal=false}={}){
+export async function setupEnergyFlow(page:Page,{abnormal=false,query=true}={}){
  const data=electricFlow(abnormal);
- const records:EnerCubixRecord[]=[{id:'electric',kind:'category',name:'测试电能',unit:'kWh'},{id:'water',kind:'category',name:'测试水量',unit:'m³'},
-  ...[...data.nodes,...data.unassigned,...waterFlow().nodes].filter(item=>item.nodeType==='meter').map(item=>({id:item.id,mod:'m1',kind:(data.rootIds.includes(item.id)||item.id==='water-main'?'totalMeter':'meter') as 'totalMeter'|'meter',name:item.name,categoryId:item.categoryId,unit:item.unit,pointId:item.sourceIds[0],meterParentId:item.parentId,includeInTotals:true}))];
+ const records:EnerCubixRecord[]=[{id:'flow-scope',kind:'space',name:'测试范围'}, {id:'electric',kind:'category',name:'测试电能',unit:'kWh'},{id:'water',kind:'category',name:'测试水量',unit:'m³'},
+  ...[...data.nodes,...data.unassigned,...waterFlow().nodes].filter(item=>item.nodeType==='meter').map(item=>({id:item.id,mod:'m1',kind:(data.rootIds.includes(item.id)||item.id==='water-main'?'totalMeter':'meter') as 'totalMeter'|'meter',name:item.name,categoryId:item.categoryId,unit:item.unit,pointId:item.sourceIds[0],meterParentId:item.parentId,spaceId:'flow-scope',includeInTotals:true}))];
  const state=await installTransport(page,{records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   const request=route.request().postDataJSON() as ReportRequest;
@@ -73,5 +73,13 @@ export async function setupEnergyFlow(page:Page,{abnormal=false}={}){
   await route.fulfill({json:{ok:true,data:resultForFlow(request,abnormal)}});
  });
  await openView(page,'energyFlow');
+ if(query)await selectEnergyFlowScope(page);
  return state;
+}
+
+export async function selectEnergyFlowScope(page:Page){
+ await page.locator('.object-select-button').click();
+ await page.locator('.object-panel .ant-tree-treenode').filter({hasText:'测试范围'}).first().locator('.ant-tree-checkbox').click();
+ await page.locator('.object-selector-drawer .ant-drawer-footer button').click();
+ await page.locator('.filter-actions button').first().click();
 }

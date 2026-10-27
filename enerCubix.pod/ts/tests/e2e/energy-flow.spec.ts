@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {PNG} from 'pngjs';
 import type {ReportRequest,EnerCubixRecord} from '../../src/types';
-import {setupEnergyFlow,summaryId,differenceId} from './energy-flow-fixture';
+import {setupEnergyFlow,selectEnergyFlowScope,summaryId,differenceId} from './energy-flow-fixture';
 
 const graph=(page:Page)=>page.locator('.energy-flow-graph');
 const flowNode=(page:Page,id:string)=>graph(page).locator(`[data-flow-node="${id}"]`);
@@ -40,20 +40,25 @@ test('exports the selected SVG flow as a real PNG and a paginated PDF',async({pa
 async function chooseEnergy(page:Page,label:string,english=false){
  await page.getByRole('combobox',{name:english?'Energy type':'能源类型',exact:true}).press('ArrowDown');
  await page.locator('.ant-select-dropdown:visible').getByText(label,{exact:true}).click();
+ await page.locator('.filter-actions button').first().click();
 }
 
-test('opens the project overview automatically with a single energy and counts independent mains once',async({page},testInfo)=>{
+test('requires scope selection and a manual query before counting independent mains once',async({page},testInfo)=>{
  await page.clock.setFixedTime(new Date('2026-10-23T04:00:00Z'));
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- const state=await setupEnergyFlow(page);
+ const state=await setupEnergyFlow(page,{query:false});
+ await expect(page.locator('.object-select-button')).toBeVisible();
+ await expect(page.locator('.filter-actions button').first()).toBeDisabled();
+ expect(reportRequests(state)).toHaveLength(0);
+ await selectEnergyFlowScope(page);
  await expect(flowNode(page,summaryId)).toHaveAttribute('data-flow-value','1800');
  expect(reportRequests(state)).toHaveLength(1);
  const request=reportRequests(state)[0].body;
- expect(request).toMatchObject({kind:'energyFlow',dimension:'metering',categoryId:'electric',nodeIds:[],period:'day',metric:'energy',perArea:false,from:'2026-10-01T00:00:00+08:00',to:'2026-10-23T12:00:00+08:00'});
+ expect(request).toMatchObject({kind:'energyFlow',dimension:'space',categoryId:'electric',nodeIds:['flow-scope'],period:'day',metric:'energy',perArea:false,from:'2026-10-01T00:00:00+08:00',to:'2026-10-23T12:00:00+08:00'});
  expect(Object.keys(request).sort()).toEqual(['kind','dimension','categoryId','nodeIds','from','to','period','metric','perArea'].sort());
  await expect(page.getByRole('tab',{name:'构成与排名',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.getByRole('tab',{name:'能流图',exact:true})).toHaveAttribute('aria-selected','true');
- await expect(page.getByRole('button',{name:/^选择对象/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/^选择对象/})).toBeVisible();
  await expect(page.getByRole('combobox',{name:'能源类型',exact:true})).toBeVisible();
  await expect(page.locator('.category-filter .ant-select')).not.toHaveClass(/ant-select-multiple/);
  await expect(metric(page,'总表统计合计')).toHaveText('1,800kWh');
@@ -99,14 +104,14 @@ test('switches exactly one energy and queries the currently selected relative da
  await expect(flowNode(page,summaryId)).toBeVisible();
  await chooseEnergy(page,'测试水量');
  await expect(flowNode(page,'__energyFlow__:water')).toHaveAttribute('data-flow-value','120');
- expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',nodeIds:[],metric:'energy',period:'day',perArea:false});
+ expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',nodeIds:['flow-scope'],metric:'energy',period:'day',perArea:false});
  await expect(page.locator('.category-filter .ant-select-selection-item')).toHaveText('测试水量');
  await page.locator('.filter-field').filter({has:page.getByText('相对时间',{exact:true})}).getByRole('combobox').press('ArrowDown');
  await page.locator('.ant-select-dropdown:visible').getByText('上月',{exact:true}).click();
  const response=page.waitForResponse(response=>response.url().endsWith('/v1/report')&&response.request().postDataJSON().from==='2026-09-01T00:00:00+08:00');
  await page.getByRole('button',{name:'查询',exact:true}).click();await response;
  await expect(flowNode(page,'water-main')).toBeVisible();
- expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',from:'2026-09-01T00:00:00+08:00',to:'2026-10-01T00:00:00+08:00',nodeIds:[]});
+ expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',from:'2026-09-01T00:00:00+08:00',to:'2026-10-01T00:00:00+08:00',nodeIds:['flow-scope']});
  await expect(metric(page,'总表统计合计')).toHaveText('120m³');
 });
 
@@ -131,7 +136,7 @@ test('keeps real missing and negative-balance readings while hiding only their o
  expect(reportRequests(state)).toHaveLength(1);
 });
 
-test('saves and applies a project template with its single energy and no required object selection',async({page})=>{
+test('saves and manually queries a template with its selected scope and single energy',async({page})=>{
  const state=await setupEnergyFlow(page);
  await expect(flowNode(page,summaryId)).toBeVisible();
  await chooseEnergy(page,'测试水量');
@@ -144,14 +149,14 @@ test('saves and applies a project template with its single energy and no require
  await expect(editor).toBeHidden();
  const saved=state.records.find(record=>record.kind==='template'&&record.name==='项目水能流模板') as EnerCubixRecord;
  expect(saved).toBeDefined();
- expect(saved.request as ReportRequest).toMatchObject({kind:'energyFlow',dimension:'metering',categoryId:'water',nodeIds:[],period:'day',metric:'energy',perArea:false});
+ expect(saved.request as ReportRequest).toMatchObject({kind:'energyFlow',dimension:'space',categoryId:'water',nodeIds:['flow-scope'],period:'day',metric:'energy',perArea:false});
  await page.getByRole('button',{name:'重置条件',exact:true}).click();
  await page.getByRole('combobox',{name:'报表模板',exact:true}).press('ArrowDown');
  await page.locator('.ant-select-dropdown:visible').getByText('项目水能流模板',{exact:true}).click();
  await expect(page.getByRole('combobox',{name:'能源类型',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'查询',exact:true}).click();
  await expect(flowNode(page,'__energyFlow__:water')).toHaveAttribute('data-flow-value','120');
- expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',nodeIds:[]});
+ expect(reportRequests(state).at(-1)?.body).toMatchObject({categoryId:'water',nodeIds:['flow-scope']});
  await expect(page.getByText('请先选择分析对象',{exact:true})).toHaveCount(0);
 });
 
@@ -169,12 +174,16 @@ test('saves a drilled subtree and restores the project overview from the applied
  await page.getByRole('button',{name:'重置条件',exact:true}).click();
  await page.getByRole('combobox',{name:'报表模板',exact:true}).press('ArrowDown');
  await page.locator('.ant-select-dropdown:visible').getByText('东楼子树模板',{exact:true}).click();
+ await page.getByRole('button',{name:'查询',exact:true}).click();
  await expect(metric(page,'当前表计用量')).toHaveText('1,000kWh');
  await expect(flowNode(page,summaryId)).toHaveCount(0);
  expect(reportRequests(state).at(-1)?.body).toMatchObject({nodeIds:['a']});
  await page.getByRole('button',{name:'返回概览',exact:true}).click();
+ await page.locator('.object-panel .ant-tree-treenode').filter({hasText:'测试范围'}).first().locator('.ant-tree-checkbox').click();
+ await page.locator('.object-selector-drawer .ant-drawer-footer button').click();
+ await page.locator('.filter-actions button').first().click();
  await expect(metric(page,'总表统计合计')).toHaveText('1,800kWh');
- expect(reportRequests(state).at(-1)?.body).toMatchObject({nodeIds:[]});
+ expect(reportRequests(state).at(-1)?.body).toMatchObject({nodeIds:['flow-scope']});
  await expect(page.getByRole('combobox',{name:'能源类型',exact:true})).toBeEnabled();
 });
 
@@ -198,6 +207,7 @@ test('retains an explicit date range when saving and applying an energy-flow tem
  await page.getByRole('button',{name:'重置条件',exact:true}).click();
  await page.getByRole('combobox',{name:'报表模板',exact:true}).press('ArrowDown');
  await page.locator('.ant-select-dropdown:visible').getByText('固定区间模板',{exact:true}).click();
+ await page.getByRole('button',{name:'查询',exact:true}).click();
  await expect.poll(()=>reportRequests(state).at(-1)?.body).toMatchObject({from:'2026-09-05T00:00:00+08:00',to:'2026-09-08T00:00:00+08:00'});
 });
 

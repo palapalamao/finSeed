@@ -2,8 +2,9 @@ import type {ReportResult,ReportSnapshot} from './types';
 
 export interface EnergyFlowNode {
  id:string;
+ nodeId?:string;
  name:string;
- nodeType:'meter'|'summary'|'difference';
+ nodeType:'meter'|'summary'|'difference'|'space'|'organization';
  parentId?:string;
  categoryId:string;
  unit:string;
@@ -17,6 +18,14 @@ export interface EnergyFlowNode {
  percentage:number|null;
  balanceMode?:'independent'|'consistency'|'mixed'|'unknown';
  lossEligible?:boolean;
+ knownValue?:number|null;
+ knownQuality?:string;
+ knownValueType?:'number'|'na'|'null';
+ knownSubmeter?:number|null;
+ knownSubmeterQuality?:string;
+ coverage?:number;
+ coveredSeconds?:number;
+ activeSeconds?:number;
 }
 export interface EnergyFlowLink {
  source:string;
@@ -25,8 +34,16 @@ export interface EnergyFlowLink {
  quality:string;
  sourceIds:string[];
  percentage:number|null;
+ relationKind?:'metering'|'calculation'|'grouping';
 }
 export interface EnergyFlowData {
+ graphId?:string;
+ objectId?:string;
+ basis?:'metering'|'calculation'|'space'|'organization';
+ contributionMemberIds?:string[];
+ sharedMemberIds?:string[];
+ additive?:boolean;
+ boundaryQuality?:string;
  categoryId:string;
  unit:string;
  focusId:string;
@@ -35,11 +52,38 @@ export interface EnergyFlowData {
  links:EnergyFlowLink[];
  unassigned:EnergyFlowNode[];
 }
+export interface EnergyFlowAccounting {
+ canAdd:boolean;memberIds:string[];sharedMemberIds:string[];
+ sharedMembers:{meterId:string;objectIds:string[]}[];
+ unionValue:number|null;unionQuality:string;basis:'physicalBoundary'|'classificationUnion'|'unavailable';
+}
+export const energyFlowNodeValue=(node:EnergyFlowNode):number|null=>Object.hasOwn(node,'knownValue')?node.knownValue??null:node.value;
+export const energyFlowNodeQuality=(node:EnergyFlowNode):string=>node.knownQuality||node.quality;
 
 export function energyFlowData(result:ReportResult):EnergyFlowData|undefined {
  const data=result.extra?.energyFlow as Partial<EnergyFlowData>|undefined;
  if(!data||typeof data!=='object'||typeof data.categoryId!=='string'||typeof data.unit!=='string'||typeof data.focusId!=='string'||!Array.isArray(data.rootIds)||!Array.isArray(data.nodes)||!Array.isArray(data.links)||!Array.isArray(data.unassigned))return;
  return data as EnergyFlowData;
+}
+export function energyFlowGraphs(result:ReportResult):EnergyFlowData[]{
+ const graphs=result.extra?.energyFlowGraphs;
+ if(Array.isArray(graphs))return graphs.flatMap(graph=>{const valid=energyFlowData({...result,extra:{energyFlow:graph}});return valid?[valid]:[];});
+ const single=energyFlowData(result);return single?[single]:[];
+}
+export function energyFlowAccounting(result:ReportResult):EnergyFlowAccounting|undefined{
+ const data=result.extra?.energyFlowAccounting as EnergyFlowAccounting|undefined;
+ return data&&Array.isArray(data.memberIds)&&Array.isArray(data.sharedMemberIds)&&Array.isArray(data.sharedMembers)?data:undefined;
+}
+/** Build an independently exportable object graph, without borrowing other graphs' rows. */
+export function energyFlowGraphSnapshot(snapshot:ReportSnapshot,graphId:string):ReportSnapshot{
+ const graph=energyFlowGraphs(snapshot.result).find(graph=>(graph.graphId||graph.objectId||graph.focusId)===graphId);
+ if(!graph)return snapshot;
+ const nodes=[...graph.nodes,...graph.unassigned];
+ const focus=energyFlowFocus(graph);
+ const rows=nodes.map(node=>({...node,graphId,nodeId:node.nodeId||node.id}));
+ const series=nodes.map(node=>({id:node.id,nodeId:node.nodeId||node.id,name:node.name,categoryId:node.categoryId,unit:node.unit,points:[{ts:snapshot.result.from,value:energyFlowNodeValue(node),quality:energyFlowNodeQuality(node),sourceIds:node.sourceIds}]}));
+ const extra:Record<string,unknown>={...snapshot.result.extra,energyFlow:graph};delete extra.energyFlowGraphs;delete extra.energyFlowAccounting;delete extra.energyFlowOverview;delete extra.energyFlowSegments;
+ return {...snapshot,request:{...snapshot.request,nodeIds:[graph.objectId||graph.focusId]},result:{...snapshot.result,rows,series,summary:{value:focus?energyFlowNodeValue(focus):null,unit:graph.unit},extra}};
 }
 
 export interface EnergyFlowSegment {
@@ -82,6 +126,7 @@ export function energyFlowSegmentSnapshot(snapshot:ReportSnapshot,index:number):
 }
 
 export function defaultEnergyFlowSegment(result:ReportResult):number{
+ if(result.extra?.relationBasis==='current'||Array.isArray(result.extra?.energyFlowGraphs))return -1;
  if(energyFlowOverview(result))return -1;
  const segments=energyFlowSegments(result);let best=-1,duration=-1;
  for(const [index,segment]of segments.entries()){
@@ -91,6 +136,16 @@ export function defaultEnergyFlowSegment(result:ReportResult):number{
   if(complete&&span>=duration){best=index;duration=span;}
  }
  return best>=0?best:Math.max(0,segments.findIndex(segment=>segment.known));
+}
+export function mergeEnergyFlowGraphSnapshots(snapshot:ReportSnapshot,panels:ReportSnapshot[]):ReportSnapshot{
+ if(!panels.length)return snapshot;
+ const graphs=panels.map(panel=>energyFlowData(panel.result)!);
+ const originals=energyFlowGraphs(snapshot.result);
+ const focused=graphs.some((graph,index)=>graph.focusId!==originals[index]?.focusId);
+ const extra:Record<string,unknown>={...snapshot.result.extra,energyFlow:graphs[0],energyFlowGraphs:graphs};
+ delete extra.energyFlowOverview;delete extra.energyFlowSegments;
+ if(focused){delete extra.energyFlowAccounting;delete extra.selectionTotals;delete extra.cleaning;delete extra.knownUsage;}
+ return {...snapshot,request:focused?{...snapshot.request,nodeIds:panels.flatMap(panel=>panel.request.nodeIds)}:snapshot.request,result:{...snapshot.result,rows:panels.flatMap(panel=>panel.result.rows),series:panels.flatMap(panel=>panel.result.series),summary:focused?{}:snapshot.result.summary,extra}};
 }
 
 // Keep navigation context outside exported report metadata: exports contain only the current scope.
@@ -116,11 +171,11 @@ export function energyFlowBreadcrumbs(snapshot:ReportSnapshot):EnergyFlowNode[] 
 export function energyFlowStats(data:EnergyFlowData) {
  const focus=energyFlowFocus(data);const overview=focus?.nodeType==='summary';
  const byId=new Map(data.nodes.map(node=>[node.id,node]));const roots=data.rootIds.map(id=>byId.get(id));
- let submeter=focus?.submeter??null;
+ let submeter=focus&&Object.hasOwn(focus,'knownSubmeter')?focus.knownSubmeter??null:focus?.submeter??null;
  if(overview){const values=roots.map(root=>root?(root.hasChildren?root.submeter:root.value):null);submeter=values.length&&values.every(finite)?values.reduce((sum,value)=>sum+value,0):null;}
- const total=focus?.value??null;
+ const total=focus?energyFlowNodeValue(focus):null;
  const difference=overview?(finite(total)&&finite(submeter)?total-submeter:null):focus?.difference??null;
- const count=overview?roots.length:data.nodes.filter(node=>node.nodeType==='meter'&&node.parentId===focus?.id).length;
+ const count=overview?roots.length:data.nodes.filter(node=>node.nodeType!=='difference'&&node.parentId===focus?.id).length;
  return {total,submeter,difference,count,overview};
 }
 
@@ -134,10 +189,11 @@ export function focusEnergyFlowSnapshot(snapshot:ReportSnapshot,focusId?:string)
  const children=childMap(data.nodes);const ids=new Set<string>();const pending=[focus];
  while(pending.length){const node=pending.pop()!;if(ids.has(node.id))continue;ids.add(node.id);pending.push(...children.get(node.id)||[]);}
  const graph:EnergyFlowData={...data,focusId:focus.id,rootIds:[focus.id],nodes:data.nodes.filter(node=>ids.has(node.id)),links:data.links.filter(link=>ids.has(link.source)&&ids.has(link.target)),unassigned:[]};
- const inScope=(id:unknown)=>typeof id==='string'&&(ids.has(id)||ids.has(id.split('|')[0]));
+ const canonicalIds=new Set(data.nodes.filter(node=>ids.has(node.id)).map(node=>node.nodeId||node.id));
+ const inScope=(id:unknown)=>typeof id==='string'&&(ids.has(id)||ids.has(id.split('|')[0])||canonicalIds.has(id));
  const stats=energyFlowStats(graph);
- const result:ReportResult={...original.result,rows:original.result.rows.filter(row=>inScope(row.nodeId??row.id)),series:original.result.series.filter(series=>inScope(series.nodeId??series.id)),summary:{focusId:focus.id,categoryId:data.categoryId,unit:data.unit,value:stats.total,total:stats.total,submeter:stats.submeter,difference:stats.difference,meterCount:graph.nodes.filter(node=>node.nodeType==='meter').length,unassignedCount:0},extra:{...original.result.extra,energyFlow:graph}};
- const output:ReportSnapshot={...original,request:{...original.request,nodeIds:[focus.id]},result};
+ const result:ReportResult={...original.result,rows:original.result.rows.filter(row=>data.basis?ids.has(String(row.id)):inScope(row.nodeId??row.id)),series:original.result.series.filter(series=>data.basis?ids.has(series.id):inScope(series.nodeId??series.id)),summary:{focusId:focus.id,categoryId:data.categoryId,unit:data.unit,value:stats.total,total:stats.total,submeter:stats.submeter,difference:stats.difference,meterCount:graph.nodes.filter(node=>node.nodeType==='meter').length,unassignedCount:0},extra:{...original.result.extra,energyFlow:graph}};
+ const output:ReportSnapshot={...original,request:{...original.request,nodeIds:[focus.nodeId||focus.id]},result};
  sourceSnapshots.set(output,original);return output;
 }
 
@@ -161,8 +217,9 @@ export function energyFlowLayout(data:EnergyFlowData):EnergyFlowLayout {
  };
  const root=tree(focus,0,energyFlowColors[0]);
  // A single common scale preserves every recorded flow; layout spacing never changes its amount.
- const largest=branches.reduce((max,branch)=>finite(branch.node.value)?Math.max(max,branch.node.value):max,0);const scale=largest>0?280/largest:0;
- const measure=(branch:Branch):number=>{branch.height=finite(branch.node.value)&&branch.node.value>0?branch.node.value*scale:0;const childSpan=branch.children.reduce((sum,child)=>sum+measure(child),0)+Math.max(0,branch.children.length-1)*20;branch.span=Math.max(48,branch.height,childSpan);return branch.span;};
+ const largest=branches.reduce((max,branch)=>{const value=energyFlowNodeValue(branch.node);return finite(value)?Math.max(max,value):max;},0);const scale=largest>0?280/largest:0;
+ const outgoing=new Map<string,number>();for(const link of data.links)if(Number.isFinite(link.value)&&link.value>0)outgoing.set(link.source,(outgoing.get(link.source)||0)+link.value);
+ const measure=(branch:Branch):number=>{const value=energyFlowNodeValue(branch.node);branch.height=finite(value)&&value>0?Math.max(value,outgoing.get(branch.node.id)||0)*scale:0;const childSpan=branch.children.reduce((sum,child)=>sum+measure(child),0)+Math.max(0,branch.children.length-1)*20;branch.span=Math.max(48,branch.height,childSpan);return branch.span;};
  measure(root);const nodes:EnergyFlowPosition[]=[];const columns=[20,430,800];
  const position=(branch:Branch,top:number)=>{
   nodes.push({node:branch.node,depth:branch.depth,x:columns[branch.depth],y:top+(branch.span-branch.height)/2,height:branch.height,color:branch.color});
