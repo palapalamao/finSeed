@@ -71,7 +71,7 @@ export const englishMessages:Record<string,string> = {
  "{0} 秒有效覆盖":"{0} seconds of numeric coverage",
  "使用自定义别名":"Use a custom alias",
  "默认跟随 FIN 设备名称；在 FIN 中改名后刷新即可同步。":"Follow the FIN equipment name by default. Refresh after renaming it in FIN.",
- "启用后仅覆盖能源魔方中的显示名称，不修改 FIN 设备名称。":"When enabled, the alias overrides the display name in EnerCubix without changing the FIN equipment name.",
+ "启用后仅覆盖能源魔方中的显示名称，不修改 FIN 设备名称。":"When enabled, the alias overrides the display name in EnergyCubix without changing the FIN equipment name.",
  "关闭自定义别名后，名称跟随 FIN 设备树。":"Turn off the custom alias to follow the name in the FIN equipment tree.",
  "对象类型":"Object type",
  "主档案":"Canonical record",
