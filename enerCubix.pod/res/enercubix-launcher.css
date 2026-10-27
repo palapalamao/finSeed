@@ -1,0 +1,8 @@
+/* FIN's application tiles render icon classes, including custom pseudo-elements. */
+.enercubix-launcher-cube::before {
+  content: "";
+  display: block;
+  width: 1em;
+  height: 1em;
+  background: url("./enercubix-cube.svg") center / contain no-repeat;
+}

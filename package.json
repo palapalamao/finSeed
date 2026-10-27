@@ -2,7 +2,7 @@
   "name": "enercubix",
   "version": "0.12.6",
   "private": true,
-  "description": "EnerCubix multidimensional energy analytics",
+  "description": "EnergyCubix building energy analytics",
   "scripts": {
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",

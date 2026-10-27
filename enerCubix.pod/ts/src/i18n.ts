@@ -72,5 +72,5 @@ export function serverMessage(source:string):string{
 
 export function initializeLocale(){
  document.documentElement.lang=locale;
- document.title=t('能源魔方 · 多维能源分析平台');
+ document.title=t('能源魔方 · 楼宇能源分析');
 }

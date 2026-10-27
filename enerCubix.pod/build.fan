@@ -11,7 +11,7 @@ class Build : BuildFinPod
   new make(Args args) : super(args)
   {
     podName = "enerCubix"
-    summary = "EnerCubix - multidimensional energy analytics"
+    summary = "EnergyCubix - Building Energy Analytics"
     version = Version("0.12.6")
     meta = ["proj.name":podName, "org.name":"EnerCubix", "license.name":"Commercial"]
     depends = [

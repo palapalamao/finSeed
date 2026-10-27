@@ -9,7 +9,7 @@ import {MessageCenter} from './MessageCenter';
 import {Management,manageTitles,type ManageView} from './Management';
 import {ReportWorkspace} from './ReportWorkspace';
 import {analysisGroups} from './navigation';
-import {BrandMark,productName} from './brand';
+import {BrandMark,productName,productTagline} from './brand';
 import {type Catalog,type ReportKind,type ReportRequest} from './types';
 import {version as uiVersion} from '../package.json';
 import {LanguageSwitcher} from './LanguageSwitcher';
@@ -55,7 +55,7 @@ export function App(){
   <Layout className="app-layout enercubix-app">
    <Layout.Header className="app-header">
     <Button type="text" className="mobile-nav-toggle" icon={<MenuOutlined/>} aria-label={t('打开导航')} onClick={()=>setMobileOpen(true)}/>
-    <a className="brand-wordmark" href={'#/dashboard?project='+encodeURIComponent(project)} aria-label={productName}><BrandMark/><span><strong>{productName}</strong><small>{locale==='zh-CN'?'EnerCubix':t('多维能源分析平台')}</small></span></a>
+    <a className="brand-wordmark" href={'#/dashboard?project='+encodeURIComponent(project)} aria-label={productName}><BrandMark/><span><strong>{productName}</strong><small>{productTagline}</small></span></a>
     {navigation()}
     <Space className="header-tools" size={8}>
      <span className="project-context" title={project}>{project||t('未指定项目')}</span>

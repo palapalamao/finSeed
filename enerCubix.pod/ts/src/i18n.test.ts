@@ -56,7 +56,16 @@ describe('automatic interface language',()=>{
   const {initializeLocale}=await import('./i18n');
   const {default:dayjs}=await import('dayjs');
   initializeLocale();expect(document.documentElement.lang).toBe('en-US');
-  expect(document.title).toBe('EnerCubix · Multidimensional Energy Analytics');expect(dayjs.locale()).toBe('en');
+  expect(document.title).toBe('EnergyCubix · Building Energy Analytics');expect(dayjs.locale()).toBe('en');
+ });
+ it.each([
+  ['zh-CN','能源魔方','楼宇能源分析'],
+  ['en-US','EnergyCubix','Building Energy Analytics'],
+  ['fr-FR','EnergyCubix','Building Energy Analytics']
+ ])('uses the localized product lockup for %s',async(language,name,tagline)=>{
+  vi.stubGlobal('navigator',{language});
+  const {productName,productTagline}=await import('./brand');
+  expect(productName).toBe(name);expect(productTagline).toBe(tagline);
  });
  it('translates known service warnings without translating captured names',async()=>{
   vi.stubGlobal('navigator',{language:'en-US'});

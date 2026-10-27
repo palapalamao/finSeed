@@ -12,7 +12,7 @@ for(const language of ['zh-CN','zh-TW','en-US','de-DE']){
    const state=await installTransport(page);
    await openView(page,'profile');
    await expect(page.locator('html')).toHaveAttribute('lang',chinese?'zh-CN':'en-US');
-   await expect(page).toHaveTitle(chinese?'能源魔方 · 多维能源分析平台':'EnerCubix · Multidimensional Energy Analytics');
+   await expect(page).toHaveTitle(chinese?'能源魔方 · 楼宇能源分析':'EnergyCubix · Building Energy Analytics');
    await expect(page.getByRole('heading',{name:chinese?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
    await expect(page.getByRole('navigation').getByRole('button',{name:chinese?'总览':'Overview',exact:true})).toBeVisible();
    await expect(page.getByRole('combobox',{name:chinese?'汇总间隔':'Aggregation interval',exact:true})).toBeVisible();

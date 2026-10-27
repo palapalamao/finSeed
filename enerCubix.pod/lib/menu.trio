@@ -4,15 +4,15 @@ name: enerCubixApp
 finStackMobileMenu
 func
 overridable
-doc: "EnerCubix energy workspace"
+doc: "EnergyCubix building energy analytics"
 src:
   () => do
     rootUri: enerCubixAppUri()
     [{
-      displayName: "能源魔方 / EnerCubix",
+      displayName: toLocale("enerCubix::enerCubixApp"),
       appId: "enerCubixApp",
       link: "",
-      icon: "icon-graph-line",
+      icon: "enercubix-launcher-cube",
       iconType: "class",
       ui: "mobile",
       minUiTarget: "phone",
@@ -21,4 +21,11 @@ src:
       keepOpen: true
     }].toGrid
   end
+---
+name: enerCubixMobileSettings
+func
+stackMobileSettings
+doc: "Register the EnergyCubix native launcher icon styles"
+src:
+  () => {styles: ["/pod/enerCubix/res/enercubix-launcher.css"]}
 ---

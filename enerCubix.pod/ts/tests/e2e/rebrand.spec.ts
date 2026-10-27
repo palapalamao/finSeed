@@ -5,7 +5,7 @@ test('horizontal workspace preserves query filters while changing independent an
  const records=[...testRecords().map(row=>row.id==='meter1'?{...row,spaceId:'floor',organizationId:'department'}:row),{id:'floor',kind:'space' as const,name:'示范楼层'},{id:'department',kind:'organization' as const,name:'示范部门'}];
  const state=await installTransport(page,{records});await openView(page,'profile');
  await expect(page.getByRole('navigation',{name:'主导航'})).toBeVisible();
- await expect(page).toHaveTitle('能源魔方 · 多维能源分析平台');
+ await expect(page).toHaveTitle('能源魔方 · 楼宇能源分析');
  await expect(page.locator('.brand-wordmark')).toContainText('能源魔方');
  await expect(page.locator('.object-panel:visible')).toHaveCount(0);
  await page.getByRole('button',{name:/^选择对象/}).click();
