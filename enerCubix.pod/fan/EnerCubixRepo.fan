@@ -412,7 +412,7 @@ class EnerCubixRepo
     out:=EnerCubixEnergyFlow.visible(visible,all)
     out.each |r|
     {
-      ["historyPointId","pointId"].each |key|
+      ["pointId"].each |key|
       {
         id:=r[key] as Str
         if (id == null) return
@@ -444,7 +444,7 @@ class EnerCubixRepo
     all.each |r|
     {
       if (r["_comparisonReadable"] == false) return
-      ["historyPointId","pointId"].each |key|
+      ["pointId"].each |key|
       {
         id:=r[key] as Str
         if (id == null) return
@@ -672,7 +672,7 @@ class EnerCubixRepo
     point := rec["pointId"] as Str
     if (point == null || point.isEmpty)
     {
-      if (rec["autoSum"] == true) throw ArgErr("请选择当前 FIN 项目的原始点位")
+      if (["meter","totalMeter"].contains(rec["kind"])) throw ArgErr("所有表计必须指定主能耗点，缺测不会由归档或公式替代")
       return
     }
     r := cx.db.readById(Ref.fromStr(point),false)

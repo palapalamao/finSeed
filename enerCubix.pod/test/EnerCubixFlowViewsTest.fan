@@ -268,7 +268,7 @@ class EnerCubixFlowViewsTest : Test
       virtualMeter("g1","e1","pg1"),virtualMeter("g2","e2","pg2"),expression("e1","a",["a":"a"]),expression("e2","a+b",["a":"a","b":"b"])]
   }
   private Str:Obj? meter(Str id,Str point,Str? parent,Str space,Str org) {["id":id,"kind":"meter","name":id,"pointId":point,"meterParentId":parent,"spaceId":space,"organizationId":org,"categoryId":"e","unit":"kWh"]}
-  private Str:Obj? virtualMeter(Str id,Str expr,Str point) {["id":id,"kind":"totalMeter","name":id,"expressionId":expr,"historyPointId":point,"categoryId":"e","unit":"kWh","includeInTotals":false]}
+  private Str:Obj? virtualMeter(Str id,Str expr,Str point) {["id":id,"kind":"totalMeter","name":id,"expressionId":expr,"pointId":point,"categoryId":"e","unit":"kWh","includeInTotals":false]}
   private Str:Obj? expression(Str id,Str formula,Str:Str vars) {["id":id,"kind":"expression","formula":formula,"variables":vars]}
   private [Str:Obj?][] histories() {[history("pt",110f),history("pa",40f),history("pb",60f),history("pg1",45f),history("pg2",105f)]}
   private Str:Obj? history(Str id,Float value) {["pointId":id,"unit":"kWh","mode":"interval","intervals":[interval(0,value)]]}

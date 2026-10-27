@@ -60,8 +60,8 @@ internal const class EnerCubixFlowOverview
     [Str:Obj?][] shared:=index.map |record->[Str:Obj?]|
     {
       latest:=current.find |r| {r["id"] == record["id"]}
-      oldPoint:=record["historyPointId"] as Str ?: (record["pointId"] as Str ?: "")
-      newPoint:=latest?.get("historyPointId") as Str ?: (latest?.get("pointId") as Str ?: "")
+      oldPoint:=record["pointId"] as Str ?: ""
+      newPoint:=latest?.get("pointId") as Str ?: ""
       return latest != null && oldPoint == newPoint ? latest : record
     }
     strict:=EnerCubixContext(shared,histories,from.tz)
@@ -74,14 +74,14 @@ internal const class EnerCubixFlowOverview
       if (strict.comparison != null && meter["_comparisonPointReadable"] == false)
         return ["id":id,"nodeId":id,"name":meter["name"],"categoryId":meter["categoryId"],"unit":meter["unit"] ?: "","value":null,"valueType":"null","quality":"forbidden","completeValue":null,"completeQuality":"forbidden","sourceIds":Str[,],"activeSeconds":duration,"coveredSeconds":0f,"coverage":0f,"complete":false,"periods":[Str:Obj?][,],"meterIds":[id]]
       latest:=current.find |r| {r["id"] == id && ["meter","totalMeter"].contains(r["kind"])}
-      point:=meter["historyPointId"] as Str ?: (meter["pointId"] as Str ?: "")
-      latestPoint:=latest?.get("historyPointId") as Str ?: (latest?.get("pointId") as Str ?: "")
+      point:=meter["pointId"] as Str ?: ""
+      latestPoint:=latest?.get("pointId") as Str ?: ""
       if (latest != null && latestPoint == point) meter=latest
       bindings:=[point]
       segments.findAll |segment| {segment["known"] == true}.each |segment|
       {
         own:=EnerCubixTemporalReport.recordsFor(current,segment).find |r| {r["id"] == id}
-        if (own != null) bindings.add(own["historyPointId"] as Str ?: (own["pointId"] as Str ?: ""))
+        if (own != null) bindings.add(own["pointId"] as Str ?: "")
       }
       if (latest != null) bindings.add(latestPoint)
       windows:=[Str:Obj?][,]
@@ -95,7 +95,7 @@ internal const class EnerCubixFlowOverview
         if (start < from) start=from
         if (end > to) end=to
         if (end <= start) return
-        source:=own["historyPointId"] as Str ?: (own["pointId"] as Str ?: "")
+        source:=own["pointId"] as Str ?: ""
         last:=windows.last
         if (last != null && last["to"] == start.toIso && last["pointId"] == source) last["to"]=end.toIso
         else windows.add(["from":start.toIso,"to":end.toIso,"pointId":source])
@@ -110,7 +110,6 @@ internal const class EnerCubixFlowOverview
         lifetime+=(finish-start).ticks.toFloat/1sec.ticks.toFloat
         source:=window["pointId"].toStr
         binding:=meter.dup.set("pointId",source)
-        if (binding["historyPointId"] != null) binding["historyPointId"]=source
         own:=EnerCubixContext.bound(strict,id,binding)
         observed:=EnerCubixContext.known(own,finish < limit ? finish : limit)
         cursor:=start

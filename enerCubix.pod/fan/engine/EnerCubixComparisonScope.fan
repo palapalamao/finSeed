@@ -69,7 +69,7 @@ internal class EnerCubixComparisonScope
       membersByMaster[id]=found.findAll |r| {selection.contains(r["id"])}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
       groups[id]=["nodeId":id,"categoryId":category,"basis":"physicalBoundary","defaultMemberIds":defaults,"selectedMemberIds":selection,"quality":quality,"completeSelection":quality == "ok","limitations":limits.unique,"availableMembers":found.sort |a,b| {a["id"].toStr <=> b["id"].toStr}.map |r->[Str:Obj?]|
       {
-        point:=(r["historyPointId"] ?: (r["pointId"] ?: "")).toStr
+        point:=(r["pointId"] ?: "").toStr
         return ["nodeId":r["id"],"name":r["alias"] ?: r["name"],"unit":r["unit"] ?: byId[category]?.get("unit"),"via":paths[r["id"].toStr] ?: Str[,],"sourceIds":point.isEmpty ? Str[,] : [point]]
       }]
     }
@@ -96,7 +96,7 @@ internal class EnerCubixComparisonScope
     seen:=Str[,]
     return dim.frontier(selected).sort |a,b| {a["id"].toStr <=> b["id"].toStr}.findAll |r|
     {
-      source:=(r["historyPointId"] ?: (r["pointId"] ?: r["id"])).toStr
+      source:=(r["pointId"] ?: r["id"]).toStr
       if (seen.contains(source)) return false
       seen.add(source);return true
     }
@@ -152,9 +152,9 @@ internal class EnerCubixComparisonScope
         if (expandable) {descend(child,category,via.dup.add(childId),path.dup.add(childId),found,aliases,paths,limits);return}
         limits.add("comparisonNonAdditive")
       }
-      if (child["pointId"] == null && child["historyPointId"] == null) limits.add("comparisonMissingSource")
-      source:=(child["historyPointId"] ?: (child["pointId"] ?: childId)).toStr
-      prior:=found.find |r| {(r["historyPointId"] ?: (r["pointId"] ?: r["id"])).toStr == source}
+      if (child["pointId"] == null) limits.add("comparisonMissingSource")
+      source:=(child["pointId"] ?: childId).toStr
+      prior:=found.find |r| {(r["pointId"] ?: r["id"]).toStr == source}
       if (prior != null) {aliases[childId]=prior["id"].toStr;return}
       found.add(child);aliases[childId]=childId;paths[childId]=via
     }

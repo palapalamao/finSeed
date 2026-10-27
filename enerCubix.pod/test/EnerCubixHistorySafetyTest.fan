@@ -8,8 +8,8 @@ class EnerCubixHistorySafetyTest : Test
     verifyErr(ArgErr#) { EnerCubixHistorySafety.repairRequested([:]) }
     verifyErr(ArgErr#) { EnerCubixHistorySafety.repairRequested(["from":"2026-01-01","to":"2026-01-02"]) }
     verifyErr(ArgErr#) { EnerCubixHistorySafety.repairRequested(["confirmHistoryRewrite":true]) }
-    verify(EnerCubixHistorySafety.repairRequested(["confirmHistoryRewrite":true,"from":"2026-01-01","to":"2026-01-02"]))
-    verifyFalse(EnerCubixHistorySafety.repairRequested(["confirmHistoryRewrite":true],true))
+    verifyErr(ArgErr#) {EnerCubixHistorySafety.repairRequested(["confirmHistoryRewrite":true,"from":"2026-01-01","to":"2026-01-02"])}
+    verifyErr(ArgErr#) {EnerCubixHistorySafety.repairRequested(["confirmHistoryRewrite":true],true)}
   }
 
   Void testMetadataCannotTrashOrDeleteHistoryButCanRemoveConfiguration()
@@ -38,20 +38,11 @@ class EnerCubixHistorySafetyTest : Test
       point:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"enerCubixComputed":Marker.val,"kind":"Number","unit":"kWh","tz":"UTC"]))).newRec
       at:=DateTime.fromIso("2026-01-01T00:00:00Z")
       first:=HisItem(at,Number(7,Unit("kWh")))
-      verifyEq(EnerCubixHistorySafety.write(db,point,[first]).size,1)
-      verifyEq(EnerCubixHistorySafety.write(db,point,[first]).size,0)
-      changed:=HisItem(at,NA.val); added:=HisItem(at+1min,Number(8,Unit("kWh")))
-      verifyErr(ArgErr#) { EnerCubixHistorySafety.write(db,point,[added,changed]) }
-      records:=HisItem[,];db.his.read(point.id,null,null) |item| {records.add(item)}
-      verifyEq(records.size,1);verifyEq(records.first.val,first.val)
-      verifyEq(EnerCubixHistorySafety.write(db,point,[changed,added],false,true),[added])
-      records.clear;db.his.read(point.id,null,null) |item| {records.add(item)}
-      verifyEq(records.size,2);verifyEq(records.first.val,first.val)
-      verifyEq(EnerCubixHistorySafety.write(db,point,[changed],true).size,1)
-      records.clear;db.his.read(point.id,null,null) |item| {records.add(item)}
-      verifyEq(records.size,2);verifyEq(records.first.val,NA.val)
-      raw:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"kind":"Number","tz":"UTC"]))).newRec
-      verifyErr(ArgErr#) { EnerCubixHistorySafety.write(db,raw,[first],true) }
+      verifyErr(ArgErr#) {EnerCubixHistorySafety.write(db,point,[first])}
+      verifyErr(ArgErr#) {EnerCubixHistorySafety.write(db,point,[first],true)}
+      rows:=HisItem[,];db.his.read(point.id,null,null) |item| {rows.add(item)}
+      verify(rows.isEmpty)
+
     }
   }
 

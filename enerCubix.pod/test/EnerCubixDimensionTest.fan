@@ -96,11 +96,11 @@ class EnerCubixDimensionTest : Test
   {
     rs:=base
     sensor:=meter("sensor","ps","floor",null,"tenant"); sensor["kind"]="sensor"
-    computed:=meter("virtual","","floor",null,"tenant"); computed["expressionId"]="expr"
+    computed:=meter("virtual","pv","floor",null,"tenant"); computed["expressionId"]="expr"
     rs.add(sensor).add(computed).add(["id":"expr","kind":"expression","formula":"a * 2","variables":["a":"floorMeter"]])
     near(value(run(rs,histories,"space",["floor"])),30f)
     computed["includeInTotals"]=true
-    near(value(run(rs,histories,"space",["floor"])),90f)
+    near(value(run(rs,histories.dup.add(["pointId":"pv","unit":"kWh","mode":"interval","samples":[[Str:Obj?]["ts":"2026-01-01T00:00:00Z","value":60f]]]),"space",["floor"])),90f)
   }
 
   Void testUtilityUsesMeasuredBranchesAndWarnsAboutCoverage()

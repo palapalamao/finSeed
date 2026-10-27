@@ -4,17 +4,10 @@ using folio
 
 class EnerCubixJobsTest : Test
 {
-  Void testHistoricalDerivedIdentityIsReused()
+  Void testArchivedCalculationActionsAreRejectedBeforeJobsCanWrite()
   {
-    withDb |db|
-    {
-      s:=series
-      historical:=Ref("historic-derived-"+EnerCubixJobs.derivedId(s).split('-').last)
-      point:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"kind":"Number","unit":"kWh","tz":"UTC","hisMode":"consumption","enerCubixComputed":Marker.val,"enerCubixResultKey":s["id"],"enerCubixResultCategory":s["categoryId"]]),historical)).newRec
-      verifyEq(EnerCubixJobs.findDerived(db,s).id,historical)
-      EnerCubixJobs.checkOwned(point,s)
-      verifyNull(db.readById(Ref(EnerCubixJobs.derivedId(s)),false))
-    }
+    ["recalculate","setCalculationEnabled","unknown"].each |action| {verifyErr(ArgErr#) {EnerCubixJobs.checkAction(action)}}
+    EnerCubixJobs.checkAction("scanAlarms");EnerCubixJobs.checkAction("setAlarmEnabled")
   }
 
   Void testNativeHourlyScheduleCreationAndLegacyRepair()
@@ -107,49 +100,6 @@ class EnerCubixJobsTest : Test
       catch (Err e) { verifyEq(e.typeof.name,"ConcurrentChangeErr") }
     }
   }
-
-  Void testDerivedOwnershipUnitsAndTimestampOverwrite()
-  {
-    withDb |db|
-    {
-      s:=series
-      id:=EnerCubixJobs.derivedId(s)
-      point:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"his":Marker.val,"kind":"Number","unit":"kWh","tz":"UTC","hisMode":"consumption","enerCubixComputed":Marker.val,"enerCubixResultKey":"g|electric","enerCubixResultCategory":"electric"]),Ref(id))).newRec
-      EnerCubixJobs.checkOwned(point,s)
-      original:=Etc.makeDict(["id":Ref("original"),"point":Marker.val,"his":Marker.val,"unit":"kWh"])
-      verifyErr(ArgErr#) { EnerCubixJobs.checkOwned(original,s) }
-      items:=EnerCubixJobs.historyItems(s,TimeZone.utc)
-      verifyEq(items[0].ts,DateTime.fromIso("2026-01-01T01:00:00Z"))
-      verifyEq(((Number)items[0].val).unit,Unit("kWh"))
-      db.his.write(point.id,items,null).get
-      (([Str:Obj?][])s["points"])[0]["value"]=null
-      db.his.write(point.id,EnerCubixJobs.historyItems(s,TimeZone.utc),null).get
-      read:=HisItem[,]
-      db.his.read(point.id,null,null) |item| { read.add(item) }
-      verifyEq(read.size,1); verifyEq(read[0].val,NA.val)
-    }
-  }
-
-  Void testQualityEvidenceIsBoundedAndComplete()
-  {
-    s:=series; points:=[Str:Obj?][,]; start:=DateTime.fromIso("2026-01-01T00:00:00Z")
-    (0..<1440).each |i| { points.add(["ts":(start+Duration(i*1hr.ticks)).toIso,"value":null,"quality":"missingTariffBaseline"]) }
-    s["points"]=points
-    chunks:=EnerCubixJobs.qualityEvidence(s,"derivedPoint","jobId")
-    verify(chunks.size > 2)
-    total:=0
-    chunks.each |chunk|
-    {
-      verify(JsonOutStream.writeJsonToStr(chunk).size < 30000)
-      total+=((Map)chunk["quality"]).size
-      verifyEq(chunk["parentJobId"],"jobId")
-    }
-    verifyEq(total,1440)
-    verify(chunks[0]["name"] != EnerCubixJobs.qualityEvidence(s,"derivedPoint","anotherJob")[0]["name"])
-  }
-
-  private [Str:Obj?] series()
-  { ["id":"g|electric","name":"Group","categoryId":"electric","unit":"kWh","points":[[Str:Obj?]["ts":"2026-01-01T00:00:00Z","value":10f,"quality":"ok"]]] }
 
   private Void withDb(|Folio| work)
   {

@@ -199,7 +199,7 @@ class EnerCubixTemporalBalanceTest : Test
   Void testFormulaArchiveIsAuthoritativeAndMissingArchiveNeverFallsBack()
   {
     rs:=records
-    rs.add(["id":"f","kind":"meter","name":"Formula","historyPointId":"pf","expressionId":"expr","categoryId":"electric","unit":"kWh"])
+    rs.add(["id":"f","kind":"meter","name":"Formula","pointId":"pf","expressionId":"expr","categoryId":"electric","unit":"kWh"])
     rs.add(["id":"expr","kind":"expression","name":"Expr","formula":"a","variables":["a":"a"]])
     req:=request("profile",1); req["nodeIds"]=["f"]
     hs:=histories.add(history("pf",[0f,15f,30f]))

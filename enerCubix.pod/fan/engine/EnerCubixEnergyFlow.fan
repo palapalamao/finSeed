@@ -339,9 +339,9 @@ internal class EnerCubixEnergyFlow
   }
   private Str physicalId(Str:Obj? r)
   {
-    point:=(r["historyPointId"] ?: r["pointId"]) as Str
+    point:=r["pointId"] as Str
     if (point == null) return r["id"].toStr
-    matches:=dim.records.findAll |m| {meter(m) && !derived(m) && m["categoryId"] == category && (m["historyPointId"] ?: m["pointId"]) == point && m["_comparisonReadable"] != false}
+    matches:=dim.records.findAll |m| {meter(m) && !derived(m) && m["categoryId"] == category && m["pointId"] == point && m["_comparisonReadable"] != false}
     return matches.map |m->Str| {m["id"].toStr}.sort.first ?: r["id"].toStr
   }
   private Bool ancestor(Str parent,Str child)

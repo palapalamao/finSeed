@@ -13,22 +13,21 @@ class EnerCubixJobs
   private Int processed := 0
   private Int alarmsCreated := 0
 
-  [Str:Obj?] run([Str:Obj?] request, Bool automatic:=false)
+  [Str:Obj?] run([Str:Obj?] request)
   {
     repo.mustWrite
     action:=request["action"] as Str ?: ""
-    if (["setCalculationEnabled","setAlarmEnabled"].contains(action))
+    checkAction(action)
+    if (action == "setAlarmEnabled")
     {
       enabled:=request["enabled"] as Bool ?: throw ArgErr("缺少启停状态")
       old:=repo.records.find |r| { r["kind"] == "job" && r["action"] == action }
-      config:=old ?: ["kind":"job","name":action == "setCalculationEnabled" ? "计算开关" : "报警开关","action":action]
+      config:=old ?: ["kind":"job","name":"报警开关","action":action]
       config["enabled"]=enabled; config["status"]=enabled ? "enabled" : "disabled"
       config["message"]="FIN 原生每小时调度；原始历史同步由 FIN 连接器独立管理"
       ensureSchedule(repo.cx.db)
       return repo.save(config,true)
     }
-    if (!["recalculate","scanAlarms"].contains(action)) throw ArgErr("任务操作无效")
-    repair:=action == "recalculate" ? EnerCubixHistorySafety.repairRequested(request,automatic) : false
     tz:=TimeZone.fromStr(repo.cx.proj.meta["tz"]?.toStr ?: "Shanghai")
     now:=DateTime.now.toTimeZone(tz); end:=EnerCubixMath.floorHour(now)
     from:=DateTime.fromIso(request["from"] as Str ?: (end-1hr).toIso).toTimeZone(tz)
@@ -40,16 +39,15 @@ class EnerCubixJobs
     {
       interruptPrevious(held)
       all:=repo.records
-      currentJob=repo.save(["kind":"job","name":(action == "recalculate" ? "范围重算 " : "报警检查 ")+now.toIso,"action":action,"status":"running","from":from.toIso,"to":to.toIso,"lastRun":now.toIso,"processed":0],true)
-      currentJob["historyWriteMode"]=repair ? "explicitRepair" : "appendOnly"
-      currentJob["historyRewriteConfirmed"]=repair
+      currentJob=repo.save(["kind":"job","name":"报警检查 "+now.toIso,"action":action,"status":"running","from":from.toIso,"to":to.toIso,"lastRun":now.toIso,"processed":0],true)
+      currentJob["historyWriteMode"]="primaryReadOnly"
+      currentJob["historyRewriteConfirmed"]=false
       try
       {
         progress(0)
-        if (action == "recalculate") recalculate(all,from.toIso,to.toIso,repair)
-        else scan(all,from.toIso,to.toIso)
+        scan(all,from.toIso,to.toIso)
         currentJob["status"]="completed"
-        currentJob["message"]=action == "recalculate" ? "派生历史写入完成；未改写采集点原始历史" : "报警检查完成"
+        currentJob["message"]="报警检查完成"
         currentJob["lastRun"]=DateTime.now.toIso
         if (action == "scanAlarms") currentJob["alarmsCreated"]=alarmsCreated
         currentJob=repo.save(currentJob,true)
@@ -69,11 +67,17 @@ class EnerCubixJobs
   {
     repo.mustWrite
     all:=repo.records; result:=Str:Obj?[:]
-    ["setCalculationEnabled":"recalculate","setAlarmEnabled":"scanAlarms"].each |action,setting|
+    ["setAlarmEnabled":"scanAlarms"].each |action,setting|
     {
-      if (all.any |r| { r["kind"] == "job" && r["action"] == setting && r["enabled"] == true }) result[action]=run(["action":action],true)
+      if (all.any |r| { r["kind"] == "job" && r["action"] == setting && r["enabled"] == true }) result[action]=run(["action":action])
     }
     return result
+  }
+
+  internal static Void checkAction(Str action)
+  {
+    if (["recalculate","setCalculationEnabled"].contains(action)) throw ArgErr("报表只读主能耗点，不再创建或重算派生归档")
+    if (!["scanAlarms","setAlarmEnabled"].contains(action)) throw ArgErr("任务操作无效")
   }
 
   private Void progress(Int count)
@@ -113,50 +117,6 @@ class EnerCubixJobs
       if (e.typeof.name != "DuplicateRecErr") throw e
       existing=db.readById(key,false)
       if (existing == null || existing["jobExpr"] != "enerCubixScheduled()") throw e
-    }
-  }
-
-  private Void recalculate([Str:Obj?][] all, Str from, Str to, Bool repair)
-  {
-    repaired:=0
-    if (repair) repaired=EnerCubixMeterGeneration.recalculate(repo.cx.db,all,DateTime.fromIso(from),DateTime.fromIso(to),true) |n| {progress(n)}
-    nodes:=all.findAll |r| { r["kind"] == "group" || (["meter","totalMeter"].contains(r["kind"]) && r["expressionId"] != null) }
-    nodes=nodes.findAll |r| {r["historyPointId"] == null || repo.cx.db.readById(EnerCubixMeterHistory.stateId(Ref(r["historyPointId"].toStr)),false) == null}
-    if (nodes.isEmpty) {if (!repair || repaired > 0) return; throw ArgErr("没有可计算的管理组或虚拟表")}
-    cx:=repo.cx; tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
-    nodes.each |node|
-    {
-      progress(0)
-      report:=repo.report(["kind":"profile","nodeIds":[node["id"]],"from":from,"to":to,"period":"hour","metric":"energy","perArea":false])
-      EnerCubixMath.maps(report["series"]).each |s|
-      {
-        progress(0)
-        rec:=findDerived(cx.db,s)
-        key:=rec?.id ?: Ref(derivedId(s))
-        if (rec == null)
-        {
-          unit:=s["unit"]?.toStr ?: ""
-          if (!unit.isEmpty && Unit.fromStr(unit,false) == null) throw ArgErr("派生点单位不是 FIN 支持的单位：$unit")
-          tags:=[Str:Obj?]["dis":s["name"],"point":Marker.val,"his":Marker.val,"kind":"Number","hisMode":"consumption","tz":tz.name,"enerCubixComputed":Marker.val,"enerCubixResultKey":s["id"].toStr,"enerCubixResultCategory":s["categoryId"]?.toStr ?: ""]
-          if (!unit.isEmpty) tags["unit"]=unit
-          rec=cx.db.commit(Diff.makeAdd(Etc.makeDict(tags),key)).newRec
-        }
-        checkOwned(rec,s)
-        batches:=monthBatches(s)
-        batches.keys.sort.each |month|
-        {
-          progress(0)
-          part:=s.dup; part["points"]=batches[month]
-          // Verify ownership immediately before each write; source points are never targets.
-          rec=cx.db.readById(key); checkOwned(rec,s)
-          items:=historyItems(part,tz)
-          EnerCubixTaskLock.heartbeat(cx.db,owner,Ref(currentJob["id"].toStr))
-          written:=EnerCubixHistorySafety.write(cx.db,rec,items,repair,true,5min)
-          part["points"]=EnerCubixMath.maps(part["points"]).findAll |p| {written.any |item| {item.ts == DateTime.fromIso(p["ts"].toStr).toTimeZone(tz)+1hr}}
-          if (!written.isEmpty) qualityEvidence(part,rec.id.id,currentJob["id"].toStr).each |evidence| { repo.save(evidence,true) }
-          progress(written.size)
-        }
-      }
     }
   }
 
@@ -218,80 +178,8 @@ class EnerCubixJobs
 
   private static Str alarmKey(Obj? node, Obj? category, Obj? ts) { "$node|$category|$ts" }
 
-  internal static Str derivedId([Str:Obj?] s)
-  {
-    identity:=s["id"].toStr+"|"+(s["categoryId"]?.toStr ?: "")+"|"+(s["unit"]?.toStr ?: "")
-    return "enerCubix-derived-"+identity.toBuf.toDigest("SHA-256").toHex[0..<24]
-  }
-
-  internal static Dict? findDerived(Folio db, [Str:Obj?] s)
-  {
-    matches:=db.readAllList(Filter.has("enerCubixComputed")).findAll |p| { p["enerCubixResultKey"] == s["id"] && p["enerCubixResultCategory"] == (s["categoryId"]?.toStr ?: "") }
-    if (matches.size > 1) throw ArgErr("Duplicate derived point identity")
-    return matches.first ?: db.readById(Ref(derivedId(s)),false)
-  }
-
-  internal static Void checkOwned(Dict point, [Str:Obj?] s)
-  {
-    category:=s["categoryId"]?.toStr ?: ""
-    if (!point.has("enerCubixComputed") || !point.has("point") || !point.has("his") || !point.id.id.split(':').last.endsWith("-"+derivedId(s).split('-').last) || point["enerCubixResultKey"] != s["id"] || point["enerCubixResultCategory"] != category) throw ArgErr("派生点所有权检查失败，拒绝写入")
-    if (point["hisMode"] != "consumption" || point.has("hisTotalized") || (point["unit"]?.toStr ?: "") != (s["unit"]?.toStr ?: "")) throw ArgErr("派生点历史模式或单位不匹配")
-    point.each |v,k| { if (k.lower.endsWith("connref") || ["hisFunc","hisOnWrite"].contains(k)) throw ArgErr("派生点存在外部历史来源或写入钩子，拒绝写入") }
-  }
-
-  internal static HisItem[] historyItems([Str:Obj?] s, TimeZone tz)
-  {
-    symbol:=s["unit"]?.toStr ?: ""
-    unit:=symbol.isEmpty ? null : Unit.fromStr(symbol,false)
-    if (!symbol.isEmpty && unit == null) throw ArgErr("FIN 不支持此派生单位：$symbol")
-    return EnerCubixMath.maps(s["points"]).map |p->HisItem|
-    {
-      at:=DateTime.fromIso(p["ts"].toStr).toTimeZone(tz)
-      if (at != EnerCubixMath.floorHour(at)) throw ArgErr("派生历史必须为完整小时")
-      n:=EnerCubixMath.num(p["value"])
-      reliable:=["ok","derived","estimated","corrected","cleaned"].contains(p["quality"]?.toStr ?: "ok")
-      return HisItem(at+1hr,n == null || !reliable ? NA.val : Number(n,unit))
-    }
-  }
-
-  private static Str:[Str:Obj?][] monthBatches([Str:Obj?] s)
-  {
-    out:=Str:[Str:Obj?][][:]
-    EnerCubixMath.maps(s["points"]).each |p|
-    {
-      month:=p["ts"].toStr[0..<7]
-      if (!out.containsKey(month)) out[month]=[Str:Obj?][,]
-      out[month].add(p)
-    }
-    return out
-  }
-
-  internal static [Str:Obj?][] qualityEvidence([Str:Obj?] s, Str point, Str parentJob)
-  {
-    result:=[Str:Obj?][,]
-    batches:=monthBatches(s)
-    batches.keys.sort.each |month|
-    {
-      quality:=Str:Obj?[:]
-      batches[month].each |p|
-      {
-        if (p["quality"] == "ok" && p["value"] != null) return
-        candidate:=quality.dup; candidate[p["ts"].toStr]=p["quality"] ?: "missing"
-        if (JsonOutStream.writeJsonToStr(candidate).size > 20000)
-        {
-          if (quality.isEmpty) throw ArgErr("单条质量证据超过存储限制")
-          result.add(evidence(point,parentJob,month,quality,result.size)); quality=Str:Obj?[:]
-        }
-        quality[p["ts"].toStr]=p["quality"] ?: "missing"
-      }
-      if (!quality.isEmpty) result.add(evidence(point,parentJob,month,quality,result.size))
-    }
-    return result
-  }
-
-  private static [Str:Obj?] evidence(Str point, Str parentJob, Str month, [Str:Obj?] quality, Int index)
-  { ["kind":"job","name":"质量证据 "+point+" "+month+" #"+index+" "+parentJob,"action":"quality","status":"completed","resultPointId":point,"parentJobId":parentJob,"month":month,"quality":quality,"lastRun":DateTime.now.toIso,"processed":quality.size] }
 }
+
 
 ** One persisted CAS lock is shared by manual and native hourly tasks.
 internal class EnerCubixTaskLock

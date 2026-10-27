@@ -108,9 +108,6 @@ class EnerCubixCleaningHistoryTest : Test
     value:=h.read(ts(0),ts(1))
     verifyEq(value.value,60f); verifyEq(value.quality,"substituted")
     verifyNull(EnerCubixValue.divide(value,EnerCubixValue(100f,"ok")).value)
-    p:=value.point(ts(0))
-    items:=EnerCubixJobs.historyItems(["unit":"kWh","points":[p]],TimeZone.utc)
-    verifyEq(items.first.val,NA.val)
     verifyEq(EnerCubixValue(0f,"cleaned").valueType,"number")
   }
 

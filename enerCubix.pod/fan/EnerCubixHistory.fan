@@ -31,6 +31,7 @@ class EnerCubixHistory
         point=cx.db.readById(Ref(id),false)
         if (point == null || !point.has("his")) { out.add(unavailable(id,"missing")); return }
         if (!cx.canRead(point)) { out.add(unavailable(id,"forbidden")); return }
+        if (!primaryReadAllowed(point,records)) { out.add(unavailable(id,"missingSource")); return }
         items:=HisItem[,]
         pointTz:=TimeZone.fromStr(point["tz"]?.toStr ?: from.tz.name,false) ?: from.tz
         // HxHisService may supply leading/trailing items. A modest extra day also
@@ -49,28 +50,6 @@ class EnerCubixHistory
           out.add(normalize(point,items,from,to,true))
           return
         }
-        if (request["raw"] != true)
-        {
-          published:=EnerCubixMeterHistory.load(cx,point,from,to)
-          if (published != null)
-          {
-            cutover:=DateTime.fromIso(published["cutover"].toStr).toTimeZone(from.tz)
-            if (from < cutover)
-            {
-              legacy:=legacyHistory(cx,point,span,from,cutover,modeRecords)
-              published=mergePublished(legacy,published,cutover)
-            }
-            out.add(published)
-            return
-          }
-          frozen:=EnerCubixMeterHistory.legacyConfig(cx,point)
-          if (frozen != null)
-          {
-            legacy:=legacyHistory(cx,point,span,from,to,modeRecords)
-            out.add(legacy)
-            return
-          }
-        }
         overrides:=modeRecords.findAll |r| { r["pointId"] == id && r["historyMode"] != null && r["historyMode"] != "auto" }.map |r->Str| { r["historyMode"].toStr }.unique
         if (overrides.size > 1) throw ArgErr("Conflicting EnerCubix history modes")
         if (point["hisFunc"] == "enerCubixCleanHis" && request["raw"] != true)
@@ -84,11 +63,8 @@ class EnerCubixHistory
           if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
           items.add(item)
         }
-        mode:=outputMode(point,overrides.first,request["raw"] == true)
-        if (mode == "unsupportedComputedMode") { out.add(unavailable(id,mode)); return }
-        if (point.has("hisFunc") && mode == "interval" && request["raw"] != true)
-          out.add(normalizeClean(point,externalResult(point,items),from,to,request["kind"] == "trend"))
-        else out.add(normalize(point,items,from,to,request["kind"] == "trend",mode))
+        mode:=outputMode(point,overrides.first,true)
+        out.add(normalize(point,items,from,to,request["kind"] == "trend",mode))
       }
       catch (ArgErr e)
       {
@@ -113,55 +89,19 @@ class EnerCubixHistory
     return out
   }
 
-  private static Str:Obj? legacyHistory(Context cx, Dict point, Span span, DateTime from, DateTime to, [Str:Obj?][] records)
-  {
-    if (point["hisFunc"] == "enerCubixCleanHis")
-      return normalizeClean(point,cleanStored(cx,point,span,Etc.emptyDict,Etc.emptyDict),from,to)
-    overrides:=records.findAll |r| { r["pointId"] == point.id.id && r["historyMode"] != null && r["historyMode"] != "auto" }.map |r->Str| { r["historyMode"].toStr }.unique
-    if (overrides.size > 1) throw ArgErr("Conflicting EnerCubix history modes")
-    items:=HisItem[,]
-    // Current cleaning ownership also applies to pre-cutover raw readings.
-    // External functions retain their own explicit normal output contract.
-    rawRead:=!point.has("hisFunc")
-    cx.rt.his.read(point,span,readOptions(point)) |item|
-    {
-      if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
-      items.add(item)
-    }
-    mode:=outputMode(point,overrides.first,rawRead)
-    if (point.has("hisFunc") && mode == "interval") return normalizeClean(point,externalResult(point,items),from,to)
-    normalized:=normalize(point,items,from,to,false,mode)
-    h:=EnerCubixHistoryData(normalized)
-    rows:=[Str:Obj?][,]
-    if (h.mode == "interval")
-    {
-      h.samples.each |sample|
-      {
-        a:=sample.ts; b:=a+1hr
-        if (a < from || b > to) return
-        v:=h.read(a,b)
-        rows.add(["from":a.toIso,"to":b.toIso,"value":v.value,"valueType":v.valueType,"quality":v.quality])
-      }
-      normalized["intervals"]=rows
-      return normalized
-    }
-    // Each interval needs its own two boundary readings; missing/NA and resets
-    // are evaluated by the normal own-history arithmetic, never assumed zero.
-    for (i:=1;i<h.samples.size;i++)
-    {
-      a:=h.samples[i-1].ts; b:=h.samples[i].ts
-      if (a < from || b > to) continue
-      v:=h.read(a,b)
-      rows.add(["from":a.toIso,"to":b.toIso,"value":v.value,"valueType":v.valueType,"quality":v.quality])
-    }
-    normalized["intervals"]=rows
-    return normalized
-  }
-
   internal static Str[] pointIds(Str:Obj? request, [Str:Obj?][] records)
   {
     plan:=dependencies(request,records)
     return ((Str[])plan["points"]).sort
+  }
+
+  ** Non-energy references remain available, but energy histories require a device binding.
+  internal static Bool primaryReadAllowed(Dict point, [Str:Obj?][] records)
+  {
+    if (point.has("enerCubixComputed")) return false
+    if (records.any |r| {["meter","totalMeter","sensor"].contains(r["kind"]) && r["pointId"] == point.id.id}) return true
+    unit:=point["unit"] as Str ?: ""
+    return !records.any |r| {r["kind"] == "category" && EnerCubixMath.unitFactor(unit,r["unit"] as Str ?: "") != null}
   }
 
   internal static Str:Obj? range(Str:Obj? request, [Str:Obj?][] records)
@@ -257,19 +197,15 @@ class EnerCubixHistory
     return out
   }
 
-  ** A manual hisFunc owns its normal output contract, including totalization.
+  ** Read the primary point's stored samples; functions cannot redirect a report.
   internal static Dict readOptions(Dict point)
   {
-    if (!point.has("hisFunc")) return Etc.makeDict(["raw":Marker.val])
-    return Etc.emptyDict
+    return Etc.makeDict(["raw":Marker.val])
   }
 
   internal static Str outputMode(Dict point, Str? configured := null, Bool raw := false)
   {
-    if (raw || !point.has("hisFunc")) return configured ?: "auto"
-    if (point["hisFunc"] == "hfTotalized" || point["hisFunc"] == "enerCubixCleanHis") return "interval"
-    if (configured != null && ["cumulative","interval"].contains(configured)) return configured
-    return "unsupportedComputedMode"
+    return configured ?: "auto"
   }
 
   internal static Str valueType(Obj? value) { value is NA ? "na" : (value == null ? "null" : "number") }
@@ -279,16 +215,6 @@ class EnerCubixHistory
   internal static EnerCubixCleanResult cleanRead(Context cx, Dict point, Span span, Dict opts, Dict config)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
-    if (!opts.has("enerCubixCleaningPreview") && !opts.has("raw"))
-    {
-      published:=EnerCubixMeterHistory.load(cx,point,span.start,span.end)
-      if (published != null)
-      {
-        cutover:=DateTime.fromIso(published["cutover"].toStr)
-        legacy:=span.start < cutover ? cleanStored(cx,point,Span.makeAbs(span.start,cutover),opts,config) : null
-        return publishedResult(point,published,legacy)
-      }
-    }
     return cleanStored(cx,point,span,opts,config)
   }
 
@@ -665,10 +591,8 @@ class EnerCubixHistory
     if (nodes.contains(id)) return
     nodes.add(id)
     r:=ctx.byId[id]
-    if (r == null) { points.add(id); return }
+    if (r == null) { if (ctx.byId.vals.any |row| {row["pointId"] == id}) points.add(id); return }
     if (r["kind"] == "nativePoint") return
-    archive:=r["historyPointId"]?.toStr
-    if (archive != null && !archive.isEmpty) { points.add(archive); return }
     if (r["pointId"] != null && !r["pointId"].toStr.isEmpty) points.add(r["pointId"].toStr)
     if (r["kind"] == "group")
     {
@@ -678,9 +602,7 @@ class EnerCubixHistory
       }
     }
     if (r["kind"] == "cop") ["numeratorId","denominatorId"].each |key| { if (r[key] != null) collect(ctx,r[key].toStr,points,nodes,trend) }
-    expression:=ctx.byId[r["expressionId"]?.toStr ?: ""]
-    variables:=expression?.get("variables") as Map
-    if (variables != null) variables.each |Obj? value| { if (value != null) collect(ctx,value.toStr,points,nodes,trend) }
+
   }
 }
 

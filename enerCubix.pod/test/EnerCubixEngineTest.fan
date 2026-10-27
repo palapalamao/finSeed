@@ -54,10 +54,10 @@ class EnerCubixEngineTest : Test
   {
     g := rec("g", "group"); a := meter("a", "pa", "g"); b := meter("b", "pb", "g")
     e := rec("e", "expression"); e["formula"] = "(a + b) * 2 - a / 2"; e["variables"] = ["a":"a", "b":"b"]
-    v := meter("v", "", "g"); v["expressionId"] = "e"
+    v := meter("v", "pv", "g"); v["expressionId"] = "e"
     sensor := rec("s", "sensor"); sensor["parentId"] = "g"; sensor["pointId"] = "ps"; sensor["categoryId"] = "electric"
     req := request(); req["nodeIds"] = ["g", "v"]
-    hs := [history("pa","interval",[10f]),history("pb","interval",[20f]),history("ps","sampled",[99f])]
+    hs := [history("pa","interval",[10f]),history("pb","interval",[20f]),history("ps","sampled",[99f]),history("pv","interval",[55f])]
     r := run([g,a,b,e,v,sensor], hs, req)
     near(value(r), 30f); near((Float?)points(r,1)[0]["value"], 55f)
     v["includeInTotals"] = true
@@ -68,10 +68,10 @@ class EnerCubixEngineTest : Test
   {
     a := meter("m", ""); a["expressionId"] = "e"
     e := rec("e", "expression"); e["formula"] = "a + 1"; e["variables"] = ["a":"m"]
-    r := run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "cycle")
+    r := run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "missing")
     e["formula"] = "1 / 0"; e["variables"] = Str:Str[:]
-    r = run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "divisionByZero")
-    e["formula"] = "sys::Env.cur"; r = run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "invalidExpression")
+    r = run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "missing")
+    e["formula"] = "sys::Env.cur"; r = run([a,e], [Str:Obj?][,]); verifyNull(value(r)); verifyEq(quality(r), "missing")
   }
 
   Void testCoefficientsAndArea()

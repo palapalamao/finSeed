@@ -260,22 +260,7 @@ internal class EnerCubixContext
     if (dimension?.nativeSpace == true && r["nativeSourceMissing"] == true) return EnerCubixValue(null,"nativeSourceMissing")
     EnerCubixValue raw := EnerCubixValue()
     durationFactor:=r["kind"] == "sensor" ? 1f : (to-from).ticks.toFloat/1hr.ticks.toFloat
-    archived:=r["historyPointId"] as Str
-    exprId := archived == null ? r["expressionId"]?.toStr : null
-    if (exprId != null)
-    {
-      if (comparison != null) return EnerCubixValue(null,"missing")
-      if (strictContext != null) return strictContext.rawNode(r,from,to,path)
-      expr := byId[exprId]
-      if (expr == null) return EnerCubixValue(null,"missingExpression")
-      variables := Str:EnerCubixValue[:]
-      map := expr["variables"] as Map
-      if (map != null) map.each |Obj? id, Obj name| { variables[name.toStr]=nodeTotal(id.toStr,from,to,path) }
-      raw = EnerCubixExpression(expr["formula"]?.toStr ?: "",variables).calculate
-    }
-    else
-    {
-      point := archived ?: (r["pointId"]?.toStr ?: "")
+    point := r["pointId"]?.toStr ?: ""
       his := byPoint[point]
       if (his == null) return EnerCubixValue(null,"missing",point.isEmpty ? Str[,] : [point])
       if (!["ok","estimated","derived","cleaned","corrected","filtered","substituted","na"].contains(his.quality)) return EnerCubixValue(null,his.quality,[point])
@@ -298,13 +283,12 @@ internal class EnerCubixContext
         recordId:=r["id"].toStr
         knownReads["$recordId|$point|${from.ticks}|${to.ticks}"]=evidence
       }
-    }
     max := EnerCubixMath.num(r["maximum"])
     if (raw.value != null && max != null && raw.value > max*durationFactor) return EnerCubixValue(null,"maximum",raw.sources)
-    if (exprId == null && r["kind"] != "sensor")
+    if (r["kind"] != "sensor")
     {
-      his:=byPoint[archived ?: (r["pointId"]?.toStr ?: "")]
-      sourceUnit:=his?.unit ?: ""
+      sourceHistory:=byPoint[r["pointId"]?.toStr ?: ""]
+      sourceUnit:=sourceHistory?.unit ?: ""
       if (sourceUnit.isEmpty) sourceUnit=r["unit"]?.toStr ?: ""
       targetUnit:=categoryUnit(r["categoryId"]?.toStr ?: "")
       factor:=EnerCubixMath.unitFactor(sourceUnit,targetUnit)

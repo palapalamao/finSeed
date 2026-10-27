@@ -11,7 +11,7 @@ export function EnergyFlowGraphsView({snapshot,panels,onFocus,exporting}:{snapsh
  return <div className="energy-flow-panels">
   {accounting&&<section className="energy-flow-accounting" aria-label={t('范围统计依据')}>
    <p>{t('统计质量：{0}',accountingQuality)}</p>
-   {accounting.unionValue!==null&&Number.isFinite(accounting.unionValue)?<><strong>{t('{0}：{1} {2}',accounting.basis==='classificationUnion'?t('分类去重贡献合计'):t('范围去重已有量'),new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(accounting.unionValue),t(energyFlowData(panels[0].result)?.unit||''))}</strong><p>{t('去重贡献合计按可解析成员的并集计算，不能替代各对象自身归档值。')}</p></>:<p>{t('各对象自身用量独立显示；当前选择没有统一统计边界，不提供混合总计。')}</p>}
+   {accounting.unionValue!==null&&Number.isFinite(accounting.unionValue)?<><strong>{t('{0}：{1} {2}',accounting.basis==='classificationUnion'?t('分类去重贡献合计'):t('范围去重已有量'),new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(accounting.unionValue),t(energyFlowData(panels[0].result)?.unit||''))}</strong><p>{t('去重贡献合计按可解析成员的并集计算，不累加这些分类总表的主点已有用量。')}</p></>:<p>{t('各对象自身用量独立显示；当前选择没有统一统计边界，不提供混合总计。')}</p>}
    {accounting.sharedMemberIds.length>0&&<><p>{t('共享成员：{0}',accounting.sharedMemberIds.map(name).join('、'))}</p><p>{t('各分类独立保留完整用量，分类之间不能直接相加，也不自动分摊。')}</p></>}
    {accounting.sharedMembers.length>0&&<details><summary>{t('查看共享成员与引用对象')}</summary><ul>{accounting.sharedMembers.map(member=><li key={member.meterId}>{t('{0}：被 {1} 引用',name(member.meterId),member.objectIds.map(name).join('、'))}</li>)}</ul></details>}
   </section>}

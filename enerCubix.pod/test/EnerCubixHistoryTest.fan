@@ -28,7 +28,7 @@ class EnerCubixHistoryTest : Test
       [Str:Obj?]["id":"c","kind":"cop","numeratorId":"a","denominatorId":"v"],
     ]
     req:=request(); req["nodeIds"]=["g","c"]; req["referenceIds"]=["outside"]
-    verifyEq(EnerCubixHistory.pointIds(req,records).sort,["outside","pa"])
+    verifyEq(EnerCubixHistory.pointIds(req,records).sort,["pa"])
     req["kind"]="trend"; req["nodeIds"]=["s"]; req.remove("referenceIds")
     verifyEq(EnerCubixHistory.pointIds(req,records),["ps"])
     req["nodeIds"]=Str[,]; verify(EnerCubixHistory.pointIds(req,records).isEmpty)
@@ -38,7 +38,7 @@ class EnerCubixHistoryTest : Test
   {
     records:=[
       [Str:Obj?]["id":"input","kind":"meter","pointId":"source-counter"],
-      [Str:Obj?]["id":"v","kind":"meter","historyPointId":"own-usage","expressionId":"formula"],
+      [Str:Obj?]["id":"v","kind":"meter","pointId":"own-usage","expressionId":"formula"],
       [Str:Obj?]["id":"formula","kind":"expression","formula":"a","variables":["a":"input"]],
     ]
     req:=request(); req["nodeIds"]=["v"]
@@ -103,10 +103,10 @@ class EnerCubixHistoryTest : Test
     stored:=Etc.makeDict(["his":Marker.val,"hisMode":"consumption","hisTotalized":Marker.val])
     verify(EnerCubixHistory.readOptions(stored).has("raw"))
     computed:=Etc.makeDict(["his":Marker.val,"hisMode":"consumption","hisTotalized":Marker.val,"hisFunc":"myCounter"])
-    opts:=EnerCubixHistory.readOptions(computed); verify(!opts.has("raw")); verify(!opts.has("hisTotalized")); verify(!opts.has("hisMode"))
-    verifyEq(EnerCubixHistory.outputMode(computed),"unsupportedComputedMode")
+    opts:=EnerCubixHistory.readOptions(computed); verify(opts.has("raw")); verify(!opts.has("hisTotalized")); verify(!opts.has("hisMode"))
+    verifyEq(EnerCubixHistory.outputMode(computed),"auto")
     verifyEq(EnerCubixHistory.outputMode(computed,"cumulative"),"cumulative")
-    verifyEq(EnerCubixHistory.outputMode(Etc.makeDict(["hisFunc":"hfTotalized","hisTotalized":Marker.val])),"interval")
+    verifyEq(EnerCubixHistory.outputMode(Etc.makeDict(["hisFunc":"hfTotalized","hisTotalized":Marker.val])),"auto")
   }
 
   Void testUnknownIntervalNeverAssumesOneHour()

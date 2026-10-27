@@ -1,5 +1,9 @@
 // Only service-owned messages are translated. Captured names and identifiers are preserved.
 export const serverMessages:Record<string,string>={
+ '报表只读主能耗点，不再创建或重算派生归档':'Reports read only the primary energy point. Derived archives are no longer created or recalculated.',
+ '所有表计必须指定主能耗点，缺测不会由归档或公式替代':'Every meter needs a primary energy point. Archives or formulas cannot replace missing data.',
+ '虚拟表也必须选择已有主能耗点，请先在 FIN 中准备设备和点位':'Virtual meters also need an existing primary energy point. Prepare the equipment and point in FIN first.',
+
  '重算会改写所选区间的已有派生历史，须明确确认':'Recalculation can replace existing derived history in the selected range. Explicit confirmation is required.',
  '能源魔方禁止自动添加 trash 标记':'EnergyCubix does not allow automatic trash tagging.',
  '能源魔方配置操作不能删除历史点或已发布历史':'EnergyCubix configuration operations cannot delete history points or published history.',

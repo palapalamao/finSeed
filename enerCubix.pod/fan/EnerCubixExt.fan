@@ -17,7 +17,6 @@ const class EnerCubixExt : Ext, Weblet
     now:=Duration.nowTicks
     if (!EnerCubixMeterRollup.isDue(lastRollup.val,now,EnerCubixMeterRollup.configuredInterval(rt.db))) return
     EnerCubixMeterRollup.update(rt.db)
-    EnerCubixMeterGeneration.update(rt.db)
     lastRollup.val=now
   }
 

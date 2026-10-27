@@ -91,12 +91,11 @@ class EnerCubixMeterTimelineIdentityTest : Test
       raw:=[HisItem(at,Number(100,Unit("kWh"))),HisItem(at+30sec,Number(107,Unit("kWh"))),HisItem(at+1min,Number(110,Unit("kWh")))]
       db.his.write(Ref("meter-p"),raw,null).get(30sec)
       EnerCubixMeterGeneration.update(db,at);EnerCubixMeterGeneration.update(db,at+3min)
-      history:=EnerCubixMeterHistory.loadDb(db,db.readById(Ref("meter-p")),at,at+2min)
-      rows:=EnerCubixMath.maps(history["intervals"])
-      verifyEq(rows.first["value"],10f);verifyEq(rows.first["quality"],"cleaned")
-      verifyEq(rows.last["quality"],"missing")
-      preserved:=HisItem[,];db.his.read(Ref("meter-p"),null,null) |item| {preserved.add(item)}
-      verifyEq(preserved.map |s->Obj?| {s.val},raw.map |s->Obj?| {s.val})
+      verifyNull(EnerCubixMeterHistory.loadDb(db,db.readById(Ref("meter-p")),at,at+2min))
+      verifyNull(db.readById(EnerCubixMeterHistory.stateId(db.readById(Ref("meter-p")).id),false))
+      samples:=HisItem[,];db.his.read(db.readById(Ref("meter-p")).id,null,null) |item| {samples.add(item)}
+      verifyEq(samples.size,raw.size)
+
     }
   }
 
@@ -112,10 +111,9 @@ class EnerCubixMeterTimelineIdentityTest : Test
       changes.addAll(EnerCubixMeterTimeline.capture(db,changes,at));db.commitAll(changes)
       db.his.write(Ref("meter-p"),[HisItem(at,Number(100,Unit("kWh"))),HisItem(at+30sec,Number(107,Unit("kWh"))),HisItem(at+1min,Number(110,Unit("kWh")))],null).get(30sec)
       EnerCubixMeterGeneration.update(db,at);EnerCubixMeterGeneration.update(db,at+3min)
-      point:=db.readById(EnerCubixMeterHistory.formulaId(db.readById(Ref("virtual")).id))
-      verifyNotNull(db.readById(EnerCubixMeterHistory.stateId(point.id),false))
-      history:=EnerCubixMeterHistory.loadDb(db,point,at,at+1min)
-      verifyNotNull(history);verifyEq(EnerCubixHistoryData(history).read(at,at+1min).value,10f)
+      verifyNull(db.readById(EnerCubixMeterHistory.formulaId(db.readById(Ref("virtual")).id),false))
+      verifyNull(EnerCubixNativeEquip.decode(db.readById(Ref("virtual")))["pointId"])
+
     }
   }
 

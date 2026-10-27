@@ -350,7 +350,7 @@ internal class EnerCubixReport
   {
     start:=line.ticks.first?.ts ?: from; finish:=line.ticks.last?.end ?: to
     meters:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
-    Str[] points:=meters.map |m->Str| {m["historyPointId"] as Str ?: (m["pointId"] as Str ?: "")}
+    Str[] points:=meters.map |m->Str| {m["pointId"] as Str ?: ""}
     points=points.findAll |id| {!id.isEmpty}.unique
     reads:=knownCtx.knownReads.vals.findAll |r| {points.contains(r["pointId"]) && DateTime.fromIso(r["from"].toStr) >= start && DateTime.fromIso(r["to"].toStr) <= finish}
     seconds:=(finish-start).ticks.toFloat/1sec.ticks.toFloat
@@ -724,7 +724,7 @@ internal class EnerCubixReport
     ids.each |id|
     {
       r:=ctx.byId[id]
-      point:=r?.get("historyPointId")?.toStr ?: (r?.get("pointId")?.toStr ?: id)
+      point:=r?.get("pointId")?.toStr ?: id
       h:=ctx.byPoint[point]
       name:=ctx.displayName(id)
       rawUnit:=r?.get("unit")?.toStr ?: (h?.unit ?: "")

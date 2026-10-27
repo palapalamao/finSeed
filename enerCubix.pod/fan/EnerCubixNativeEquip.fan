@@ -61,7 +61,6 @@ const class EnerCubixNativeEquip
     if (nativeName == null || nativeName.trim.isEmpty) nativeName=equip.dis
     out:=Str:Obj?["id":equip.id.id,"mod":EnerCubixRepo.iso(equip["mod"]),"kind":equip["enerCubixKind"],"nativeEquip":true,"nativeDis":equip.dis,"nativeName":nativeName]
     out["cleaningEnabled"]=equip.has("enerCubixCleaningEnabled")
-    if (equip["enerCubixExpressionRef"] is Ref && equip["enerCubixPointRef"] == null) out["historyPointId"]=EnerCubixMeterHistory.formulaId(equip.id).id
     EnerCubixRepo.refTags.each |tag,key|
     {
       if (equip[tag] is Ref) out[key]=((Ref)equip[tag]).id
@@ -83,8 +82,6 @@ const class EnerCubixNativeEquip
     {
       if (data["autoSum"] == true) throw ArgErr("分表合计与计算公式不能同时启用")
       if (!equip.has("enerCubixVirtual")) throw ArgErr("表达式仅可绑定 FIN 虚拟设备")
-      if (data["pointId"] != null) throw ArgErr("主能耗点和表达式不可同时设置")
-      return
     }
     if (point == null || !point.has("point") || !point.has("his") || point.has("enerCubixComputed")) throw ArgErr("请选择本设备下已开启历史的主能耗点")
     if (point["equipRef"] != equip.id) throw ArgErr("主能耗点必须属于当前 FIN 设备")

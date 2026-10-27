@@ -238,25 +238,7 @@ class EnerCubixAcceptance
   }
 
   private [Str:Obj?][] derivedHistory(Str:Obj? series, DateTime from, DateTime to)
-  {
-    point:=cx.db.readById(Ref(EnerCubixJobs.derivedId(series)))
-    EnerCubixJobs.checkOwned(point,series)
-    if (point["unit"] != "kWh") throw Err("Derived point unit expected kWh")
-    // Dedicated computed consumption uses interval END timestamps.
-    items:=rawHistory(point,from,to+1sec).findAll |item| { item.ts > from && item.ts <= to }
-    if (items.size != 24) throw Err("Derived native history expected 24 items, got ${items.size}")
-    result:=[Str:Obj?][,]
-    items.each |item,i|
-    {
-      if (item.ts != from+1hr*(i+1)) throw Err("Derived native history timestamp mismatch at $i")
-      number:=item.val as Number ?: throw Err("Derived native history has nonnumeric item")
-      if (number.unit != Unit.fromStr("kWh")) throw Err("Derived native history item unit failed")
-      check("derived native hourly energy $i",number.toFloat,10f)
-      result.add(["ts":item.ts.toIso,"value":number.toFloat,"unit":number.unit.toStr])
-    }
-    checks["native derived history readback"]=[point.id.id,items.size,"kWh"]
-    return result
-  }
+  { throw ArgErr("Legacy derived-history acceptance is retired: use explicit primary points") }
 
   private HisItem[] rawHistory(Dict point, DateTime from, DateTime to)
   {

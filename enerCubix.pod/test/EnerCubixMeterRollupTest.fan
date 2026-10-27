@@ -10,6 +10,39 @@ class EnerCubixMeterRollupTest : Test
     verifyEq(EnerCubixMeterRollup.intervalSeconds(3600),3600)
   }
 
+  Void testFormulaCurrentValueUsesExplicitPrimaryAndDoesNotChangeHistory()
+  {
+    withDb |db|
+    {
+      virtualTags:=Etc.dictToMap(equip("virtual"));virtualTags["enerCubixAutoSum"]=false;virtualTags["enerCubixExpressionRef"]=Ref("formula")
+      source:=Etc.dictToMap(equip("source"));source["enerCubixAutoSum"]=false
+      expression:=Etc.makeDict(["id":Ref("formula"),"enerCubix":Marker.val,"enerCubixKind":"expression","enerCubixConfig":JsonOutStream.writeJsonToStr(["kind":"expression","formula":"a * 2","variables":["a":"source"]])])
+      [Etc.makeDict(virtualTags),Etc.makeDict(source),expression,point("virtual",1f),point("source",10f)].each |r| {add(db,r)}
+      before:=db.readAllList(Filter.has("point")).map |r->Str| {r.id.id}.sort
+      EnerCubixMeterRollup.update(db)
+      verifyEq(db.readById(Ref("virtual-p"))["curVal"],Number(20f,Unit("m³")))
+      verifyEq(db.readAllList(Filter.has("point")).map |r->Str| {r.id.id}.sort,before)
+      samples:=HisItem[,];db.his.read(Ref("virtual-p"),null,null) |item| {samples.add(item)}
+      verify(samples.isEmpty)
+      db.commit(Diff(db.readById(Ref("virtual")),Etc.makeDict(["enerCubixPointRef":Remove.val])))
+      EnerCubixMeterRollup.update(db)
+      verifyNull(db.readById(EnerCubixMeterHistory.formulaId(Ref("virtual")),false))
+    }
+  }
+
+  Void testFormulaCurrentUnitsAndSensorInputsRemainIndependent()
+  {
+    target:=Etc.dictToMap(equip("virtual"));target["enerCubixAutoSum"]=false;target["enerCubixExpressionRef"]=Ref("formula");target["enerCubixCategoryRef"]=Ref("energy")
+    source:=Etc.dictToMap(equip("source"));source["enerCubixAutoSum"]=false;source["enerCubixCategoryRef"]=Ref("energy")
+    expression:=Etc.makeDict(["id":Ref("formula"),"enerCubix":Marker.val,"enerCubixKind":"expression","enerCubixConfig":JsonOutStream.writeJsonToStr(["kind":"expression","formula":"a * 2","variables":["a":"source"]])])
+    category:=Etc.makeDict(["id":Ref("energy"),"enerCubixKind":"category","enerCubixConfig":"{\"kind\":\"category\",\"unit\":\"kWh\"}"])
+    out:=EnerCubixMeterRollup.calculate([Etc.makeDict(target),Etc.makeDict(source),expression,category],[point("virtual",0f,"Wh"),point("source",5000f,"Wh")])
+    verifyEq(out["virtual"]["val"],Number(10000f,Unit("Wh")))
+    source["enerCubixKind"]="sensor"
+    out=EnerCubixMeterRollup.calculate([Etc.makeDict(target),Etc.makeDict(source),expression],[point("virtual",0f,"m³"),point("source",3f,"m³")])
+    verifyEq(out["virtual"]["val"],Number(6f,Unit("m³")))
+  }
+
   Void testProjectIntervalPersistsAndControlsNextRun()
   {
     withDb |db|

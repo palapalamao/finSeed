@@ -4,14 +4,14 @@ class EnerCubixNativeVirtualReportTest : Test
 {
   private Str prefix:="p:virtualRead:r:"
   private Str virtualId() {prefix+"virtual"}
-  private Str pointId() {prefix+"enerCubix-formula-"+virtualId.toBuf.toDigest("SHA-256").toHex[0..<24]}
+  private Str pointId() {prefix+"virtual-main"}
   private Str start:="2026-10-25T10:00:00Z"
   private Str end:="2026-10-25T10:01:00Z"
 
   Void testNativeMetadataUsesTheCommittedHistoryPointIdentity()
   {
     row:=virtualRecord
-    verifyEq(row["historyPointId"],pointId)
+    verifyEq(row["pointId"],pointId);verifyNull(row["historyPointId"])
     verifyEq(row["includeInTotals"],false)
   }
 
@@ -47,14 +47,14 @@ class EnerCubixNativeVirtualReportTest : Test
   Void testUnprefixedStandaloneMetadataRemainsCompatible()
   {
     record:=EnerCubixNativeEquip.decode(Etc.makeDict(["id":Ref("v"),"equip":Marker.val,"dis":"v","enerCubixKind":"meter","enerCubixExpressionRef":Ref("e"),"enerCubixCategoryRef":Ref("c")]))
-    verifyEq(record["historyPointId"],EnerCubixMeterHistory.formulaId(Ref("v")).id)
+    verifyNull(record["historyPointId"]);verifyNull(record["pointId"])
   }
 
   private Str:Obj? request(Str kind)
   { ["kind":kind,"dimension":"metering","nodeIds":[virtualId],"from":start,"to":end,"asOf":end,"period":"hour","metric":"energy","perArea":false] }
   private Str:Obj? virtualRecord()
   {
-    return EnerCubixNativeEquip.decode(Etc.makeDict(["id":Ref(virtualId),"equip":Marker.val,"dis":"Virtual","enerCubixKind":"meter","enerCubixExpressionRef":Ref(prefix+"expression"),"enerCubixCategoryRef":Ref(prefix+"category"),"enerCubixSpaceRef":Ref(prefix+"space"),"enerCubixIncludeInTotals":false]))
+    return EnerCubixNativeEquip.decode(Etc.makeDict(["id":Ref(virtualId),"equip":Marker.val,"dis":"Virtual","enerCubixKind":"meter","enerCubixPointRef":Ref(pointId),"enerCubixExpressionRef":Ref(prefix+"expression"),"enerCubixCategoryRef":Ref(prefix+"category"),"enerCubixSpaceRef":Ref(prefix+"space"),"enerCubixIncludeInTotals":false]))
   }
   private [Str:Obj?][] records()
   {

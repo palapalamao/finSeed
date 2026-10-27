@@ -204,8 +204,7 @@ class EnerCubixDimension
         r:=dim.byId[id]
         if (r == null || r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false) return
         nodes.add(id)
-        point:=r["historyPointId"] as Str
-        if (point == null && r["expressionId"] == null) point=r["pointId"] as Str
+        point:=r["pointId"] as Str
         if (point != null) points.add(point)
       }
       return ["points":points.unique.sort,"nodes":nodes.unique]
@@ -223,20 +222,17 @@ class EnerCubixDimension
     if (nodes.contains(id)) return
     nodes.add(id)
     r:=byId[id]
-    if (r == null) { points.add(id); return }
+    if (r == null) { if (records.any |row| {row["pointId"] == id}) points.add(id); return }
     if (r["kind"] == "nativePoint" || (nativeSpace && r["nativeSourceMissing"] == true)) return
     if (scope(id)) members(id).each |m| { collect(m["id"].toStr,false,nodes,points) }
     else if (r["kind"] == "group") records.findAll |m| { m["parentId"]?.toStr == id }.each |m| { collect(m["id"].toStr,false,nodes,points) }
     else
     {
-      archived:=r["historyPointId"] as Str
-      point:=archived ?: (r["pointId"] as Str)
-      if (point != null && !point.isEmpty && (archived != null || r["expressionId"] == null)) points.add(point)
+      point:=r["pointId"] as Str
+      if (point != null && !point.isEmpty) points.add(point)
       if (leak) directChildren(id).each |m| { collect(m["id"].toStr,false,nodes,points) }
       ["numeratorId","denominatorId"].each |key| { ref:=r[key]?.toStr; if (ref != null) collect(ref,false,nodes,points) }
-      expr:=archived == null ? byId[r["expressionId"]?.toStr ?: ""] : null
-      vars:=expr?.get("variables") as Map
-      if (vars != null) vars.each |Obj? ref, Obj name| { if (ref != null) collect(ref.toStr,false,nodes,points) }
+
     }
   }
 

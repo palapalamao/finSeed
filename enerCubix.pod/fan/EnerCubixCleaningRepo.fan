@@ -72,8 +72,6 @@ class EnerCubixCleaningRepo
     enabled:=record["cleaningEnabled"] == true
     pointId:=record["pointId"] as Str
     Dict? selectedPoint:=pointId != null ? cx.db.readById(Ref(pointId),false) : null
-    totalized:=selectedPoint != null && ["meter","totalMeter"].contains(record["kind"])
-    selectedRestored:=false
     diffs:=Diff[,]
     ownedPoints(equip.id).each |point|
     {
@@ -81,26 +79,18 @@ class EnerCubixCleaningRepo
       if (!enabled || point.id != selectedPoint?.id)
       {
         tags:=Etc.dictToMap(restore(point))
-        if (totalized && point.id == selectedPoint?.id) { tags["hisTotalized"]=Marker.val; selectedRestored=true }
         diffs.add(Diff(point,Etc.makeDict(tags)))
       }
     }
-    if (!enabled)
-    {
-      if (totalized && !selectedRestored && selectedPoint["hisTotalized"] !== Marker.val)
-        diffs.add(Diff(selectedPoint,Etc.makeDict(["hisTotalized":Marker.val])))
-      return diffs
-    }
+    if (!enabled) return diffs
     if (record["expressionId"] != null || record["canonicalId"] != null) throw ArgErr("公式或别名档案不能配置点位清洗")
     if (record["historyMode"] != null && !["auto","cumulative"].contains(record["historyMode"])) throw ArgErr("清洗需要累计历史数据")
     profileId:=record["cleaningProfileId"] as Str ?: throw ArgErr("请选择清洗方案")
     profile:=loadProfile(profileId)
     point:=selectedPoint
     if (point == null) throw ArgErr("请选择当前设备的主历史点")
-    if (totalized) point=Etc.makeDict(Etc.dictToMap(point).set("hisTotalized",Marker.val))
     validatePoint(point,equip,record["historyMode"] as Str)
     tags:=Etc.dictToMap(install(point,equip.id,configFor(profile,point)))
-    if (totalized) tags["hisTotalized"]=Marker.val
     diffs.add(Diff(selectedPoint,Etc.makeDict(tags)))
     return diffs
   }

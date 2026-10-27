@@ -28,8 +28,8 @@ internal class EnerCubixMeterRollup
   static Void update(Folio db, DateTime ts:=DateTime.now)
   {
     EnerCubixMeterTimeline.initialize(db,ts)
-    equips:=configuredMeters(db.readAllList(Filter("enerCubix and enerCubixKind")))
-    refs:=equips.map |eq->Ref?| { eq["enerCubixPointRef"] as Ref }.exclude |r| { r == null }.unique
+    equips:=db.readAllList(Filter("enerCubix and enerCubixKind"))
+    refs:=configuredMeters(equips).dup.addAll(equips.findAll |r| {r["enerCubixKind"] == "sensor"}).map |eq->Ref?| { eq["enerCubixPointRef"] as Ref }.exclude |r| { r == null }.unique
     points:=db.readByIdsList((Ref[])refs,false).exclude |p| { p == null }
     sums:=continuous(db,equips,(Dict[])points,ts)
     targets:=Ref[,]
@@ -81,12 +81,18 @@ internal class EnerCubixMeterRollup
   private Str:Dict sources := [:]
   private Str:Str[] children := [:]
   private Str:Dict values := [:]
+  private Str:Dict expressions := [:]
+  private Str:Dict sensors := [:]
+  private Str:Str categoryUnits := [:]
   private Str:Bool visiting := [:]
   private Folio? continuityDb
   private DateTime continuityAt:=DateTime.now
 
   private new make(Dict[] equips, Dict[] points)
   {
+    equips.findAll |r| {r["enerCubixKind"] == "expression"}.each |r| {expressions[r.id.id]=r}
+    equips.findAll |r| {r["enerCubixKind"] == "sensor"}.each |r| {sensors[r.id.id]=r}
+    equips.findAll |r| {r["enerCubixKind"] == "category"}.each |r| {categoryUnits[r.id.id]=EnerCubixRepo.decode(r)["unit"]?.toStr ?: ""}
     configuredMeters(equips).each |eq|
     {
       meters[eq.id.id]=eq
@@ -105,10 +111,10 @@ internal class EnerCubixMeterRollup
   {
     calc:=EnerCubixMeterRollup(equips,points)
     out:=Str:Dict[:]
-    calc.children.keys.sort.each |id|
+    calc.meters.keys.sort.each |id|
     {
       eq:=calc.meters[id]; point:=calc.sources[(eq["enerCubixPointRef"] as Ref)?.id ?: ""]
-      if (enabled(eq,point)) out[id]=calc.value(id)
+      if (enabled(eq,point) && (calc.children.containsKey(id) || eq["enerCubixExpressionRef"] is Ref)) out[id]=calc.value(id)
     }
     return out
   }
@@ -117,10 +123,10 @@ internal class EnerCubixMeterRollup
   {
     calc:=EnerCubixMeterRollup(equips,points); calc.continuityDb=db; calc.continuityAt=at
     out:=Str:Dict[:]
-    calc.children.keys.sort.each |id|
+    calc.meters.keys.sort.each |id|
     {
       eq:=calc.meters[id]; point:=calc.sources[(eq["enerCubixPointRef"] as Ref)?.id ?: ""]
-      if (enabled(eq,point)) out[id]=calc.value(id)
+      if (enabled(eq,point) && (calc.children.containsKey(id) || eq["enerCubixExpressionRef"] is Ref)) out[id]=calc.value(id)
     }
     return out
   }
@@ -142,6 +148,34 @@ internal class EnerCubixMeterRollup
     if (meters.vals.findAll |m| { m["enerCubixPointRef"] == point.id }.size != 1) return result("ambiguousPoint")
     unit:=Unit.fromStr(point["unit"] as Str ?: "",false)
     if (unit == null) return result("incompatibleUnit")
+    exprId:=eq["enerCubixExpressionRef"] as Ref
+    if (exprId != null && !collected(point))
+    {
+      expression:=expressions[exprId.id]
+      if (expression == null) return result("missingExpression")
+      config:=EnerCubixRepo.decode(expression)
+      inputs:=Str:EnerCubixValue[:]
+      Map vars:=config["variables"] as Map ?: Str:Obj?[:]
+      vars.each |ref,name|
+      {
+        variableId:=ref.toStr
+        source:=meters[variableId] ?: sensors[variableId]
+        if (source == null) {inputs[name.toStr]=EnerCubixValue(null,"missingSource");return}
+        sourcePoint:=sources[(source["enerCubixPointRef"] as Ref)?.id ?: ""]
+        input:=sensors.containsKey(variableId) ? (sourcePoint == null || !ownsPoint(source,sourcePoint) || sourcePoint["curStatus"] != "ok" ? result("missing") : result("ok",sourcePoint["curVal"] as Number)) : value(variableId)
+        n:=input["val"] as Number
+        sourceUnit:=n?.unit?.symbol ?: (sourcePoint?.get("unit") as Str ?: "")
+        categoryUnit:=sensors.containsKey(variableId) ? sourceUnit : (categoryUnits[(source["enerCubixCategoryRef"] as Ref)?.id ?: ""] ?: sourceUnit)
+        factor:=EnerCubixMath.unitFactor(sourceUnit,categoryUnit)
+        inputs[name.toStr]=input["status"] == "ok" && n != null && factor != null ? EnerCubixValue(n.toFloat*factor,"ok") : EnerCubixValue(null,"missing")
+      }
+      computed:=EnerCubixExpression(config["formula"]?.toStr ?: "",inputs).calculate
+      categoryUnit:=categoryUnits[(eq["enerCubixCategoryRef"] as Ref)?.id ?: ""] ?: unit.symbol
+      factor:=EnerCubixMath.unitFactor(categoryUnit,unit.symbol)
+      if (factor == null) return result("incompatibleUnit")
+      return computed.value == null ? result(computed.quality) : result("ok",Number(computed.value*factor,unit))
+    }
+
     // A measured intermediate meter contributes its own reading, preserving
     // the measured boundary even if it has configured downstream meters.
     parts:=enabled(eq,point) ? children[id] : null
@@ -186,7 +220,7 @@ internal class EnerCubixMeterRollup
   }
 
   private static Bool enabled(Dict equip, Dict? point)
-  { equip["enerCubixAutoSum"] == true && !collected(point) }
+  { (equip["enerCubixAutoSum"] == true || equip["enerCubixExpressionRef"] is Ref) && !collected(point) }
 
   private static Bool ownsPoint(Dict meter, Dict? point)
   { point != null && point.has("point") && (!point.has("enerCubixComputed") || point.has("enerCubixFormulaResult")) && point["equipRef"] is Ref && (!meter.has("equip") || point["equipRef"] == meter.id) }
@@ -200,8 +234,6 @@ internal class EnerCubixMeterRollup
     {
       if (r.has("equip"))
       {
-        if (r["enerCubixExpressionRef"] is Ref && r["enerCubixPointRef"] == null)
-          return Etc.makeDict(Etc.dictToMap(r).set("enerCubixPointRef",EnerCubixMeterHistory.formulaId(r.id)))
         return r
       }
       tags:=Etc.dictToMap(r)

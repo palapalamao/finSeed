@@ -1,6 +1,13 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ "新查询按当前规则读取并清洗主能耗点历史；不会改写原始历史，也不会生成额外归档点。已有报告快照保持不变。":"New queries read and clean primary point history using current rules. Raw history is preserved and no extra archive points are created. Existing report snapshots stay unchanged.",
+ "去重贡献合计按可解析成员的并集计算，不累加这些分类总表的主点已有用量。":"Deduplicated contributions use the union of resolved members and do not add the classification masters' own primary-point consumption.",
+ "所有表计只读取各自主能耗点的历史；不创建额外归档点。正常采集由 FIN 管理。":"All meters read history only from their own primary energy point. No extra archive points are created. FIN manages normal collection.",
+ "纳入虚拟表":"Enroll virtual meter",
+ "请选择主能耗点":"Select the primary energy point",
+ "当前值计算公式":"Current-value formula",
+ "报表只读取此主能耗点的历史，缺测不会用分表或公式补算。":"Reports read only this primary point's history. Missing data is not reconstructed from submeters or formulas.",
  "自动计算仅新增归档，不改写已有历史。手动重算须确认所选范围，且仅影响能源魔方所属派生历史。":"Automatic calculations only append archives and preserve existing history. Manual recalculation requires confirmation of the selected range and affects only EnergyCubix-owned derived history.",
  "确认改写派生历史":"Confirm derived history replacement",
  "确认改写":"Confirm replacement",

@@ -169,24 +169,7 @@ class EnerCubixNativeEquipRepo
 
   [Str:Obj?] createVirtual([Str:Obj?] input)
   {
-    if (input["cleaningEnabled"] == true) throw ArgErr("公式或别名档案不能配置点位清洗")
-    if (input["pointId"] != null || input["expressionId"] == null) throw ArgErr("新建虚拟设备必须选择表达式且不绑定物理点")
-    siteId:=input["siteId"] as Str ?: throw ArgErr("请选择虚拟设备所属 FIN 站点")
-    site:=cx.db.readById(Ref(siteId),false)
-    if (site == null || !site.has("site") || !cx.canRead(site)) throw ArgErr("请选择本项目可访问的 FIN 站点")
-    floorId:=input["floorId"] as Str ?: throw ArgErr("请选择虚拟设备所属 FIN 楼层或设备目录")
-    floor:=cx.db.readById(Ref(floorId),false)
-    if (floor == null || !floor.has("floor") || floor["siteRef"] != site.id || !cx.canRead(floor)) throw ArgErr("虚拟设备目录必须属于所选 FIN 站点")
-    id:=Ref.gen
-    rec:=EnerCubixNativeSpace.clean(input); rec["id"]=id.id; rec["includeInTotals"]=false
-    rec.remove("parentId"); rec.remove("createVirtual"); rec.remove("siteId"); rec.remove("floorId")
-    all:=repo.liveRecords
-    EnerCubixConfig.validate(rec,all)
-    tags:=Etc.dictToMap(EnerCubixNativeEquip.tags(rec,Etc.emptyDict,cx.user.username))
-    tags["equip"]=Marker.val; tags["enerCubixVirtual"]=Marker.val; tags["dis"]=rec["name"]; tags["navName"]=rec["name"]; tags["siteRef"]=site.id
-    tags["floorRef"]=floor.id
-    repo.commit([Diff.makeAdd(Etc.makeDict(tags),id)])
-    return EnerCubixRepo.decode(repo.stored(id.id))
+    throw ArgErr("虚拟表也必须选择已有主能耗点，请先在 FIN 中准备设备和点位")
   }
 
   [Str:Obj?] migrate([Str:Obj?] input)

@@ -69,7 +69,7 @@ class EnerCubixComparisonScopeTest : Test
     rs:=records
     rs.find |r| {r["id"] == "a"}["meterParentId"]="v"
     rs.find |r| {r["id"] == "b"}["meterParentId"]="v"
-    rs.add(["id":"v","kind":"totalMeter","name":"Weighted","categoryId":"e","historyPointId":"pv","expressionId":"ex","meterParentId":"m","includeInTotals":true])
+    rs.add(["id":"v","kind":"totalMeter","name":"Weighted","categoryId":"e","pointId":"pv","expressionId":"ex","meterParentId":"m","includeInTotals":true])
     rs.add(["id":"ex","kind":"expression","name":"Weighted expression","formula":"2*x+y","variables":["x":"a","y":"b"]])
     result:=EnerCubixEngine.report(request,rs,histories.dup.add(history("pv",777f)))
     near(total(result)["knownSubmeter"],777f)
@@ -113,7 +113,7 @@ class EnerCubixComparisonScopeTest : Test
     rs:=records
     rs.find |r| {r["id"] == "a"}["meterParentId"]="v"
     rs.find |r| {r["id"] == "b"}["meterParentId"]="v"
-    rs.add(["id":"v","kind":"totalMeter","name":"Addition","categoryId":"e","historyPointId":"pv","expressionId":"ex","meterParentId":"m"])
+    rs.add(["id":"v","kind":"totalMeter","name":"Addition","categoryId":"e","pointId":"pv","expressionId":"ex","meterParentId":"m"])
     rs.add(["id":"ex","kind":"expression","name":"Addition formula","formula":"(x+y)","variables":["x":"a","y":"b"]])
     result:=EnerCubixEngine.report(request,rs,histories.dup.add(history("pv",777f)))
     near(total(result)["knownSubmeter"],50f)

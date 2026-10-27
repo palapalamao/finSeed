@@ -110,7 +110,7 @@ internal const class EnerCubixTemporalReport
     if (!EnerCubixMath.strings(request["nodeIds"]).all |id| { records.any |r| { r["id"] == id } }) return [segment]
     dimension:=EnerCubixDimension("metering",records)
     plan:=EnerCubixEnergyFlow.scope(dimension.normalizeRequest(request),dimension)
-    ids:=EnerCubixMath.maps(plan["selected"]).map |r->Str| { r["historyPointId"]?.toStr ?: (r["pointId"]?.toStr ?: "") }.unique
+    ids:=EnerCubixMath.maps(plan["selected"]).map |r->Str| { r["pointId"]?.toStr ?: "" }.unique
     if (ids.isEmpty) return [segment]
     inputs:=EnerCubixHistoryData[,]; common:=Int[,]; first:=true
     ids.each |id|

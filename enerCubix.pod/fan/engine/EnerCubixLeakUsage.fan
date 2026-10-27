@@ -226,7 +226,7 @@ internal const class EnerCubixLeakUsage
   }
 
   private static Str:Obj? binding(Str:Obj? record)
-  { record.findAll |v,k| {["id","kind","pointId","historyPointId","expressionId","categoryId","subcategoryId","tariffId","unit","maximum","configurationError"].contains(k)} }
+  { record.findAll |v,k| {["id","kind","pointId","expressionId","categoryId","subcategoryId","tariffId","unit","maximum","configurationError"].contains(k)} }
 
   private static Bool unknownIn([Str:Obj?][] segments, DateTime from, DateTime to)
   { segments.any |s| {s["known"] != true && DateTime.fromIso(s["from"].toStr) < to && DateTime.fromIso(s["to"].toStr) > from} }
