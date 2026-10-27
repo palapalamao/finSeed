@@ -8,6 +8,7 @@ try {
     $env:FAN_HOME = $enerCubixSdk
     Push-Location $enerCubixRoot
     try {
+        Invoke-EnerCubixCommand 'node' @('scripts/check-primary-energy-source.mjs')
         if (-not $SkipUi) {
             Invoke-EnerCubixCommand 'npm.cmd' @('--prefix', 'enerCubix.pod/ts', 'run', 'build')
         }
