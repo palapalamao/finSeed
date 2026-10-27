@@ -300,10 +300,29 @@ class EnerCubixMeterGenerationTest : Test
     }
   }
 
-  Void testProjectPrefixReplayUpdatesTheTargetBatchOnce()
+  Void testAutomaticReplayPreservesPublishedProjectBatch()
   { checkProjectPrefixedPublication(false,false) }
 
-  Void testProjectPrefixOverflowReplayUpdatesExistingMinuteBatchOnce()
+  Void testAutomaticMirrorReplayDoesNotOverwriteConflictingHistory()
+  {
+    withDb |db|
+    {
+      at:=DateTime.fromIso("2026-10-25T00:00:00Z")
+      meter(db,"total",null,true);meter(db,"a","total")
+      counters(db,"a",at,10sec,5000f,1f)
+      EnerCubixMeterTimeline.initialize(db,at);EnerCubixMeterGeneration.update(db,at)
+      point:=db.readById(Ref("total-p"));state:=db.readById(EnerCubixMeterHistory.stateId(point.id))
+      usage:=db.readById(state["enerCubixUsageRef"])
+      db.his.write(usage.id,[HisItem(at,Number(99,Unit("kWh")))],null).get(30sec)
+      verifyErr(ArgErr#) {EnerCubixMeterGeneration.publish(db,point,state,at,at+1min,EnerCubixValue(6f,"derived"),at+3min,false)}
+      old:=HisItem[,];db.his.read(usage.id,null,null) |item| {old.add(item)}
+      verifyEq(old.size,1);verifyEq(old.first.val,Number(99,Unit("kWh")))
+      verifyEq(db.readById(state.id)["enerCubixGenerationCursor"],at)
+      verify(db.readAllList(Filter.has("enerCubixIntervalBatch")).isEmpty)
+    }
+  }
+
+  Void testAutomaticReplayPreservesPublishedMinuteBatch()
   { checkProjectPrefixedPublication(true,false) }
 
   Void testProjectPrefixRepairDeduplicatesHourAndMinuteBatches()
@@ -340,6 +359,13 @@ class EnerCubixMeterGenerationTest : Test
       {
         minuteTags:=tags.dup;minuteTags["enerCubixIntervals"]=JsonOutStream.writeJsonToStr([old])
         db.commit(Diff.makeAdd(Etc.makeDict(minuteTags),EnerCubixMeterHistory.minuteBatchId(point.id,at)))
+      }
+      if (!repair)
+      {
+        verifyErr(ArgErr#) { EnerCubixMeterGeneration.publish(db,point,state,at,at+1min,EnerCubixValue(2f,"derived",sources),at+3min,false) }
+        verifyEq(db.readById(hour.id)["enerCubixIntervals"],json)
+        verifyEq(db.readById(state.id)["enerCubixGenerationCursor"],cursor)
+        return
       }
       EnerCubixMeterGeneration.publish(db,point,state,at,at+1min,EnerCubixValue(2f,"derived",sources),at+3min,false,repair)
       published:=EnerCubixMeterHistory.loadDb(db,point,at,overflow ? at+2min : at+1min)

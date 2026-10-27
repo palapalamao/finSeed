@@ -1,5 +1,12 @@
 // Only service-owned messages are translated. Captured names and identifiers are preserved.
 export const serverMessages:Record<string,string>={
+ '重算会改写所选区间的已有派生历史，须明确确认':'Recalculation can replace existing derived history in the selected range. Explicit confirmation is required.',
+ '能源魔方禁止自动添加 trash 标记':'EnergyCubix does not allow automatic trash tagging.',
+ '能源魔方配置操作不能删除历史点或已发布历史':'EnergyCubix configuration operations cannot delete history points or published history.',
+ '历史写入仅允许能源魔方所属派生点':'History writes are restricted to EnergyCubix-owned derived points.',
+ '已有历史与新增结果不同，未获明确授权不能改写':'The new result conflicts with existing history. Replacement requires explicit authorization.',
+ '已有发布区间不能由自动任务改写':'Automatic tasks cannot replace published historical intervals.',
+
  "能流图仅支持区间能耗，不支持费用或面积归一化":"Energy flow supports period consumption, without cost or area normalization.",
  "能流图对象必须是所选能源的表计或当前视角范围":"Choose meters of the selected energy type or scopes in the current perspective.",
  "legacyTopologyInvalidProof":"The historical relationship recovery evidence is invalid.",

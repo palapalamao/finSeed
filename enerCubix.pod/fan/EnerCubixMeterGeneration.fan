@@ -320,6 +320,7 @@ internal class EnerCubixMeterGeneration
     hour:=EnerCubixMath.floorHour(from.toTimeZone(TimeZone.utc)); key:=EnerCubixMeterHistory.batchId(main.id,hour)
     candidates:=db.readAllList(Filter.has("enerCubixIntervalBatch").and(Filter.eq("enerCubixMainRef",main.id)).and(Filter.ge("enerCubixBatchHour",hour)).and(Filter.lt("enerCubixBatchHour",hour+1hr)))
     matches:=candidates.findAll |batch| {EnerCubixMath.maps(JsonInStream(batch["enerCubixIntervals"].toStr.in).readJson).any |r| {DateTime.fromIso(r["from"].toStr).ticks == from.ticks}}
+    if (!repair && !matches.isEmpty) throw ArgErr("已有发布区间不能由自动任务改写")
     if (repair && !matches.isEmpty) key=matches.first.id
     previous:=db.readById(key,false)
     rows:=previous == null ? [Str:Obj?][,] : EnerCubixMath.maps(JsonInStream(previous["enerCubixIntervals"].toStr.in).readJson)
@@ -337,11 +338,11 @@ internal class EnerCubixMeterGeneration
       key=EnerCubixMeterHistory.minuteBatchId(main.id,from); previous=db.readById(key,false); rows=[row]; json=JsonOutStream.writeJsonToStr(rows)
       if (json.size > 30000) throw ArgErr("单段用量的来源证据超过30000字符")
     }
-    // A native mirror write may be retried safely at the same timestamp. The
-    // Folio payload/cursor are published together only after it acknowledges.
+    // Identical acknowledged mirror writes are skipped on replay. Conflicting
+    // existing values require explicit repair before Folio publication can move.
     usageTz:=TimeZone.fromStr(usage["tz"]?.toStr ?: from.tz.name)
     item:=HisItem(from.toTimeZone(usageTz),value.value == null ? NA.val : Number(value.value,Unit.fromStr(usage["unit"]?.toStr ?: "",false)))
-    db.his.write(usageId,[item],null).get(30sec)
+    EnerCubixHistorySafety.write(db,usage,[item],repair)
     tags:=Etc.makeDict(["enerCubixIntervalBatch":Marker.val,"enerCubixMainRef":main.id,"enerCubixUsageRef":usageId,"enerCubixBatchHour":hour,"enerCubixIntervals":json,"enerCubixPublishedAt":now,"dis":"EnerCubix owned minute history"])
     cumulative:=state["enerCubixGeneratedCumulative"] as Number ?: Number(0)
     // A historical correction changes period results, never imports old energy

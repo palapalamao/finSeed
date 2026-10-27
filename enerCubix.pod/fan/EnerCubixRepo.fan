@@ -684,6 +684,7 @@ class EnerCubixRepo
 
   internal Void commit(Diff[] changes, Bool event := false)
   {
+    EnerCubixHistorySafety.metadata(cx.db,changes)
     if (!event)
     {
       EnerCubixCleaningRepo(this).validateSaves(changes)

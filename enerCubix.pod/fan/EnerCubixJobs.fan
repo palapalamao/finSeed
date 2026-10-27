@@ -13,7 +13,7 @@ class EnerCubixJobs
   private Int processed := 0
   private Int alarmsCreated := 0
 
-  [Str:Obj?] run([Str:Obj?] request)
+  [Str:Obj?] run([Str:Obj?] request, Bool automatic:=false)
   {
     repo.mustWrite
     action:=request["action"] as Str ?: ""
@@ -28,6 +28,7 @@ class EnerCubixJobs
       return repo.save(config,true)
     }
     if (!["recalculate","scanAlarms"].contains(action)) throw ArgErr("任务操作无效")
+    repair:=action == "recalculate" ? EnerCubixHistorySafety.repairRequested(request,automatic) : false
     tz:=TimeZone.fromStr(repo.cx.proj.meta["tz"]?.toStr ?: "Shanghai")
     now:=DateTime.now.toTimeZone(tz); end:=EnerCubixMath.floorHour(now)
     from:=DateTime.fromIso(request["from"] as Str ?: (end-1hr).toIso).toTimeZone(tz)
@@ -40,10 +41,12 @@ class EnerCubixJobs
       interruptPrevious(held)
       all:=repo.records
       currentJob=repo.save(["kind":"job","name":(action == "recalculate" ? "范围重算 " : "报警检查 ")+now.toIso,"action":action,"status":"running","from":from.toIso,"to":to.toIso,"lastRun":now.toIso,"processed":0],true)
+      currentJob["historyWriteMode"]=repair ? "explicitRepair" : "appendOnly"
+      currentJob["historyRewriteConfirmed"]=repair
       try
       {
         progress(0)
-        if (action == "recalculate") recalculate(all,from.toIso,to.toIso)
+        if (action == "recalculate") recalculate(all,from.toIso,to.toIso,repair)
         else scan(all,from.toIso,to.toIso)
         currentJob["status"]="completed"
         currentJob["message"]=action == "recalculate" ? "派生历史写入完成；未改写采集点原始历史" : "报警检查完成"
@@ -68,7 +71,7 @@ class EnerCubixJobs
     all:=repo.records; result:=Str:Obj?[:]
     ["setCalculationEnabled":"recalculate","setAlarmEnabled":"scanAlarms"].each |action,setting|
     {
-      if (all.any |r| { r["kind"] == "job" && r["action"] == setting && r["enabled"] == true }) result[action]=run(["action":action])
+      if (all.any |r| { r["kind"] == "job" && r["action"] == setting && r["enabled"] == true }) result[action]=run(["action":action],true)
     }
     return result
   }
@@ -113,12 +116,13 @@ class EnerCubixJobs
     }
   }
 
-  private Void recalculate([Str:Obj?][] all, Str from, Str to)
+  private Void recalculate([Str:Obj?][] all, Str from, Str to, Bool repair)
   {
-    repaired:=EnerCubixMeterGeneration.recalculate(repo.cx.db,all,DateTime.fromIso(from),DateTime.fromIso(to),true) |n| {progress(n)}
+    repaired:=0
+    if (repair) repaired=EnerCubixMeterGeneration.recalculate(repo.cx.db,all,DateTime.fromIso(from),DateTime.fromIso(to),true) |n| {progress(n)}
     nodes:=all.findAll |r| { r["kind"] == "group" || (["meter","totalMeter"].contains(r["kind"]) && r["expressionId"] != null) }
     nodes=nodes.findAll |r| {r["historyPointId"] == null || repo.cx.db.readById(EnerCubixMeterHistory.stateId(Ref(r["historyPointId"].toStr)),false) == null}
-    if (nodes.isEmpty) {if (repaired > 0) return; throw ArgErr("没有可计算的管理组或虚拟表")}
+    if (nodes.isEmpty) {if (!repair || repaired > 0) return; throw ArgErr("没有可计算的管理组或虚拟表")}
     cx:=repo.cx; tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
     nodes.each |node|
     {
@@ -146,12 +150,11 @@ class EnerCubixJobs
           // Verify ownership immediately before each write; source points are never targets.
           rec=cx.db.readById(key); checkOwned(rec,s)
           items:=historyItems(part,tz)
-          // SDK HxHisService overwrites matching timestamps. 'replace' is not a
-          // documented option; NA explicitly replaces stale values after quality failure.
           EnerCubixTaskLock.heartbeat(cx.db,owner,Ref(currentJob["id"].toStr))
-          cx.rt.his.write(rec,items,null).get(5min)
-          qualityEvidence(part,rec.id.id,currentJob["id"].toStr).each |evidence| { repo.save(evidence,true) }
-          progress(items.size)
+          written:=EnerCubixHistorySafety.write(cx.db,rec,items,repair,true,5min)
+          part["points"]=EnerCubixMath.maps(part["points"]).findAll |p| {written.any |item| {item.ts == DateTime.fromIso(p["ts"].toStr).toTimeZone(tz)+1hr}}
+          if (!written.isEmpty) qualityEvidence(part,rec.id.id,currentJob["id"].toStr).each |evidence| { repo.save(evidence,true) }
+          progress(written.size)
         }
       }
     }

@@ -1,6 +1,10 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ "自动计算仅新增归档，不改写已有历史。手动重算须确认所选范围，且仅影响能源魔方所属派生历史。":"Automatic calculations only append archives and preserve existing history. Manual recalculation requires confirmation of the selected range and affects only EnergyCubix-owned derived history.",
+ "确认改写派生历史":"Confirm derived history replacement",
+ "确认改写":"Confirm replacement",
+ "将重新计算 {0} 至 {1}，并可能改写此范围内已有的派生历史；原始采集历史保持不变。":"Recalculate {0} to {1}, potentially replacing existing derived history in this range. Raw collected history remains unchanged.",
  "下级已有量质量":"Child available consumption quality",
  "图标识":"Graph identifier",
  "统计依据":"Accounting basis",
