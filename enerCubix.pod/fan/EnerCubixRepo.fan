@@ -182,7 +182,7 @@ class EnerCubixRepo
       {
         target:=EnerCubixNativeEquipRepo(this).equipment(input["targetId"] as Str ?: throw ArgErr("请选择已有目标设备"))
         if (target.has("enerCubixKind")) throw ArgErr("目标设备已经纳入能源分析")
-        copy:=old.dup; copy["id"]=target.id.id; copy["mod"]=input["targetMod"]; copy["name"]=target.dis
+        copy:=old.dup; copy["id"]=target.id.id; copy["mod"]=input["targetMod"]; copy["name"]=target.dis; copy["useAlias"]=false
         copy.remove("pointId"); copy.remove("expressionId"); copy.remove("canonicalId")
         copy["pointId"]=input["pointId"]
         return ["records":[save(copy)]]

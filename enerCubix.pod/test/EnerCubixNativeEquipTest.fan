@@ -18,7 +18,7 @@ class EnerCubixNativeEquipTest : Test
   Void testPatchOwnsOnlyEnerCubixTagsAndKeepsNativeIdentity()
   {
     equip:=Etc.makeDict(["id":Ref("equip"),"equip":Marker.val,"dis":"FIN 原名","siteRef":Ref("site"),"enerCubixAlias":"旧别名"])
-    tags:=EnerCubixNativeEquip.tags(["kind":"meter","name":"短表名","pointId":"point","meterParentId":"master","includeInTotals":true],equip,"admin")
+    tags:=EnerCubixNativeEquip.tags(["kind":"meter","name":"短表名","useAlias":true,"pointId":"point","meterParentId":"master","includeInTotals":true],equip,"admin")
     verifyEq(tags["enerCubixAlias"],"短表名")
     verifyEq(tags["enerCubixPointRef"],Ref("point"))
     verifyEq(tags["enerCubixMeterParentRef"],Ref("master"))

@@ -4,7 +4,7 @@ using util
 ** The only fields EnerCubix owns on an existing FIN equipment record.
 const class EnerCubixNativeEquip
 {
-  static const [Str:Str] scalars := ["name":"enerCubixAlias", "unit":"enerCubixUnit", "area":"enerCubixArea", "maximum":"enerCubixMaximum", "historyMode":"enerCubixHistoryMode", "includeInTotals":"enerCubixIncludeInTotals", "autoSum":"enerCubixAutoSum", "alarmEnabled":"enerCubixAlarmEnabled", "alarmLimit":"enerCubixAlarmLimit", "actualEfficiency":"enerCubixActualEfficiency", "baselineEfficiency":"enerCubixBaselineEfficiency", "location":"enerCubixLocation", "description":"enerCubixDescription"]
+  static const [Str:Str] scalars := ["name":"enerCubixAlias", "useAlias":"enerCubixUseAlias", "unit":"enerCubixUnit", "area":"enerCubixArea", "maximum":"enerCubixMaximum", "historyMode":"enerCubixHistoryMode", "includeInTotals":"enerCubixIncludeInTotals", "autoSum":"enerCubixAutoSum", "alarmEnabled":"enerCubixAlarmEnabled", "alarmLimit":"enerCubixAlarmLimit", "actualEfficiency":"enerCubixActualEfficiency", "baselineEfficiency":"enerCubixBaselineEfficiency", "location":"enerCubixLocation", "description":"enerCubixDescription"]
 
   static Str[] ownedTags()
   { ["enerCubix","enerCubixKind","enerCubixUpdatedAt","enerCubixUpdatedBy","enerCubixCleaningEnabled"].addAll(EnerCubixRepo.refTags.vals).addAll(scalars.vals).unique }
@@ -39,6 +39,7 @@ const class EnerCubixNativeEquip
     scalars.each |tag,key|
     {
       value:=data[key]
+      if (key == "name" && data["useAlias"] != true) value=null
       if (value is Float) value=Number((Float)value)
       if (value is Int) value=Number((Int)value)
       if (value != null) out[tag]=value
@@ -56,8 +57,9 @@ const class EnerCubixNativeEquip
 
   static [Str:Obj?] decode(Dict equip)
   {
-    name:=equip["enerCubixAlias"] as Str ?: ((equip["navName"] as Str) ?: equip.dis)
-    out:=Str:Obj?["id":equip.id.id,"mod":EnerCubixRepo.iso(equip["mod"]),"kind":equip["enerCubixKind"],"name":name,"nativeEquip":true,"nativeDis":equip.dis]
+    nativeName:=equip["navName"] as Str
+    if (nativeName == null || nativeName.trim.isEmpty) nativeName=equip.dis
+    out:=Str:Obj?["id":equip.id.id,"mod":EnerCubixRepo.iso(equip["mod"]),"kind":equip["enerCubixKind"],"nativeEquip":true,"nativeDis":equip.dis,"nativeName":nativeName]
     out["cleaningEnabled"]=equip.has("enerCubixCleaningEnabled")
     if (equip["enerCubixExpressionRef"] is Ref && equip["enerCubixPointRef"] == null) out["historyPointId"]=EnerCubixMeterHistory.formulaId(equip.id).id
     EnerCubixRepo.refTags.each |tag,key|
@@ -66,13 +68,17 @@ const class EnerCubixNativeEquip
       else if (equip.has(tag)) out["configurationError"]=tag+" 必须是 FIN Ref 类型"
     }
     scalars.each |tag,key| { value:=equip[tag]; if (value != null) out[key]=value is Number ? ((Number)value).toFloat : value }
+    alias:=equip["enerCubixAlias"] as Str
+    // Older enrollment copied names into aliases without an explicit user choice.
+    out["useAlias"]=equip["enerCubixUseAlias"] == true
+    out["name"]=out["useAlias"] == true && alias != null && !alias.trim.isEmpty ? alias : nativeName
     return out
   }
 
   static Void validateSource([Str:Obj?] data, Dict equip, Dict? point, [Str:Obj?][] all)
   {
     if (!equip.has("equip")) throw ArgErr("能源业务对象必须是本项目 FIN 原生设备")
-    ["includeInTotals","alarmEnabled","autoSum"].each |field| { if (data[field] != null && data[field] isnot Bool) throw ArgErr(field+" 必须为布尔值") }
+    ["includeInTotals","alarmEnabled","autoSum","useAlias"].each |field| { if (data[field] != null && data[field] isnot Bool) throw ArgErr(field+" 必须为布尔值") }
     if (data["expressionId"] != null)
     {
       if (data["autoSum"] == true) throw ArgErr("分表合计与计算公式不能同时启用")

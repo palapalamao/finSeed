@@ -75,6 +75,7 @@ class EnerCubixNativeEquipRepo
     }
     else out["id"]=resolve(id)
     eq:=equipment(out["id"].toStr)
+    if (out["useAlias"] != true) out["name"]=EnerCubixNativeEquip.decode(eq)["nativeName"]
     // Enrollment also requires the equipment revision observed in the catalog.
     EnerCubixRepo.checkMod(eq,input["mod"])
     if (eq.has("enerCubixKind") && !EnerCubixRelations.meterKinds.contains(eq["enerCubixKind"])) throw ArgErr("设备已被其他 EnerCubix 配置占用")
