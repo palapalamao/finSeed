@@ -1624,6 +1624,14 @@ Object.assign(englishMessages,{
 });
 Object.assign(englishMessages,{'物理分表并集合计（已去重）':'Physical submeter union total (deduplicated)','完整边界选择':'Complete boundary selection'});
 Object.assign(englishMessages,{
+ '已有用量差值（总表 − 分表）':'Available usage difference (main − submeters)',
+ '已有用量差值比例':'Available usage difference',
+ '已有用量差值比例 (%)':'Available usage difference (%)',
+ '差值 ÷ 总表已有用量':'Difference / available main-meter usage',
+ '当前差值仅比较已有用量。各表数据覆盖可能不同，不代表完整区间的计量差额或实际泄漏。':'This difference compares available usage only. Meter coverage may differ; it does not establish a complete-period balance or actual leakage.',
+ '左柱为总表已有用量，右柱按当前关系堆叠各分表已有量。已有用量差值仅作对照；缺测不补零，覆盖不一致时不据此判断泄漏。':'The left bar shows available main-meter usage; the right bar stacks available submeter usage using current relationships. The available usage difference is for comparison only. Missing data is not zero-filled, and unequal coverage cannot establish leakage.'
+});
+Object.assign(englishMessages,{
  '长文本明细':'Long text details',
  '原工作表':'Original worksheet',
  '原单元格':'Original cell',

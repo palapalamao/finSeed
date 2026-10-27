@@ -27,7 +27,9 @@ for(const language of ['zh-CN','en-US'])test(`shows October 24 using current rel
  const overview=page.locator('.leak-overview');
  await expect(overview).toContainText(language==='zh-CN'?'关系变更仅作日志':'Relationship changes are audit logs only');
  await expect(overview.locator('.metric-readout').nth(1)).toContainText('559030');
- await expect(overview.locator('.metric-readout').nth(2)).toContainText('—');
+ await expect(overview.locator('.metric-readout').nth(2)).toContainText('-33730');
+ await expect(overview.locator('.metric-readout').nth(3)).toContainText('-6.42');
+ expect((result.extra?.leakTotals as Record<string,unknown>[])[0]).toMatchObject({difference:null,percentage:null});
  await expect(overview.locator('.report-chart canvas')).toHaveCount(1);
  const options=chartOptions(result);
  const dates=(options.xAxis as {data:string[]}).data;
