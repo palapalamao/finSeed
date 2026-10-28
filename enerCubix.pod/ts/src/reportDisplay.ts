@@ -48,6 +48,7 @@ function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{
  return snapshot.display?.objects[id]||snapshot.display?.sources[id]||names.join(' / ')||(key==='categoryId'?t("能源类型名称不可用"):t("对象名称不可用"));
 }
 Object.assign(reportLabels,{relationBasis:t('关系计算依据')});
+Object.assign(reportLabels,{referenceOnly:t('仅作汇总参考'),distributionComparable:t('下级分布可比'),energyFlowCoveredScopes:t('已合并下级范围')});
 Object.assign(reportLabels,{utilityMembers:t('分项表计明细'),utilityName:t('所属分项'),memberIds:t('分项成员'),flowMode:t('能流展示方式')});
 Object.assign(reportLabels,{comparisonBasis:t('比较依据'),comparisonMembers:t('临时比较分表'),comparisonScopes:t('已解析比较范围'),availableMembers:t('可选分表'),defaultMemberIds:t('默认分表'),selectedMemberIds:t('已选分表'),via:t('解析路径'),limitations:t('范围限制')});
 Object.assign(reportLabels,{comparisonUnion:t('物理分表并集合计（已去重）'),completeSelection:t('完整边界选择')});
@@ -67,7 +68,7 @@ export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unk
  if(key==='proofId')return value;
  if(key==='basis'&&value==='snapshotRecovered')return t('按旧备份恢复');
  if(key==='balanceMode')return ({independent:t('独立计量平衡'),consistency:t('计算一致性检查'),mixed:t('混合计算口径'),unknown:t('未知历史关系')} as Record<string,string>)[String(value)]||value;
- if(['complete','removed','completeSelection'].includes(key))return value===true?t('是'):t('否');
+ if(['complete','removed','completeSelection','referenceOnly','distributionComparable'].includes(key))return value===true?t('是'):t('否');
  if(['coverage','currentCoverage','referenceCoverage'].includes(key)&&typeof value==='number')return numberText(value*100)+'%';
  if(key==='lossEligible')return value===true?t('是'):t('否');
  if(key==='processingScope')return cleaningScopeText(value);

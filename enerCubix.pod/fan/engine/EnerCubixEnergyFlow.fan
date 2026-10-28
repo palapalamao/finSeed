@@ -83,6 +83,8 @@ internal class EnerCubixEnergyFlow
       if (r == null || (!dim.scope(id) && (!meter(r) || r["categoryId"] != category))) throw ArgErr("能流图对象必须是所选能源的表计或当前视角范围")
       roots.add(r)
     }
+    covered:=roots.findAll |root| {id:=root["id"].toStr;return dim.scope(id) && roots.any |other| {other != root && scopeAncestor(other["id"].toStr,id,dim)}}
+    roots=roots.findAll |root| {!covered.contains(root)}
     reachable:=Str[,]
     roots.each |root|
     {
@@ -92,7 +94,19 @@ internal class EnerCubixEnergyFlow
     }
     reachable=reachable.unique
     unassigned:=ids.isEmpty && dim.dimension == "metering" ? automatic.findAll |r| {!reachable.contains(r["id"].toStr)} : [Str:Obj?][,]
-    return ["meters":automatic,"roots":roots.sort |a,b| {a["id"].toStr <=> b["id"].toStr},"selected":meters.findAll |r| {reachable.contains(r["id"].toStr)},"unassigned":unassigned]
+    return ["meters":automatic,"roots":roots.sort |a,b| {a["id"].toStr <=> b["id"].toStr},"selected":meters.findAll |r| {reachable.contains(r["id"].toStr)},"unassigned":unassigned,"coveredScopes":covered.map |r->[Str:Obj?]| {["id":r["id"],"name":r["name"]]}]
+  }
+
+  private static Bool scopeAncestor(Str parent,Str child,EnerCubixDimension dim)
+  {
+    if (!dim.scope(parent) || !dim.scope(child)) return false
+    seen:=[child];cursor:=dim.byId[child]?.get("parentId") as Str
+    while (cursor != null)
+    {
+      if (seen.contains(cursor) || !dim.scope(cursor)) return false
+      seen.add(cursor);cursor=dim.byId[cursor]?.get("parentId") as Str
+    }
+    return seen.contains(parent)
   }
 
   private static Void closure(Str id,EnerCubixDimension dim,Str category,Str[] found)
@@ -158,7 +172,7 @@ internal class EnerCubixEnergyFlow
     flow:=compatible(graphs,roots,plan,total)
     return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
       "summary":["value":strictTotal.value,"unit":unit,"selectionTotals":[total]],
-      "extra":["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]]]
+      "extra":["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]]]
   }
 
   ** Reuse the physical-boundary resolver directly; this is not a leak report.
@@ -329,10 +343,18 @@ internal class EnerCubixEnergyFlow
     }
     children=children.unique.findAll |child| {c:=ctx.byId[child];return c != null && !path.contains(child) && child != id && c["_comparisonReadable"] != false && (dim.scope(child) || (meter(c) && c["categoryId"] == category && allowed.contains(child)))}.sort
     row["hasChildren"]=!children.isEmpty
+    groupingBoundaries:=Str:Str[][:]
+    if (grouping) children.each |child| {groupingBoundaries[child]=groupingMembers(child)}
     suppressed:=Str[,];seenPoints:=Str[,]
     children.each |child|
     {
       c:=ctx.byId[child]
+      if (grouping)
+      {
+        members:=groupingBoundaries[child]
+        if (!members.isEmpty && members.all |member| {children.any |other| {other != child && groupingBoundaries[other].any |otherMember| {ancestor(member,otherMember) || (member == otherMember && other < child)}}}) suppressed.add(child)
+        return
+      }
       if (!meter(c)) return
       if (!derived(c))
       {
@@ -340,7 +362,6 @@ internal class EnerCubixEnergyFlow
         if (seenPoints.contains(physical)) suppressed.add(child)
         else seenPoints.add(physical)
       }
-      if (grouping && children.any |other| {other != child && (dim.scope(other) ? EnerCubixMath.strings(boundaries(other)["members"]) : [other]).any |member| {ancestor(child,member)}}) suppressed.add(child)
     }
     displayed:=children.findAll |child| {!suppressed.contains(child)}
     inputSafe:=relation != "calculation" || contribution(id,Str[,])["additive"] == true
@@ -355,7 +376,20 @@ internal class EnerCubixEnergyFlow
       topology:=validChain(id) ? dim.leakQuality(id) : "topologyIncomplete"
       if (topology != null) {quality=topology;difference=null}
     }
-    if (grouping && !suppressed.isEmpty) quality="overlappingScopes"
+    distributionSafe:=true
+    if (grouping)
+    {
+      seenMembers:=Str[,]
+      displayed.each |child|
+      {
+        members:=groupingBoundaries[child]
+        if (members.any |m| {seenMembers.any |other| {m == other || ancestor(m,other) || ancestor(other,m)}}) distributionSafe=false
+        seenMembers.addAll(members)
+      }
+      if (!distributionSafe) quality="overlappingScopes"
+      distributionSafe=distributionSafe && known.value != null && known.value >= 0f && knownSubtotal.value != null && knownSubtotal.value >= 0f && knownSubtotal.value <= known.value+(known.value.abs+1f)*0.000000001f && displayed.all |child| {v:=knownUsage(child);return v.value != null && v.value >= 0f}
+      row["distributionComparable"]=distributionSafe
+    }
     if (difference != null && difference < 0f && difference.abs <= (value.value.abs+1f)*0.000000001f) difference=0f
     if (difference != null && difference < 0f) {quality="negativeBalance";ctx.warn(ctx.displayName(id)+": 分表合计大于总表，差额为负，请核对计量关系与数据")}
     row["submeter"]=subtotal.value;row["knownSubmeter"]=knownSubtotal.value;row["knownSubmeterQuality"]=knownSubtotal.quality;row["difference"]=difference;row["balanceQuality"]=quality
@@ -365,8 +399,9 @@ internal class EnerCubixEnergyFlow
       before:=nodes.size;build(child,occurrence,value,path.dup.add(id),grouping)
       if (nodes.size == before) return
       target:=nodes[before]["id"].toStr;amount:=knownUsage(child)
-      if (suppressed.contains(child)) nodes[before]["percentage"]=null
-      if (!suppressed.contains(child) && amount.value != null && amount.value > 0f) addLink(occurrence,target,amount,known,relation)
+      if (suppressed.contains(child)) {nodes[before]["percentage"]=null;if (grouping) nodes[before]["referenceOnly"]=true}
+      if (grouping && !distributionSafe) nodes[before]["percentage"]=null
+      if (!suppressed.contains(child) && distributionSafe && amount.value != null && amount.value > 0f) addLink(occurrence,target,amount,known,relation)
     }
     if (difference != null && difference > 0f && good(value) && good(subtotal))
     {
@@ -374,6 +409,13 @@ internal class EnerCubixEnergyFlow
       gap:=base(diffId,diffId,"","difference",occurrence,v,v);gap["percentage"]=percentage(v,value);gap["balanceMode"]=mode;gap["lossEligible"]=row["lossEligible"]
       nodes.add(gap);addLink(occurrence,diffId,v,value,"metering")
     }
+  }
+
+  private Str[] groupingMembers(Str id)
+  {
+    if (dim.scope(id)) return EnerCubixMath.strings(boundaries(id)["members"])
+    r:=ctx.byId[id]
+    return r == null ? Str[,] : [derived(r) ? id : physicalId(r)]
   }
 
   private Str:Obj? boundaries(Str id)

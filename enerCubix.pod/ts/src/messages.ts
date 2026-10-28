@@ -1,6 +1,13 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ "汇总参考（不参与下级分布）":"Summary references (excluded from downstream distribution)",
+ "以下对象包含其他分支的上级读数或重复来源，保留自身用量供核对，不作为另一条分流。":"These objects contain upstream readings or repeated sources from other branches. Their own consumption is retained for reference, without creating another flow branch.",
+ "下级分布与范围用量暂不可比；虚线仅表示当前归属，不表示等量流向。":"Downstream distribution and scope consumption are not comparable. Dashed lines show current membership only, without implying balanced energy flow.",
+ "已合并被上级范围包含的选择：{0}；可在主图中下钻查看。":"Selections already covered by a parent scope have been combined: {0}. Drill down in the main graph to view them.",
+ "仅作汇总参考":"Summary reference only",
+ "下级分布可比":"Comparable downstream distribution",
+ "已合并下级范围":"Combined child scopes",
  "新查询按当前规则读取并清洗主能耗点历史；不会改写原始历史，也不会生成额外归档点。已有报告快照保持不变。":"New queries read and clean primary point history using current rules. Raw history is preserved and no extra archive points are created. Existing report snapshots stay unchanged.",
  "去重贡献合计按可解析成员的并集计算，不累加这些分类总表的主点已有用量。":"Deduplicated contributions use the union of resolved members and do not add the classification masters' own primary-point consumption.",
  "所有表计只读取各自主能耗点的历史；不创建额外归档点。正常采集由 FIN 管理。":"All meters read history only from their own primary energy point. No extra archive points are created. FIN manages normal collection.",

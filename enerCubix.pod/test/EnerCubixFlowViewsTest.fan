@@ -1,5 +1,65 @@
 class EnerCubixFlowViewsTest : Test
 {
+  Void testSelectedParentScopeContainsFloorsWithoutRepeatedGraphs()
+  {
+    ["space","organization"].each |dimension|
+    {
+      ids:=dimension == "space" ? ["site","f1","f2"] : ["org","o1","o2"]
+      req:=request(ids).set("dimension",dimension)
+      r:=EnerCubixEngine.report(req,records,histories)
+      verifyEq(graphs(r).map |g->Str| {g["objectId"].toStr},[ids.first.toStr])
+      verifyEq(EnerCubixMath.maps(extra(r)["energyFlowCoveredScopes"]).map |s->Str| {s["id"].toStr}.sort,ids[1..-1].sort)
+      near(node(graphs(r).first,ids.first)["knownValue"],110f)
+      verifyEq(EnerCubixHistory.pointIds(req,records),["pa","pb","pt"])
+    }
+    verifyEq(graphs(EnerCubixEngine.report(request(["t","a"]),records,histories)).size,2)
+  }
+
+  Void testUpstreamMeterFloorIsAReferenceRatherThanAnotherDistributionBranch()
+  {
+    rs:=records
+    rs.add(["id":"summary","kind":"space","name":"Any floor name","parentId":"site"])
+    rs.find |m| {m["id"] == "t"}["spaceId"]="summary"
+    r:=EnerCubixEngine.report(request(["site"]).set("dimension","space"),rs,histories)
+    g:=graph(r,"site")
+    verifyEq(node(g,"summary")["referenceOnly"],true)
+    near(node(g,"summary")["knownValue"],110f)
+    near(node(g,"t")["knownValue"],110f)
+    near(node(g,"site")["knownSubmeter"],100f)
+    verify(!EnerCubixMath.maps(g["links"]).any |l| {l["target"] == "summary"})
+    verifyEq(EnerCubixMath.maps(g["links"]).findAll |l| {l["source"] == "site"}.map |l->Str| {l["target"].toStr}.sort,["f1","f2"])
+    verifyNull(node(g,"summary")["percentage"])
+  }
+
+  Void testSameFloorMasterIsReferenceAndOverdrawnDistributionHasNoWeightedFlow()
+  {
+    rs:=records;rs.find |m| {m["id"] == "t"}["spaceId"]="f1"
+    rs.find |m| {m["id"] == "b"}["spaceId"]="f1"
+    r:=EnerCubixEngine.report(request(["f1"]).set("dimension","space"),rs,histories)
+    g:=graph(r,"f1")
+    verifyEq(node(g,"t")["referenceOnly"],true)
+    near(node(g,"f1")["knownValue"],110f);near(node(g,"f1")["knownSubmeter"],100f)
+    hs:=histories;hs.find |h| {h["pointId"] == "pt"}["intervals"]=[interval(0,50f)]
+    r=EnerCubixEngine.report(request(["f1"]).set("dimension","space"),rs,hs);g=graph(r,"f1")
+    verify(EnerCubixMath.maps(g["links"]).isEmpty)
+    near(node(g,"a")["knownValue"],40f);near(node(g,"b")["knownValue"],60f)
+    verifyEq(node(g,"f1")["distributionComparable"],false)
+  }
+
+  Void testMixedFloorWithIndependentConsumptionIsNotHiddenAsAReference()
+  {
+    rs:=records.add(["id":"summary","kind":"space","name":"Mixed floor","parentId":"site"])
+    rs.find |m| {m["id"] == "t"}["spaceId"]="summary"
+    rs.add(meter("independent","pi",null,"summary","org"))
+    r:=EnerCubixEngine.report(request(["site"]).set("dimension","space"),rs,histories.add(history("pi",20f)))
+    g:=graph(r,"site")
+    verifyNull(node(g,"summary")["referenceOnly"])
+    near(node(g,"summary")["knownValue"],130f)
+    near(node(g,"independent")["knownValue"],20f)
+    verifyEq(node(g,"site")["distributionComparable"],false)
+    verify(!EnerCubixMath.maps(g["links"]).any |l| {l["source"] == "site"})
+  }
+
   Void testPartialDataStillDrawsAvailableBranchesOverTheWholeQuery()
   {
     req:=request(["t"]); req["to"]=at(2); req["asOf"]=at(2)
@@ -117,11 +177,12 @@ class EnerCubixFlowViewsTest : Test
       root:=node(g,dimension == "space" ? "site" : "org")
       near(root["knownSubmeter"],100f)
       near(node(g,"t")["knownValue"],110f)
-      verifyEq(root["balanceQuality"],"overlappingScopes")
+      verifyEq(root["distributionComparable"],true)
+      verifyEq(node(g,"t")["referenceOnly"],true)
       verify(!EnerCubixMath.maps(g["links"]).any |l| {l["source"] == root["id"] && l["target"] == "t"})
       verify(!EnerCubixMath.maps(g["links"]).any |l| {l["target"] == "t"})
       near(node(g,dimension == "space" ? "site" : "org")["submeter"],100f)
-      verifyEq(node(g,dimension == "space" ? "site" : "org")["balanceQuality"],"overlappingScopes")
+      verifyEq(root["balanceQuality"],"cleaned")
     }
     req:=request(["f1"]); req["dimension"]="space"
     r:=EnerCubixEngine.report(req,records,histories); g:=graph(r,"f1")
@@ -134,9 +195,9 @@ class EnerCubixFlowViewsTest : Test
   {
     req:=request(["site","f1"]); req["dimension"]="space"
     r:=EnerCubixEngine.report(req,records,histories)
-    verifyEq(graphs(r).size,2)
+    verifyEq(graphs(r).size,1)
     a:=(Map)extra(r)["energyFlowAccounting"]
-    verifyEq(a["canAdd"],false); near(a["unionValue"],110f)
+    verifyEq(a["canAdd"],true); near(a["unionValue"],110f)
     verifyEq(a["memberIds"],["t"])
     totals:=EnerCubixMath.maps(((Map)r["summary"])["selectionTotals"])
     near(totals.first["knownValue"],110f)

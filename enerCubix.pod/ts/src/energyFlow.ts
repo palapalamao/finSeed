@@ -28,6 +28,8 @@ export interface EnergyFlowNode {
  coverage?:number;
  coveredSeconds?:number;
  activeSeconds?:number;
+ referenceOnly?:boolean;
+ distributionComparable?:boolean;
 }
 export interface EnergyFlowLink {
  source:string;
@@ -213,7 +215,7 @@ export function energyFlowLayout(data:EnergyFlowData):EnergyFlowLayout {
  const tree=(node:EnergyFlowNode,depth:number,color:string):Branch=>{
   visited.add(node.id);const branch:Branch={node,depth,color:node.nodeType==='difference'?differenceColor:color,children:[],height:0,span:0};branches.push(branch);
   if(depth<2){const next=node.nodeType==='summary'?data.rootIds.map(id=>byId.get(id)).filter((child):child is EnergyFlowNode=>!!child):children.get(node.id)||[];
-   for(const [index,child]of next.entries())if(!visited.has(child.id))branch.children.push(tree(child,depth+1,node.nodeType==='summary'||data.basis==='endUse'&&depth===0?energyFlowColors[index%energyFlowColors.length]:color));
+   for(const [index,child]of next.entries())if(!child.referenceOnly&&!visited.has(child.id))branch.children.push(tree(child,depth+1,node.nodeType==='summary'||data.basis==='endUse'&&depth===0?energyFlowColors[index%energyFlowColors.length]:color));
   }
   return branch;
  };
