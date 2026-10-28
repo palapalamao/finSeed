@@ -1,6 +1,8 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ "当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。":"The current interface version is {0}, and the service version is {1}. Reopen EnergyCubix to load the updated interface.",
+ "加载新版界面":"Load updated interface",
  "汇总参考（不参与下级分布）":"Summary references (excluded from downstream distribution)",
  "以下对象包含其他分支的上级读数或重复来源，保留自身用量供核对，不作为另一条分流。":"These objects contain upstream readings or repeated sources from other branches. Their own consumption is retained for reference, without creating another flow branch.",
  "下级分布与范围用量暂不可比；虚线仅表示当前归属，不表示等量流向。":"Downstream distribution and scope consumption are not comparable. Dashed lines show current membership only, without implying balanced energy flow.",

@@ -29,7 +29,8 @@ const class EnerCubixExt : Ext, Weblet
     if (path.isEmpty || path == ["index.html"])
     {
       if (req.method != "GET") { res.sendErr(405); return }
-      res.redirect(("/pod/enerCubix/res/web/enerCubix/index.html#/dashboard?project="+cx.proj.name).toUri,302)
+      res.headers["Cache-Control"]="no-store"
+      res.redirect(("/pod/enerCubix/res/web/enerCubix/index-${EnerCubixLib#.pod.version}.html#/dashboard?project="+cx.proj.name).toUri,302)
       return
     }
     res.sendErr(404)

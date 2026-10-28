@@ -6,5 +6,6 @@ playwright-report/
 *.log
 enerCubix.pod/res/web/enerCubix/assets/
 enerCubix.pod/res/web/enerCubix/index.html
+enerCubix.pod/res/web/enerCubix/index-*.html
 enerCubix.pod/res/web/enerCubix/modules/
 enerCubix.pod/ts/validation-logs/
