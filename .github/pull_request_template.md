@@ -18,6 +18,7 @@ Mark checks not run with a reason; controlled-data browser tests are not FIN run
 
 ## 完成条件 / Completion criteria
 
+- [ ] 任务分支来自最新 `developer`，PR 目标为 `developer`；发布 PR 由发布负责人按授权以 `main` 为目标 / Task branches start from the latest `developer` and target `developer`; authorized release PRs target `main`
 - [ ] 与任务验收条件一致，未混入无关改动 / Meets acceptance criteria with no unrelated changes
 - [ ] 缺陷有修复前后的复现证据（适用时） / Before/after reproduction for bug fixes where applicable
 - [ ] 相关测试、类型检查和构建通过，或准确说明不适用项 / Relevant tests, type check and build pass, or justified N/A

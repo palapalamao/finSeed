@@ -7,6 +7,13 @@
 - 新功能验收应覆盖中文和英文，检查日期控件、图表、导出及手机布局。
 - 发布或部署前递增版本号，保持 `enerCubix.pod/build.fan`、根目录及前端 `package.json`、前端锁文件的版本一致；核对安装包元数据与运行版本。
 
+## 分支与开发基线
+
+- `developer` 是唯一开发主分支和功能集成基线；`main` 用于稳定发布。
+- 所有新功能、缺陷修复及任务分支必须从最新 `developer` 拆出，默认命名 `codex/<任务ID>-<简短名称>`；完成验证后合回 `developer`，发布时再由发布负责人按授权合入 `main`。
+- 创建工作区前先刷新远端引用并核对基线。Codex `create_worktree` 必须显式指定最新 `developer` 提交或 `origin/developer`，命令行新任务使用 `origin/developer`；不得沿用旧任务分支、旧 `main` 或任意当前 HEAD 作为默认起点。
+- 已有工作区的未提交内容按原归属保留；接续任务先核对与 `developer` 的差异，不批量重置、改写历史或强推。
+
 ## 团队协作与交付
 
 - 协作流程见 `docs/team/README.md`，当前队列见 `docs/team/board.md`，派工与证据格式见 `docs/team/templates.md`。先核对已有任务，避免重复开发；沿用已确认需求，不为普通细节重复确认。

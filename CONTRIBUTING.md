@@ -6,6 +6,23 @@
 
 Start with one owner, a bounded change and observable acceptance criteria. Use an isolated checkout for concurrent implementation. Reuse agreed requirements and review according to risk.
 
+## 分支流程 / Branch workflow
+
+`developer` 是开发主分支，`main` 用于稳定发布。所有新任务从最新 `developer` 拆出 `codex/<任务ID>-<简短名称>`，验证后向 `developer` 提交 PR；发布时再按授权从 `developer` 合入 `main`。
+
+Use `developer` as the development and integration branch, and `main` for stable releases. Start each new task from the latest `developer`, name its branch `codex/<task-id>-<short-name>`, and target `developer` in its PR. Release integration into `main` follows the release owner's authorization.
+
+命令行示例；替换任务名称与工作区路径 / CLI example; replace the task name and checkout path:
+
+```powershell
+git fetch origin
+git worktree add -b codex/task-name ..\finSeed-task-name origin/developer
+```
+
+使用 Codex 托管工作区时，先刷新远端引用，再显式指定最新 `developer` 提交或 `origin/developer` 为 `create_worktree` 的 `ref`。已有分支不批量重建，接续任务先核对差异并按归属集成。
+
+For Codex-managed worktrees, refresh remote refs and explicitly pass the latest `developer` commit or `origin/developer` as `create_worktree.ref`. Preserve existing branches and uncommitted work; reconcile their changes with `developer` before continuing them.
+
 ## 本地检查 / Local checks
 
 仅检查团队工具与版本 / Team tooling and version metadata:

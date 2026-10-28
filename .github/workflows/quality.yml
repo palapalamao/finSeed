@@ -3,7 +3,7 @@ name: Quality
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [developer, main]
   workflow_dispatch:
 
 permissions:
