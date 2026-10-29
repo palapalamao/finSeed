@@ -9,6 +9,13 @@ src:
   () => do
     rootUri: enerCubixAppUri()
     [{
+      displayName: toLocale("enerCubix::enerCubixMenuGroup"),
+      appId: "",
+      isDivider: true,
+      level: 0,
+      order: -20,
+      ui: "mobile"
+    }, {
       displayName: toLocale("enerCubix::enerCubixApp"),
       appId: "enerCubixApp",
       link: "",
@@ -16,7 +23,7 @@ src:
       iconType: "class",
       ui: "mobile",
       minUiTarget: "phone",
-      order: -1,
+      order: -19,
       action: "top.app.LoadApplication('" + rootUri + "', null, null, {app: '_enerCubix'});top.app.ToggleCollapse(true);",
       keepOpen: true
     }].toGrid
