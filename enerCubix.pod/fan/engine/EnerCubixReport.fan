@@ -318,7 +318,7 @@ internal class EnerCubixReport
       meters:=ctx.selectionMeters(candidates)
       strict:=EnerCubixValue.sum(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category)})
       known:=knownCtx == null ? null : EnerCubixKnownUsage.combine(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category,true)})
-      quality:=ctx.dimension?.quality(candidates)
+      quality:=ctx.dimension?.quality(request["metric"] == "cost" ? candidates.unique : candidates)
       invalid:=selected.find |l| {available(l).value == null && !["missing","incompleteInterval","filtered","substituted","na","reset","negative","maximum","missingArea"].contains(available(l).quality)}
       if (quality == null && invalid != null) quality=available(invalid).quality
       if (quality != null)

@@ -59,7 +59,7 @@ export interface EnergyFlowData {
 export interface EnergyFlowAccounting {
  canAdd:boolean;memberIds:string[];sharedMemberIds:string[];
  sharedMembers:{meterId:string;objectIds:string[]}[];
- unionValue:number|null;unionQuality:string;basis:'physicalBoundary'|'classificationUnion'|'unavailable';
+ unionValue:number|null;unionQuality:string;basis:'physicalBoundary'|'classificationUnion'|'meterCostScope'|'unavailable';
 }
 export const energyFlowNodeValue=(node:EnergyFlowNode):number|null=>Object.hasOwn(node,'knownValue')?node.knownValue??null:node.value;
 export const energyFlowNodeQuality=(node:EnergyFlowNode):string=>node.knownQuality||node.quality;

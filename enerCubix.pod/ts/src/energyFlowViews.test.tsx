@@ -2,6 +2,9 @@ import {describe,expect,it,vi} from 'vitest';
 import {createElement,type ReactNode} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {EnergyFlowView} from './EnergyFlowView';
+import {EnergyFlowGraphsView} from './EnergyFlowGraphsView';
+import {initializeLocale} from './i18n';
+import {reportCellText} from './reportDisplay';
 import {energyFlowGraphs,energyFlowGraphSnapshot,energyFlowLayout,energyFlowStats,focusEnergyFlowSnapshot,type EnergyFlowData,type EnergyFlowNode} from './energyFlow';
 import {makeSnapshot,reportTables} from './exports';
 import type {ReportSnapshot} from './types';
@@ -17,6 +20,20 @@ function source():ReportSnapshot{
  return makeSnapshot(q,{kind:'energyFlow',from:q.from,to:q.to,period:'day',series:[],rows:[],summary:{},warnings:[],extra:{relationBasis:'current',energyFlow:graphs[0],energyFlowGraphs:graphs,energyFlowAccounting:{canAdd:false,memberIds:['a','b'],sharedMemberIds:['a'],sharedMembers:[{meterId:'a',objectIds:['g1','g2']}],unionValue:null,unionQuality:'overlappingScopes',basis:'unavailable'}}},'Flow','cubeTest');
 }
 describe('current energy-flow object graphs',()=>{
+ it.each(['zh-CN','en-US'])('identifies the primary-meter cost scope in relations and end-use mode (%s)',language=>{
+  initializeLocale(language);
+  for(const mode of ['relations','endUse'] as const){
+   const snapshot=source();snapshot.request.metric='cost';snapshot.request.flowMode=mode;
+   energyFlowGraphs(snapshot.result).forEach(graph=>{graph.unit='元';graph.nodes.forEach(node=>{node.unit='元';});});
+   snapshot.result.extra!.energyFlowAccounting={canAdd:true,memberIds:['t'],sharedMemberIds:['a'],sharedMembers:[{meterId:'a',objectIds:['t','g1']}],unionValue:56,unionQuality:'filtered',basis:'meterCostScope'};
+   const html=renderToStaticMarkup(createElement(EnergyFlowGraphsView,{snapshot,panels:[energyFlowGraphSnapshot(snapshot,'t')],exporting:false,onFocus:()=>{}}));
+   expect(html).toContain(language==='zh-CN'?'范围已有费用合计（已去重）':'Available cost in scope (deduplicated)');
+   expect(html).toContain(language==='zh-CN'?'分表和公式引用不重复计入':'Submeters and formula references are not added again');
+   expect(html).toContain(language==='zh-CN'?'共享成员仅说明图中的引用关系':'Shared members only describe graph references');
+   expect(html).not.toContain(language==='zh-CN'?'分类之间不能直接相加':'classifications cannot be added');
+   expect(reportCellText(snapshot,'basis','meterCostScope')).toBe(language==='zh-CN'?'主能耗点费用范围':'Primary energy-point cost scope');
+  }
+ });
  it('separates summary references from distribution while preserving drill-down and export rows',()=>{
   const original=source(),data=graph('site',110,'space');data.nodes[0].nodeType='space';
   data.nodes=[data.nodes[0],node('floor',100,'site',{nodeType:'space',hasChildren:true}),node('summary',110,'site',{nodeType:'space',referenceOnly:true,hasChildren:true}),node('master',110,'summary')];

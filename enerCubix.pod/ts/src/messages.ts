@@ -1692,7 +1692,7 @@ Object.assign(englishMessages,{
  '内容已分为 {0} 段，完整内容见“{1}”工作表的 {2} / {3}。此单元格显示第 1 段。':'The content has {0} parts. See worksheet “{1}”, {2} / {3}, for the complete text. This cell shows part 1.'
 });
 
-Object.assign(englishMessages,{'范围分项已有合计（已去重）':'Available end-use total in scope (deduplicated)','该合计只统计参与分表；总表自身用量在各图中单独展示。':'This total includes participating submeters only. Each main meter’s own usage is shown separately in its graph.'});
+Object.assign(englishMessages,{'范围分项已有合计（已去重）':'Available end-use total in scope (deduplicated)','该合计只统计参与分表；总表自身用量在各图中单独展示。':'This total includes participating submeters only. Each main meter’s own usage is shown separately in its graph.','范围已有费用合计（已去重）':'Available cost in scope (deduplicated)','费用合计按所选范围的去重表计主能耗点历史计算；图中的分表和公式引用不重复计入。':'Cost is calculated from the primary energy-point histories of deduplicated meters in the selected scope. Submeters and formula references are not added again.','主能耗点费用范围':'Primary energy-point cost scope'});
 Object.assign(englishMessages,{
  '尖时':'Sharp peak','尖峰时段':'Sharp-peak hours','混合时段':'Mixed periods','按尖峰谷平配色':'Color by sharp peak / peak / flat / valley',
  '默认时段分类':'Default time-band category','时段分类':'Time-band category',
@@ -1709,3 +1709,4 @@ Object.assign(englishMessages,{
  '费用计价依据':'Cost calculation basis','闭合主点区间按起点费率计价；不摊分，缺测不补零。':'Closed primary-point intervals use the tariff at their start. Intervals are not prorated and missing data is not zero-filled.',
  '历史逐表计费用模式，未包含未来费率调整':'Historical meter cost patterns, excluding future tariff changes','预测依据':'Forecast basis','预测去重表计':'Deduplicated forecast meters'
 });
+Object.assign(englishMessages,{'共享成员仅说明图中的引用关系，不重复计入范围费用。':'Shared members only describe graph references and are not added again to the scope cost.'});
