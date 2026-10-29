@@ -125,3 +125,13 @@ test('waits for FIN locale before mounting UI modules and permits retry after a 
  await page.getByRole('button',{name:'Reconnect',exact:true}).click();
  await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
 });
+
+test('a native login challenge during locale startup requests sign-in without accessing business data',async({page})=>{
+ const state=await installTransport(page,{userLocale:'zh'});
+ await page.route('**/finStackAuth',route=>route.fulfill({status:200,contentType:'text/html',body:'<html><title>Login</title><body>FIN login</body></html>'}));
+ await page.goto('/#/profile?project=testproject');
+ await expect(page.getByRole('alert')).toHaveText('Your FIN session is no longer valid. Sign in to FIN again.');
+ await expect(page.getByRole('button',{name:'Reconnect',exact:true})).toBeVisible();
+ await expect(page.locator('.app-layout')).toHaveCount(0);
+ expect(state.requests).toHaveLength(0);
+});

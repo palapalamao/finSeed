@@ -1,6 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {finCsrfFetch} from 'haystack-nclient';
 import {loadFinLocale} from './session';
+import {initializeLocale,t} from './i18n';
 vi.mock('haystack-nclient',()=>({finCsrfFetch:vi.fn()}));
 afterEach(()=>vi.clearAllMocks());
 const location={hash:'#/profile?project=FIN%20Project',search:'?enerCubixLang=zh-CN',pathname:'/pod/enerCubix/res/web/enerCubix/index-0.12.16.html'};
@@ -23,4 +24,24 @@ it.each([
 it('does not read a session when no project was specified',async()=>{
  await expect(loadFinLocale({hash:'',search:'',pathname:'/'})).rejects.toThrow();
  expect(finCsrfFetch).not.toHaveBeenCalled();
+});
+
+it.each(['zh-CN','en-US'])('distinguishes FIN authentication, permission and network failures in %s',async language=>{
+ initializeLocale(language);
+ for(const error of [Object.assign(new Error('Cannot acquire attest key'),{_isCsrfError:true,status:200}),{status:401}]){
+  vi.mocked(finCsrfFetch).mockRejectedValueOnce(error);
+  await expect(loadFinLocale(location)).rejects.toThrow(t('FIN 会话已失效，请在 FIN 中重新登录。'));
+ }
+ vi.mocked(finCsrfFetch).mockRejectedValueOnce({status:403});
+ await expect(loadFinLocale(location)).rejects.toThrow(t('当前 FIN 会话无权访问此项目。'));
+ vi.mocked(finCsrfFetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+ await expect(loadFinLocale(location)).rejects.toThrow(t('无法连接 FIN，请检查网络与当前会话。'));
+});
+
+it.each(['zh-CN','en-US'])('classifies native login HTML and permission responses in %s',async language=>{
+ initializeLocale(language);
+ vi.mocked(finCsrfFetch).mockResolvedValueOnce(new Response('<h1>Login</h1>',{headers:{'Content-Type':'text/html'}}));
+ await expect(loadFinLocale(location)).rejects.toThrow(t('FIN 会话已失效，请在 FIN 中重新登录。'));
+ vi.mocked(finCsrfFetch).mockResolvedValueOnce(new Response('{}',{status:403,headers:{'Content-Type':'application/json'}}));
+ await expect(loadFinLocale(location)).rejects.toThrow(t('当前 FIN 会话无权访问此项目。'));
 });
