@@ -17,6 +17,20 @@ function source():ReportSnapshot{
  return makeSnapshot(q,{kind:'energyFlow',from:q.from,to:q.to,period:'day',series:[],rows:[],summary:{},warnings:[],extra:{relationBasis:'current',energyFlow:graphs[0],energyFlowGraphs:graphs,energyFlowAccounting:{canAdd:false,memberIds:['a','b'],sharedMemberIds:['a'],sharedMembers:[{meterId:'a',objectIds:['g1','g2']}],unionValue:null,unionQuality:'overlappingScopes',basis:'unavailable'}}},'Flow','cubeTest');
 }
 describe('current energy-flow object graphs',()=>{
+ it('separates summary references from distribution while preserving drill-down and export rows',()=>{
+  const original=source(),data=graph('site',110,'space');data.nodes[0].nodeType='space';
+  data.nodes=[data.nodes[0],node('floor',100,'site',{nodeType:'space',hasChildren:true}),node('summary',110,'site',{nodeType:'space',referenceOnly:true,hasChildren:true}),node('master',110,'summary')];
+  data.links=[];original.result.extra!.energyFlowGraphs=[data];
+  const selected=energyFlowGraphSnapshot(original,'site');
+  expect(energyFlowLayout(data).nodes.map(position=>position.node.id)).toEqual(['site','floor']);
+  const html=renderToStaticMarkup(createElement(EnergyFlowView,{snapshot:selected,exporting:false,onFocus:()=>{}}));
+  expect(html).toContain('汇总参考（不参与下级分布）');
+  expect(html).toContain('data-flow-reference="summary"');
+  expect(html).not.toContain('data-flow-node="summary"');
+  expect(selected.result.rows.map(row=>row.id)).toContain('summary');
+  const focused=focusEnergyFlowSnapshot(selected,'summary');
+  expect(energyFlowLayout(focused.result.extra!.energyFlow as EnergyFlowData).nodes.map(position=>position.node.id)).toEqual(['summary','master']);
+ });
  it('keeps an empty valid graph unavailable without inventing consumption',()=>{
   const original=source(),data=graph('empty',0);data.nodes=[];data.links=[];original.result.extra!.energyFlowGraphs=[data];
   const selected=energyFlowGraphSnapshot(original,'empty');expect(selected.result.summary.value).toBeNull();expect(selected.result.rows).toEqual([]);

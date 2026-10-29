@@ -15,6 +15,10 @@ try {
         if (-not (Test-Path -LiteralPath 'enerCubix.pod\res\web\enerCubix\index.html')) {
             throw 'UI output missing; run the UI build before packing the Pod.'
         }
+        $enerCubixUiVersion=(Get-Content -LiteralPath 'enerCubix.pod\ts\package.json' -Raw | ConvertFrom-Json).version
+        if (-not (Test-Path -LiteralPath "enerCubix.pod\res\web\enerCubix\index-$enerCubixUiVersion.html")) {
+            throw 'Versioned UI entry missing; rebuild the matching frontend before packing the Pod.'
+        }
         $env:ENERCUBIX_UI_BUILT = 'true'
         Push-Location 'enerCubix.pod'
         try { Invoke-EnerCubixCommand (Join-Path $enerCubixSdk 'bin\fan.bat') @('build.fan') -FailurePattern '(?m)^BUILD FAILED' }

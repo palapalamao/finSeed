@@ -41,7 +41,8 @@ export function App(){
  const analysisView=!configView&&view!=='dashboard'&&view!=='messages';
  useEffect(()=>{if(analysisView)lastAnalysis.current=view as ReportKind;},[view,analysisView]);
  const navigate=(next:View,nextTemplate?:string)=>{setView(next);setTemplateId(nextTemplate);setMobileOpen(false);location.hash='/' + next + '?project=' + encodeURIComponent(project)+(nextTemplate?'&template='+encodeURIComponent(nextTemplate):'');};
- const version=catalog?.version||uiVersion;
+ const version=uiVersion;
+ const versionMismatch=!!catalog?.version&&catalog.version!==uiVersion;
  const destinations=[
   {key:'dashboard',label:t('总览'),icon:<DashboardOutlined/>,target:'dashboard' as View},
   {key:'analysis',label:t('分析工作台'),icon:<BarChartOutlined/>,target:(analysisView?view:lastAnalysis.current) as View},
@@ -69,6 +70,7 @@ export function App(){
    <Layout.Content className="app-content">
     {!project?<div className="connection-state"><Empty description={t('尚未指定 FIN 项目')}/><Alert type="info" showIcon message={t('请从 FIN 项目打开能源管理，或在地址中指定 #/dashboard?project=项目名。')}/></div>:!catalog?<div className="connection-state">{loading?<Spin tip={t('正在读取 FIN 项目配置…')}/>:<><Alert type="error" showIcon message={error||t('项目配置尚未加载')}/><Button onClick={()=>void reload()}>{t('重新连接')}</Button></>}</div>:<>
      {error&&<Alert banner type="error" message={error}/>}
+     {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/enerCubix/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame">
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
       {view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
