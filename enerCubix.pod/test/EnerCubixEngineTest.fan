@@ -320,7 +320,8 @@ class EnerCubixEngineTest : Test
   Void testProfileReferenceCurveDoesNotEnterEnergyTotals()
   {
     req:=request(); req["referenceIds"]=["outside"]
-    r:=run([meter("m","p")],[history("p","interval",[10f]),history("outside","sampled",[23f])],req)
+    binding:=rec("weather","binding");binding["pointId"]="outside";binding["role"]="reference"
+    r:=run([meter("m","p"),binding],[history("p","interval",[10f]),history("outside","sampled",[23f])],req)
     verifyEq((([Str:Obj?][])r["series"]).size,2); near((Float?)points(r,1)[0]["value"],23f)
     totals:=([Str:Obj?][])((Str:Obj?)r["summary"])["totals"]; verifyEq(totals.size,1); near((Float?)totals[0]["value"],10f)
   }

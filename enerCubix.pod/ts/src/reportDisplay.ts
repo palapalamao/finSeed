@@ -1,3 +1,4 @@
+import {isReferenceCurve,referenceName as curveName} from './referenceCurves';
 import {locale,serverMessage,t} from './i18n';
 import {meterOrigin,meterOriginLabel} from './meterOrigin';
 import dayjs from 'dayjs';
@@ -26,9 +27,11 @@ Object.assign(reportLabels,{availableDifference:t('已有用量差值（总表 �
 Object.assign(reportLabels,{legacyMembership:t('旧关系恢复范围'),proofId:t('恢复记录'),childId:t('分表')});
 Object.assign(reportLabels,{graphId:t('图标识'),objectId:t('分析对象'),relationKind:t('关系类型'),contributionMemberIds:t('贡献成员'),sharedMemberIds:t('共享成员'),additive:t('纯加法分类'),boundaryQuality:t('统计边界质量'),canAdd:t('可直接相加'),memberIds:t('参与成员'),sharedMembers:t('共享引用'),unionValue:t('去重贡献合计'),unionQuality:t('去重质量'),objectIds:t('引用对象'),energyFlowGraphs:t('对象能流图'),energyFlowAccounting:t('范围统计依据')});
 Object.assign(reportLabels,{costBasis:t('费用计价依据'),forecastBasis:t('预测依据'),forecastMeterIds:t('预测去重表计'),forecastTotals:t('范围预测费用合计（已去重）'),tariffSnapshot:t('费率快照'),rate:t('单价 (元/能源单位)'),rules:t('时段规则'),exceptions:t('例外费率'),blocks:t('阶梯'),startHour:t('起始小时'),endHour:t('结束小时'),weekday:t('星期'),mod:t('配置版本')});
+Object.assign(reportLabels,{referenceCurves:t('参考曲线'),referencePeriod:t('参考时段'),validSamples:t('有效小时数'),expectedSamples:t('查询小时数'),missingSamples:t('缺测小时数'),naSamples:t('NA 小时数'),role:t('数据用途')});
 export function reportLabel(snapshot:ReportSnapshot,key:string){if(snapshot.request.metric==='cost'){const label:Record<string,string>={usageBasis:t('费用显示口径'),knownTotals:t('已有费用小计'),knownValue:t('已有费用'),completeValue:t('完整区间费用'),selectionTotals:t('范围已有费用合计（已去重）'),knownCurrent:t('本期已有费用'),knownReference:t('对比期已有费用'),knownWorking:t('工作时段已有费用'),knownNonworking:t('非工作时段已有费用'),costBasis:t('费用计价依据'),forecastBasis:t('预测依据'),forecastMeterIds:t('预测去重表计')};if(label[key])return label[key];}if(snapshot.result.kind==='energyFlow'&&key==='basis')return t('统计依据');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeter')return t('下级已有用量小计');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeterQuality')return t('下级已有量质量');if(snapshot.result.kind==='energyFlow'&&key==='complete')return t('是否完整');if(snapshot.result.kind==='energyFlow'&&key==='coveredSeconds')return t('有效时长（秒）');const objects=snapshot.request.kind==='comparison'&&!snapshot.request.otherFrom;return (objects?({current:t("对象用量"),reference:t("基准用量"),difference:t("差值（对象 − 基准）"),percentage:t("相对基准变化率 (%)")} as Record<string,string>)[key]:undefined)||reportLabels[key]||key;}
 export const numberText=(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:2,useGrouping:false}).format(value);
 export function displaySeriesName(series:Series):string{
+ if(series.role==='reference')return curveName(series,true);
  const suffix=series.role==='history'?' · 历史':series.role==='forecast'?' · 预测':'';
  return suffix&&series.name.endsWith(suffix)?series.name.slice(0,-suffix.length)+t(suffix):series.name;
 }
@@ -57,6 +60,9 @@ Object.assign(reportLabels,{utilityMembers:t('分项表计明细'),utilityName:t
 Object.assign(reportLabels,{comparisonBasis:t('比较依据'),comparisonMembers:t('临时比较分表'),comparisonScopes:t('已解析比较范围'),availableMembers:t('可选分表'),defaultMemberIds:t('默认分表'),selectedMemberIds:t('已选分表'),via:t('解析路径'),limitations:t('范围限制')});
 Object.assign(reportLabels,{comparisonUnion:t('物理分表并集合计（已去重）'),completeSelection:t('完整边界选择')});
 export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>):unknown{
+ if(key==='referencePeriod')return value==='comparison'?t('对比期'):t('本期');
+ if(key==='role'&&value==='reference')return t('参考曲线');
+ if(key==='aggregation'&&value==='availableHourlyMean')return t('已有小时均值，不补齐缺测');
  if((key==='comparisonBasis'||key==='basis')&&value==='physicalBoundary')return t('物理计量边界');
  if(key==='comparisonMembers'&&value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([id,ids])=>[referenceName(snapshot,id,'nodeId'),readableReportValue(snapshot,'selectedMemberIds',ids)]));
  if(key==='limitations'&&Array.isArray(value))return value.map(item=>serverMessage(String(item)));
@@ -120,16 +126,17 @@ export function compactReportTime(ts:string,period:string):string{
 }
 export function leakGroups(snapshot:ReportSnapshot){
  const {result}=snapshot;
- return result.series.map(series=>{const node=series.nodeId||series.id.split('|')[0];const matches=(row:Record<string,unknown>)=>(row.nodeId===node||!row.nodeId&&result.series.length===1)&&(!row.categoryId||row.categoryId===series.categoryId)&&(!row.unit||row.unit===series.unit);const branches=(Array.isArray(result.extra?.leakBranches)?result.extra.leakBranches:[]) as Record<string,unknown>[];const totals=(Array.isArray(result.extra?.leakTotals)?result.extra.leakTotals:[]) as Record<string,unknown>[];return {series,total:totals.find(matches),result:{...result,series:[series],rows:result.rows.filter(matches),extra:{...result.extra,leakBranches:branches.filter(matches)}}};});
+ const business=result.series.filter(series=>!isReferenceCurve(series,result.kind));const references=result.series.filter(series=>isReferenceCurve(series,result.kind));
+ return business.map(series=>{const node=series.nodeId||series.id.split('|')[0];const matches=(row:Record<string,unknown>)=>(row.nodeId===node||!row.nodeId&&business.length===1)&&(!row.categoryId||row.categoryId===series.categoryId)&&(!row.unit||row.unit===series.unit);const branches=(Array.isArray(result.extra?.leakBranches)?result.extra.leakBranches:[]) as Record<string,unknown>[];const totals=(Array.isArray(result.extra?.leakTotals)?result.extra.leakTotals:[]) as Record<string,unknown>[];return {series,total:totals.find(matches),result:{...result,series:[series,...references],rows:result.rows.filter(row=>row.role!=='reference'&&matches(row)),extra:{...result.extra,leakBranches:branches.filter(matches)}}};});
 }
 export function isProfileReference(series:Series,referenceIds:readonly string[]=[]){
- return series.id.endsWith('|reference')||referenceIds.includes(series.nodeId||series.id.split('|')[0]);
+ return isReferenceCurve(series,undefined,referenceIds);
 }
 export function profileGroups(snapshot:ReportSnapshot){
  const groups=new Map<string,{title:string;series:Series[]}>();
  for(const series of snapshot.result.series){const node=series.nodeId||series.id.split('|')[0];const reference=isProfileReference(series,snapshot.request.referenceIds);const role=reference?t("参考曲线"):snapshot.result.kind==='primary'?t("折算对比"):snapshot.request.metric==='cost'?t("费用对比"):t("用量对比");const kind=snapshot.display?.meterKinds[node];const category=series.categoryId?referenceName(snapshot,series.categoryId,'categoryId'):'';const key=`${series.categoryId||''}|${series.unit}|${role}`;const group=groups.get(key)||{title:[category,role,t(series.unit)].filter(Boolean).join(' · '),series:[]};group.series.push(!reference&&(kind==='totalMeter'||kind==='meter')?{...series,name:`${series.name}（${kind==='totalMeter'?(snapshot.display?.meterOrigins?.[node]&&snapshot.display.meterOrigins[node].type!=='unconfirmed'?meterOriginLabel(snapshot.display.meterOrigins[node]):t("总表")):t("分表")}）`}:series);groups.set(key,group);}
  const result=[...groups.values()];
- if(snapshot.result.kind!=='profile')return result;
+ if(!['profile','primary'].includes(snapshot.result.kind))return result;
  const references=snapshot.result.series.filter(series=>isProfileReference(series,snapshot.request.referenceIds));
  const consumption=result.filter(group=>!isProfileReference(group.series[0],snapshot.request.referenceIds));
  // Like SEED, append the selected reference lines to each consumption chart.

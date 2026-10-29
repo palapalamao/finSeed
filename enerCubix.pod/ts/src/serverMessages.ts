@@ -437,3 +437,6 @@ Object.assign(chineseServerMessages,{utilityMeterOrScopeRequired:'分项能耗�
 
 Object.assign(serverMessages,{negativeBalance:'Submeter usage exceeds the main meter. The balance is negative; check metering relationships and data.'});
 Object.assign(chineseServerMessages,{negativeBalance:'分表合计大于总表，差额为负，请核对计量关系与数据。'});
+
+Object.assign(serverMessages,{'{0} : referencePartialCoverage':'{0}: Reference mean uses available hours; some hours are missing or NA.','{0} : referenceMissingData':'{0}: No usable reference observations are available in this range.'});
+Object.assign(chineseServerMessages,{'{0} : referencePartialCoverage':'{0}：参考均值基于已有小时，部分小时缺测或为 NA。','{0} : referenceMissingData':'{0}：此区间没有可用的参考观测值。'});

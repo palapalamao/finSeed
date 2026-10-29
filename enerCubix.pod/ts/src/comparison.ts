@@ -1,3 +1,5 @@
+import {isReferenceCurve,referenceAxes,referenceLine} from './referenceCurves';
+import {qualityLabel} from './reportQuality';
 import {t} from './i18n';
 import dayjs,{type Dayjs} from 'dayjs';
 import type {EChartsCoreOption} from 'echarts/core';
@@ -39,18 +41,20 @@ export function comparisonChartOptions(result:ReportResult,request:ReportRequest
  const paired=!!request.otherFrom&&!!request.otherTo;
  const times=comparisonSlots(result.from,result.to,result.period,request.comparisonAlignment);
  const otherTimes=paired?comparisonSlots(request.otherFrom!,request.otherTo!,result.period,request.comparisonAlignment):[];
- const length=Math.max(times.length,otherTimes.length),units=Array.from(new Set(result.series.map(series=>series.unit)));
- const primary=result.series.filter(series=>!paired||!series.id.endsWith('|reference'));
+ const business=result.series.filter(series=>!isReferenceCurve(series,'comparison')),references=result.series.filter(series=>isReferenceCurve(series,'comparison'));
+ const referenceUnits=[...new Set(references.map(series=>series.unit))];
+ const length=Math.max(times.length,otherTimes.length),units=Array.from(new Set(business.map(series=>series.unit)));
+ const primary=business.filter(series=>!paired||!series.id.endsWith('|reference'));
  const baselineId=String(result.extra?.comparisonBaselineId||request.baselineId||'');
  const bars=primary.flatMap((series,index)=>{
-  const pair=paired?result.series.find(reference=>reference.id===series.id+'|reference'):undefined;
+  const pair=paired?business.find(reference=>reference.id===series.id+'|reference'):undefined;
   return [series,...(paired?[pair]:[])].map((line,side)=>{
    const slots=side?otherTimes:times,points=new Map(line?.points.map(point=>[Date.parse(point.ts),point]));
    return {name:`${series.name}${paired?side?t(" · 对比期"):t(" · 本期"):baselineId&&(series.nodeId||series.id.split('|')[0])===baselineId?t("（基准）"):''}`,type:'bar',barMaxWidth:36,yAxisIndex:units.indexOf(series.unit),itemStyle:{color:colors[index%colors.length],opacity:side ? 0.45 : 1},emphasis:{focus:'series'},data:Array.from({length},(_,i)=>{const ts=slots[i],point=ts?points.get(Date.parse(ts)):undefined;return {value:point?.value??null,ts:point?.ts||ts||t("此期无对应时段"),quality:point?.quality||'missing',unit:t(series.unit)};})};
   });
  });
  return {animation:false,tooltip:{trigger:'axis',axisPointer:{type:'shadow'},renderMode:'richText',formatter:(items:unknown)=>{
-  const values=items as {seriesName:string;data:{value:number|null;ts:string;quality:string;unit:string}}[];
-  return values.map(({seriesName,data})=>`${seriesName}\n${data.ts.replace('T',' ')}  ${data.value===null?t("缺测"):numberText(data.value)+' '+data.unit} · ${data.quality}`).join('\n\n');
- }},legend:{type:'scroll',bottom:2},grid:{left:70,right:35+Math.max(0,units.length-1)*45,top:35,bottom:100},xAxis:{type:'category',data:Array.from({length},(_,i)=>paired?`${times[i]?compactReportTime(times[i],result.period):t("无对应时段")}\n${otherTimes[i]?compactReportTime(otherTimes[i],result.period):t("无对应时段")}`:compactReportTime(times[i],result.period)),axisLabel:{hideOverlap:true}},yAxis:units.map((unit,index)=>({type:'value',name:t(unit),scale:false,position:index?'right':'left',offset:Math.max(0,index-1)*45})),dataZoom:[{type:'inside'},{type:'slider',bottom:35,height:18}],series:bars};
+  const values=items as {seriesName:string;data:{value:number|null;ts:string;quality:string;unit:string;coverage?:string}}[];
+  return values.map(({seriesName,data})=>`${seriesName}\n${data.ts.replace('T',' ')}  ${data.value===null?data.quality==='na'?'NA':t("缺测"):numberText(data.value)+' '+data.unit} · ${qualityLabel(data.quality)}${data.coverage?'\n'+data.coverage:''}`).join('\n\n');
+ }},legend:{type:'scroll',bottom:2},grid:{left:70,right:35+Math.max(0,units.length+referenceUnits.length-1)*45,top:35,bottom:100},xAxis:{type:'category',data:Array.from({length},(_,i)=>paired?`${times[i]?compactReportTime(times[i],result.period):t("无对应时段")}\n${otherTimes[i]?compactReportTime(otherTimes[i],result.period):t("无对应时段")}`:compactReportTime(times[i],result.period)),axisLabel:{hideOverlap:true}},yAxis:[...units.map((unit,index)=>({type:'value',name:t(unit),scale:false,position:index?'right':'left',offset:Math.max(0,index-1)*45})),...referenceAxes(referenceUnits,Math.max(0,units.length-1))],dataZoom:[{type:'inside'},{type:'slider',bottom:35,height:18}],series:[...bars,...references.map((series,index)=>{const slots=series.referencePeriod==='comparison'?otherTimes:times;const line=referenceLine(series,slots,units.length+referenceUnits.indexOf(series.unit),colors[(primary.length+Math.floor(index/2))%colors.length],true);return {...line,data:Array.from({length},(_,i)=>line.data[i]||{value:null,ts:t("此期无对应时段"),quality:'missing',unit:t(series.unit),reference:true,coverage:''})};})]};
 }

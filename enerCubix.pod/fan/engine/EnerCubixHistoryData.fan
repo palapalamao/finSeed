@@ -59,6 +59,7 @@ internal class EnerCubixHistoryData
     src := sources
     effective:=raw ? rawQuality : quality
     if (!["ok","estimated","derived","cleaned","corrected","filtered","substituted","na"].contains(effective)) return EnerCubixValue(null,effective,src)
+    if (raw && mode == "cov") return cov(start,end,true)
     if (raw && mode != "cov")
     {
       first:=lowerBoundIn(rawSamples,start); last:=lowerBoundIn(rawSamples,end)
@@ -153,13 +154,15 @@ internal class EnerCubixHistoryData
     return EnerCubixValue(total/values.size.toFloat,quality,[id])
   }
 
-  private EnerCubixValue cov(DateTime start, DateTime end)
+  private EnerCubixValue cov(DateTime start, DateTime end, Bool preserveNa := false)
   {
     index:=lowerBound(start)
     if (index < samples.size && samples[index].ts == start) index++
     if (index == 0) return EnerCubixValue(null,"missing",[id])
+    if (preserveNa && samples[index-1].valueType == "na") return EnerCubixValue(null,"na",[id])
     current:=samples[index-1].value; cursor:=start; weighted:=0f
     changes:=between(start,end)
+    if (preserveNa && changes.any |s| {s.valueType == "na"}) return EnerCubixValue(null,"na",[id])
     for (i:=0;i<changes.size;i++)
     {
       sample:=changes[i]

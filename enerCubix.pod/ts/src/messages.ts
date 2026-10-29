@@ -1,6 +1,22 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+  "部分小时可用的参考均值": "Reference mean from available hours",
+  "此时段没有可用的参考观测值": "No usable reference observations in this period",
+  "{0} · 参考": "{0} · Reference",
+  "{0} · 本期参考": "{0} · Current-period reference",
+  "{0} · 对比期参考": "{0} · Comparison-period reference",
+  "有效小时 {0}/{1}；缺测 {2}；NA {3}": "Valid hours {0}/{1}; missing {2}; NA {3}",
+  "按查询期间各小时的已有温度等观测值取平均，缺测与 NA 不补零。": "Average available observations, such as temperature, for each hour of the selected dates. Missing and NA observations stay unfilled.",
+  "参考曲线叠加在原图，使用独立右轴，不参与能耗、费用或差额合计。": "Reference lines overlay the original chart on independent right axes and are excluded from energy, cost and balance totals.",
+  "参考时段": "Reference period",
+  "有效小时数": "Valid hours",
+  "查询小时数": "Requested hours",
+  "缺测小时数": "Missing hours",
+  "NA 小时数": "NA hours",
+  "数据用途": "Data role",
+  "已有小时均值，不补齐缺测": "Available hourly mean; missing data stays unfilled",
+
  '跟随 FIN 用户语言':'Follow FIN user language',
  '无法保存语言设置，请检查浏览器的站点存储权限。':'Unable to save the language preference. Check this site’s browser storage permissions.',
  '无法读取 FIN 用户语言，请重新打开应用。':'Unable to read your FIN user language. Reopen the application.',

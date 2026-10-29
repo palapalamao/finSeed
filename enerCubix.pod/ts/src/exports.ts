@@ -1,3 +1,4 @@
+import {isReferenceCurve} from './referenceCurves';
 import {t} from './i18n';
 import {productName} from './brand';
 import type {ComparisonScope,FinPoint,ReportRequest,ReportResult,ReportSnapshot,EnerCubixRecord} from './types';
@@ -13,7 +14,7 @@ export function makeSnapshot(request:ReportRequest,result:ReportResult,title:str
  for(const scope of (snapshot.result.extra?.comparisonScopes||[]) as ComparisonScope[])for(const member of scope.availableMembers)snapshot.display.objects[member.nodeId]=member.name;
  applyKnownUsageDisplay(snapshot.result);
  if(result.kind==='profile'){
-  snapshot.result.extra={...snapshot.result.extra,profileStatistics:snapshot.result.series.filter(series=>!series.id.endsWith('|reference')&&!request.referenceIds?.includes(series.nodeId||series.id)).map(series=>({id:series.id,name:series.name,categoryId:series.categoryId,unit:series.unit,...profileStats(snapshot,series)}))};
+  snapshot.result.extra={...snapshot.result.extra,profileStatistics:snapshot.result.series.filter(series=>!isReferenceCurve(series,result.kind,request.referenceIds)).map(series=>({id:series.id,name:series.name,categoryId:series.categoryId,unit:series.unit,...profileStats(snapshot,series)}))};
  }
  for(const row of result.rows){const id=String(row.nodeId??row.id??'');if(id&&typeof row.name==='string'&&!snapshot.display.objects[id])snapshot.display.objects[id]=row.name;}
  if(result.kind==='energyFlow'){
@@ -31,17 +32,17 @@ export function makeSnapshot(request:ReportRequest,result:ReportResult,title:str
 }
 export function filterSnapshot(snapshot:ReportSnapshot|null,categoryIds:string[],categoryNames:string[]):ReportSnapshot|null{
  if(!snapshot||!categoryIds.length)return snapshot;
- const output=structuredClone(snapshot);const selected=new Set(categoryIds);const ids=new Set(output.result.series.filter(series=>selected.has(series.categoryId||'')).map(series=>series.id));
- const keep=(row:Record<string,unknown>)=>selected.has(String(row.categoryId||''))||ids.has(String(row.id||''))||categoryIds.some(category=>String(row.key||'').startsWith(`${category}|`));
- output.result.series=output.result.series.filter(series=>selected.has(series.categoryId||''));output.result.rows=output.result.rows.filter(keep);
- for(const object of [output.result.summary,output.result.extra])if(object)for(const[key,value]of Object.entries(object))if(key!=='cleaning'&&Array.isArray(value)&&value.every(item=>item&&typeof item==='object'))object[key]=(value as Record<string,unknown>[]).filter(keep);
+ const output=structuredClone(snapshot);const selected=new Set(categoryIds);const ids=new Set(output.result.series.filter(series=>isReferenceCurve(series,output.result.kind,snapshot.request.referenceIds)||selected.has(series.categoryId||'')).map(series=>series.id));
+ const keep=(row:Record<string,unknown>)=>row.role==='reference'||selected.has(String(row.categoryId||''))||ids.has(String(row.id||''))||categoryIds.some(category=>String(row.key||'').startsWith(`${category}|`));
+ output.result.series=output.result.series.filter(series=>isReferenceCurve(series,output.result.kind,snapshot.request.referenceIds)||selected.has(series.categoryId||''));output.result.rows=output.result.rows.filter(keep);
+ for(const object of [output.result.summary,output.result.extra])if(object)for(const[key,value]of Object.entries(object))if(!['cleaning','referenceCurves'].includes(key)&&Array.isArray(value)&&value.every(item=>item&&typeof item==='object'))object[key]=(value as Record<string,unknown>[]).filter(keep);
  output.categoryIds=[...categoryIds];output.categoryNames=[...categoryNames];return output;
 }
 export function cellText(value:unknown):string {if(value===null||value===undefined)return '—';if(typeof value==='object')return JSON.stringify(value);return String(value);}
 export function reportTables(snapshot:ReportSnapshot){
  const rows=snapshot.result.rows;
  const keys=Array.from(new Set(rows.flatMap(row=>Object.keys(row)))).filter(key=>key!=='key'&&key!=='id');
- return {headers:keys.map(key=>reportLabel(snapshot,key)),rows:rows.map(row=>keys.map(key=>reportCellText(snapshot,key,row[key],true,row))),series:[[t("对象"),t("单位"),t("时间"),t("值"),t("质量"),t("源点")],...snapshot.result.series.flatMap(series=>series.points.map(point=>[displaySeriesName(series),t(series.unit),point.ts,reportCellText(snapshot,'value',point.value,true,point as unknown as Record<string,unknown>),reportQualityText(snapshot,point.quality,point),reportCellText(snapshot,'sourceIds',point.sourceIds)]))]};
+ return {headers:keys.map(key=>reportLabel(snapshot,key)),rows:rows.map(row=>keys.map(key=>reportCellText(snapshot,key,row[key],true,row))),series:[[t("对象"),t("单位"),t("时间"),t("值"),t("质量"),t("源点")],...snapshot.result.series.flatMap(series=>series.points.map(point=>[displaySeriesName(series),t(series.unit),point.ts,reportCellText(snapshot,'value',point.value,true,point as unknown as Record<string,unknown>),reportQualityText(snapshot,point.quality,{...point,role:series.role}),reportCellText(snapshot,'sourceIds',point.sourceIds)]))]};
 }
 function download(blob:Blob,name:string){const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function filename(snapshot:ReportSnapshot,extension:string){return `${snapshot.title}_${snapshot.project}_${snapshot.generatedAt.slice(0,10)}.${extension}`.replace(/[\\/:*?"<>|]/g,'_');}
@@ -115,7 +116,7 @@ export async function exportImage(snapshot:ReportSnapshot,element:HTMLElement){
  try{
   // PNG is an explicitly scoped chart-and-summary image. Full rows remain in XLSX, DOCX and paginated PDF.
   clone.querySelectorAll('.ant-table-wrapper,.table-heading,.quality-details').forEach(node=>node.remove());
-  const sources=document.createElement('div');sources.className='snapshot-foot';const heading=document.createElement('strong');heading.textContent=t("图表质量与来源摘要");sources.appendChild(heading);snapshot.result.series.forEach(series=>{const line=document.createElement('p');line.textContent=t("{0}：{1}；源点：{2}",series.name,Array.from(new Set(series.points.map(point=>reportQualityText(snapshot,point.quality,point)))).join('、'),reportCellText(snapshot,'sourceIds',Array.from(new Set(series.points.flatMap(point=>point.sourceIds))))||t("未提供"));sources.appendChild(line);});clone.appendChild(sources);
+  const sources=document.createElement('div');sources.className='snapshot-foot';const heading=document.createElement('strong');heading.textContent=t("图表质量与来源摘要");sources.appendChild(heading);snapshot.result.series.forEach(series=>{const line=document.createElement('p');line.textContent=t("{0}：{1}；源点：{2}",series.name,Array.from(new Set(series.points.map(point=>reportQualityText(snapshot,point.quality,{...point,role:series.role})))).join('、'),reportCellText(snapshot,'sourceIds',Array.from(new Set(series.points.flatMap(point=>point.sourceIds))))||t("未提供"));sources.appendChild(line);});clone.appendChild(sources);
   const note=document.createElement('p');note.className='snapshot-foot';note.textContent=t("图片范围：图表与摘要。完整 {0} 条统计记录与时序质量、源点明细请导出 Excel、Word 或 PDF。",snapshot.result.rows.length);clone.appendChild(note);
   const height=clone.scrollHeight;if(height*1.5>30000)throw new Error(t("图表摘要超过图片尺寸限制，请使用分页 PDF 或完整 Excel / Word 导出。"));
   const url=await toPng(clone,{backgroundColor:'#fff',pixelRatio:1.5,style:{position:'static',left:'0',top:'0'}});const a=document.createElement('a');a.href=url;a.download=filename(snapshot,'png');a.click();

@@ -23,6 +23,7 @@ class EnerCubixEngine
     result:=calculate(frozen,records,clipped,section)
     if (frozen["kind"] == "leak" && !section && EnerCubixDimension.active(frozen))
       EnerCubixLeakUsage.attach(result,frozen,records,clipped)
+    if (!section) EnerCubixReferenceCurves.attach(result,frozen,records,clipped)
     extra:=(Str:Obj?)(result["extra"] ?: Str:Obj?[:])
     extra["relationBasis"]="current"
     comparison:=frozen["_comparisonScope"] as EnerCubixComparisonScope
@@ -112,7 +113,6 @@ class EnerCubixEngine
         lines.add(report.line(id,cat))
       }
     }
-    if (kind == "profile") EnerCubixMath.strings(request["referenceIds"]).unique.each |id| { lines.add(report.referenceLine(id,true)) }
     if (kind == "forecast") return report.forecast(lines)
     return report.finish(lines)
   }

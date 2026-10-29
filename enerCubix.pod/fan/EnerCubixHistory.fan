@@ -92,7 +92,7 @@ class EnerCubixHistory
   internal static Str[] pointIds(Str:Obj? request, [Str:Obj?][] records)
   {
     plan:=dependencies(request,records)
-    return ((Str[])plan["points"]).sort
+    return ((Str[])plan["points"]).dup.addAll(EnerCubixReferenceCurves.pointIds(request,records)).unique.sort
   }
 
   ** Non-energy references remain available, but energy histories require a device binding.
