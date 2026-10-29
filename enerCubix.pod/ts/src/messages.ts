@@ -1,6 +1,8 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ "数据提示（{0} 条）":"Data notices ({0})",
+ "数据清洗与覆盖情况（{0} 项）":"Data cleaning and coverage ({0} entries)",
  "当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。":"The current interface version is {0}, and the service version is {1}. Reopen EnergyCubix to load the updated interface.",
  "加载新版界面":"Load updated interface",
  "汇总参考（不参与下级分布）":"Summary references (excluded from downstream distribution)",
