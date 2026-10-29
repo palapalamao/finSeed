@@ -1,6 +1,6 @@
 {
   "name": "enercubix",
-  "version": "0.12.19",
+  "version": "0.12.20",
   "private": true,
   "description": "EnergyCubix building energy analytics",
   "scripts": {
