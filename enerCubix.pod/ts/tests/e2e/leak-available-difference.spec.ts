@@ -10,8 +10,8 @@ for(const language of ['zh-CN','en-US'])test(`shows and exports the available-us
  const records:EnerCubixRecord[]=[{id:'e',kind:'category',name:en?'Electricity':'电能',unit:'kWh'},{id:'m',kind:'totalMeter',name:en?'Main meter':'总表',pointId:'p-main',categoryId:'e',unit:'kWh'},...['a','b','c'].map((id,i)=>({id,kind:'meter' as const,name:en?`Submeter ${i+1}`:`分表${i+1}`,pointId:'p-'+id,categoryId:'e',unit:'kWh',meterParentId:'m'})),{id:'saved-leak',kind:'template',name:'Available balance',request}];
  const total={nodeId:'m',categoryId:'e',unit:'kWh',knownTotal:924821,knownSubmeter:974613,difference:null,percentage:null,balanceMode:'consistency',membershipQuality:'ok'};
  const result:ReportResult={kind:'leak',from:request.from,to:request.to,asOf:'2026-10-27T22:59:35+08:00',period:'day',series:[{id:'m|e',nodeId:'m',name:en?'Main meter':'总表',categoryId:'e',unit:'kWh',points:[{ts:request.from,value:null,knownValue:924821,quality:'missing',knownQuality:'filtered',sourceIds:['p-main']}]}],rows:[{...total,ts:request.from}],summary:{},warnings:[],extra:{relationBasis:'current',leakTotals:[total],leakBranches:['a','b','c'].map((id,i)=>({nodeId:'m',branchId:id,name:records[i+2].name,categoryId:'e',unit:'kWh',ts:request.from,value:null,knownValue:[267898,530636,176079][i],quality:'missing',sourceIds:['p-'+id]}))}};
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
- await installTransport(page,{records});
+
+ await installTransport(page,{userLocale:language,records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',r=>r.fulfill({json:{ok:true,data:result}}));
  await page.goto('/#/leak?project=testproject&template=saved-leak');
  await page.getByRole('button',{name:en?'Query':/查\s*询/,exact:true}).click();

@@ -1,10 +1,13 @@
 import {locale,serverMessage,t} from './i18n';
 import {meterOrigin,meterOriginLabel} from './meterOrigin';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import {dimensionNames} from './types';
 import {reportQualityText} from './reportQuality';
 import {cleaningReason,cleaningScopeText} from './cleaning';
 import type {FinPoint,ReportDisplay,ReportResult,ReportSnapshot,EnerCubixRecord,Series} from './types';
+
+dayjs.extend(utc);
 
 const cleaningIntervalLabels={intervalStart:t('区间开始'),intervalEnd:t('区间结束（不含）')};
 
@@ -124,13 +127,15 @@ export function profileGroups(snapshot:ReportSnapshot){
 }
 export function profileStats(snapshot:ReportSnapshot,series:Series){
  const {from,to}=snapshot.result;const period=snapshot.request.period;const expectedTimes=new Set<number>();
- const start=period==='week'?dayjs(from).startOf('day').subtract((dayjs(from).day()+6)%7,'day'):dayjs(from).startOf(period);
- for(let at=start;at.valueOf()<Date.parse(to);at=at.add(1,period))expectedTimes.add(at.valueOf());
+ const zone=from.match(/([+-])(\d{2}):(\d{2})$/);const offset=zone?(zone[1]==='-'?-1:1)*(Number(zone[2])*60+Number(zone[3]))*60000:0;
+ const localFrom=dayjs.utc(Date.parse(from)+offset);
+ const start=period==='week'?localFrom.startOf('day').subtract((localFrom.day()+6)%7,'day'):localFrom.startOf(period);
+ for(let at=start;at.valueOf()-offset<Date.parse(to);at=at.add(1,period))expectedTimes.add(at.valueOf()-offset);
  const reliableQualities=['ok','good','estimated','derived','cleaned','corrected'];
  const byTime=new Map(series.points.map(point=>[Date.parse(point.ts),point]));
  const points=[...byTime.values()].filter(point=>expectedTimes.has(Date.parse(point.ts))).map(point=>({...point,value:'knownValue'in point?point.knownValue??null:point.value})).filter(point=>point.value!==null&&Number.isFinite(point.value));
  const valid=points.length;const numericTimes=new Set(points.map(point=>Date.parse(point.ts)));let complete=0,na=0,unfinished=0,ongoing=0;
- for(const at of expectedTimes){const point=byTime.get(at);const end=point?.bucketEnd?Date.parse(point.bucketEnd):dayjs(at).add(1,period).valueOf();const pending=end>Date.parse(snapshot.result.asOf||snapshot.request.asOf||snapshot.generatedAt);if(pending)ongoing++;
+ for(const at of expectedTimes){const point=byTime.get(at);const end=point?.bucketEnd?Date.parse(point.bucketEnd):dayjs.utc(at+offset).add(1,period).valueOf()-offset;const pending=end>Date.parse(snapshot.result.asOf||snapshot.request.asOf||snapshot.generatedAt);if(pending)ongoing++;
   const numeric=numericTimes.has(at);
   if(numeric){const strictValue=point&&'completeValue'in point?point.completeValue:point?.value;const strictQuality=point?.completeQuality??point?.quality;const knownQuality=point?.knownQuality??point?.quality;if(strictValue!==null&&strictValue!==undefined&&Number.isFinite(strictValue)&&reliableQualities.includes(strictQuality||'')&&reliableQualities.includes(knownQuality||'')&&at>=Date.parse(from)&&end<=Date.parse(to)&&!pending)complete++;}
   else if((point?.knownValueType??point?.valueType)==='na')na++;else if(pending)unfinished++;

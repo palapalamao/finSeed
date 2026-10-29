@@ -14,8 +14,8 @@ for(const en of [false,true])test(`site scope removes repeated floors and separa
  const graph:EnergyFlowData={graphId:'space|site',objectId:'site',basis:'space',categoryId:'e',unit:'kWh',focusId:'site',rootIds:['site'],nodes,links:[{source:'f1',target:'child',value:600,quality:'ok',sourceIds:['child-point'],percentage:null,relationKind:'grouping'}],unassigned:[],contributionMemberIds:['t'],additive:true,boundaryQuality:'ok'};
  const result:ReportResult={kind:'energyFlow',from:request.from,to:request.to,period:'day',asOf:request.to,series:[],rows:nodes.map(node=>({...node})),summary:{},warnings:[],extra:{relationBasis:'current',energyFlow:graph,energyFlowGraphs:[graph],energyFlowCoveredScopes:['f1','f2'].map(id=>({id,name:names[id as 'f1'|'f2']}))}};
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),en?'en-US':'zh-CN');
- const state=await installTransport(page,{records});
+
+ const state=await installTransport(page,{userLocale:en?'en-US':'zh-CN',records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{state.requests.push({path:'report',body:route.request().postDataJSON()});await route.fulfill({json:{ok:true,data:result}});});
  await page.goto('/#/energyFlow?project=testproject&template=template');await page.getByRole('button',{name:en?'Query':'查询',exact:true}).click();
  const panel=page.locator('.energy-flow-current');await expect(panel).toHaveCount(1);

@@ -10,7 +10,7 @@ function snapshot(overlap=true):ReportSnapshot{
 }
 
 async function render(source:ReportSnapshot,language='zh-CN'){
- vi.resetModules();vi.stubGlobal('navigator',{language,languages:[language]});
+ vi.resetModules();(await import('./i18n')).initializeLocale(language);
  const [{createElement},{renderToStaticMarkup},{ReportView}]=await Promise.all([import('react'),import('react-dom/server'),import('./ReportView')]);
  return renderToStaticMarkup(createElement(ReportView,{snapshot:source}));
 }

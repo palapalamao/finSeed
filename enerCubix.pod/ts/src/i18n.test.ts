@@ -6,24 +6,17 @@ import {serverMessages} from './serverMessages';
 
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 
-describe('automatic interface language',()=>{
- it.each(['zh','zh-CN','zh-TW','zh-HK','zh-Hans','zh-Hant','ZH-cn'])('uses Chinese for %s',async language=>{
-  const {detectLocale}=await import('./i18n');
-  expect(detectLocale({language,languages:[language]})).toBe('zh-CN');
+describe('FIN user interface language',()=>{
+ it.each(['zh','zh-CN','zh-TW','zh-HK','zh-Hans','zh-Hant','ZH-cn'])('uses Chinese for FIN locale %s',async language=>{
+  const {resolveFinLocale}=await import('./i18n');
+  expect(resolveFinLocale(language)).toBe('zh-CN');
  });
- it.each(['en-US','en-GB','fr-FR','de-DE','ja-JP',''])('defaults to English for %s',async language=>{
-  const {detectLocale}=await import('./i18n');
-  expect(detectLocale({language,languages:[]})).toBe('en-US');
- });
- it('uses the first browser preference, with language-list and system fallbacks',async()=>{
-  const {detectLocale}=await import('./i18n');
-  expect(detectLocale({language:'en-US',languages:['en-US','zh-CN']})).toBe('en-US');
-  expect(detectLocale({languages:['zh-TW','en-US']})).toBe('zh-CN');
-  expect(detectLocale({},'zh-CN')).toBe('zh-CN');
-  expect(detectLocale({},'fr-FR')).toBe('en-US');
+ it.each(['en-US','en-GB','fr-FR','de-DE','ja-JP',''])('defaults to English for unsupported FIN locale %s',async language=>{
+  const {resolveFinLocale}=await import('./i18n');
+  expect(resolveFinLocale(language)).toBe('en-US');
  });
  it('translates placeholders without translating inserted project data',async()=>{
-  vi.stubGlobal('navigator',{language:'en-US'});
+  (await import('./i18n')).initializeLocale('en-US');
   const {t}=await import('./i18n');
   expect(t('编辑{0}','能源概览')).toBe('Edit 能源概览');
   expect(t('共 {0} 条',12)).toBe('12 records');
@@ -31,14 +24,14 @@ describe('automatic interface language',()=>{
   expect(t('Unrecognized server detail')).toBe('Unrecognized server detail');
  });
  it('preserves Chinese text and substitutions',async()=>{
-  vi.stubGlobal('navigator',{language:'zh-CN'});
+  (await import('./i18n')).initializeLocale('zh-CN');
   const {t,locale}=await import('./i18n');
   expect(locale).toBe('zh-CN');
   expect(t('共 {0} 条',12)).toBe('共 12 条');
   expect(t('回归方程：Y = {0}',6)).toBe('回归方程：Y = 6');
  });
  it('uses the same locale for shared labels, charts and export headers',async()=>{
-  vi.stubGlobal('navigator',{language:'en-US'});
+  (await import('./i18n')).initializeLocale('en-US');
   const {reportNames}=await import('./types');
   const {loadBandNames}=await import('./chartOptions');
   const {reportLabels,compactReportTime,displaySeriesName}=await import('./reportDisplay');
@@ -51,11 +44,11 @@ describe('automatic interface language',()=>{
   expect(displaySeriesName({id:'a',name:'能源概览',unit:'kWh',points:[]})).toBe('能源概览');
  });
  it('sets the document language, title and date locale together',async()=>{
-  vi.stubGlobal('navigator',{language:'en-US'});
+  (await import('./i18n')).initializeLocale('en-US');
   vi.stubGlobal('document',{documentElement:{lang:''},title:''});
   const {initializeLocale}=await import('./i18n');
   const {default:dayjs}=await import('dayjs');
-  initializeLocale();expect(document.documentElement.lang).toBe('en-US');
+  initializeLocale('en-US');expect(document.documentElement.lang).toBe('en-US');
   expect(document.title).toBe('EnergyCubix · Building Energy Analytics');expect(dayjs.locale()).toBe('en');
  });
  it.each([
@@ -63,12 +56,12 @@ describe('automatic interface language',()=>{
   ['en-US','EnergyCubix','Building Energy Analytics'],
   ['fr-FR','EnergyCubix','Building Energy Analytics']
  ])('uses the localized product lockup for %s',async(language,name,tagline)=>{
-  vi.stubGlobal('navigator',{language});
+  (await import('./i18n')).initializeLocale(language);
   const {productName,productTagline}=await import('./brand');
   expect(productName).toBe(name);expect(productTagline).toBe(tagline);
  });
  it('translates known service warnings without translating captured names',async()=>{
-  vi.stubGlobal('navigator',{language:'en-US'});
+  (await import('./i18n')).initializeLocale('en-US');
   const {serverMessage}=await import('./i18n');
   expect(serverMessage('能源概览: 分项覆盖不完整')).toBe('能源概览: End-use coverage is incomplete.');
   expect(serverMessage('名称已存在')).toBe('Name already exists');
@@ -78,7 +71,7 @@ describe('automatic interface language',()=>{
   expect(serverMessage('Unknown technical detail')).toBe('Unknown technical detail');
  });
  it.each(['zh-CN','en-US'])('translates virtual cleaning blockers in %s while preserving meter names',async language=>{
-  vi.stubGlobal('navigator',{language});
+  (await import('./i18n')).initializeLocale(language);
   const {serverMessage}=await import('./i18n');
   const source='虚拟总表“总表 A”无法保存清洗配置，请先处理以下问题：\n“名称已存在”：尚未启用清洗或未选择清洗方案\n“B”：主能耗点单位与上级总表不兼容';
   expect(serverMessage(source)).toBe(language==='zh-CN'?source:'Cannot save cleaning for virtual main meter “总表 A”. Resolve these issues first:\n“名称已存在”: Cleaning is not enabled or no cleaning profile is selected.\n“B”: The main energy point unit is incompatible with the parent meter.');
@@ -101,48 +94,5 @@ describe('automatic interface language',()=>{
    expect(value.trim(),key).not.toBe('');expect(value,key).not.toMatch(/\p{Script=Han}/u);
    expect(placeholders(value),key).toEqual(placeholders(key));
   }
- });
- it('loads a saved choice before translating shared labels',async()=>{
-  vi.stubGlobal('navigator',{language:'zh-CN'});
-  vi.stubGlobal('localStorage',{getItem:()=> 'en-US'});
-  const {locale,languagePreference}=await import('./i18n');
-  const {reportNames}=await import('./types');
-  expect(languagePreference).toBe('en-US');expect(locale).toBe('en-US');
-  expect(reportNames.dashboard).toBe('Energy overview');
- });
- it.each(['fr-FR','invalid','__proto__'])('ignores unsupported saved language %s',async stored=>{
-  vi.stubGlobal('navigator',{language:'zh-CN'});
-  vi.stubGlobal('localStorage',{getItem:()=>stored});
-  const {locale,languagePreference}=await import('./i18n');
-  expect(languagePreference).toBe('auto');expect(locale).toBe('zh-CN');
- });
- it('still detects the browser language if preference storage is blocked',async()=>{
-  vi.stubGlobal('navigator',{language:'zh-CN'});
-  vi.stubGlobal('localStorage',{getItem:()=>{throw new Error('blocked');}});
-  const {locale}=await import('./i18n');expect(locale).toBe('zh-CN');
- });
- it('persists a manual choice and reloads the same project and view',async()=>{
-  const storage={getItem:()=>null,setItem:vi.fn(),removeItem:vi.fn()};
-  const location={href:'https://fin.example/enerCubix/?project=demo#/profile?project=demo',search:'?project=demo',reload:vi.fn(),replace:vi.fn()};
-  vi.stubGlobal('localStorage',storage);vi.stubGlobal('location',location);
-  const {changeLanguage,localeStorageKey}=await import('./i18n');
-  changeLanguage('en-US');expect(storage.setItem).toHaveBeenCalledWith(localeStorageKey,'en-US');
-  expect(location.reload).toHaveBeenCalledOnce();expect(location.replace).not.toHaveBeenCalled();
- });
- it('clears a saved choice when returning to the browser language',async()=>{
-  const storage={getItem:()=> 'en-US',setItem:vi.fn(),removeItem:vi.fn()};
-  vi.stubGlobal('localStorage',storage);
-  vi.stubGlobal('location',{href:'https://fin.example/enerCubix/#/profile?project=demo',search:'',reload:vi.fn(),replace:vi.fn()});
-  const {changeLanguage,localeStorageKey}=await import('./i18n');
-  changeLanguage('auto');expect(storage.removeItem).toHaveBeenCalledWith(localeStorageKey);
- });
- it('uses a URL fallback when preference storage cannot be written',async()=>{
-  const location={href:'https://fin.example/enerCubix/?project=demo#/profile?project=demo',search:'?project=demo',reload:vi.fn(),replace:vi.fn()};
-  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{throw new Error('blocked');}});
-  vi.stubGlobal('location',location);
-  const {changeLanguage,readLanguagePreference}=await import('./i18n');
-  changeLanguage('en-US');const next=new URL(location.replace.mock.calls[0][0]);
-  expect(next.hash).toBe('#/profile?project=demo');expect(next.searchParams.get('project')).toBe('demo');
-  expect(readLanguagePreference(undefined,next.search)).toBe('en-US');
  });
 });

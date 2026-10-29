@@ -4,7 +4,7 @@ import type {EnerCubixRecord} from './types';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 beforeAll(async()=>{await import('./MeterOriginBadge');},30000);
 async function render(record:EnerCubixRecord,language='zh-CN'){
- vi.resetModules();vi.stubGlobal('navigator',{language,languages:[language]});
+ vi.resetModules();(await import('./i18n')).initializeLocale(language);
  const [{createElement},{renderToStaticMarkup},{MeterOriginBadge}]=await Promise.all([import('react'),import('react-dom/server'),import('./MeterOriginBadge')]);
  return renderToStaticMarkup(createElement(MeterOriginBadge,{record}));
 }

@@ -8,7 +8,7 @@ afterEach(()=>{if(originalBrowserFlag)Object.defineProperty(process,'browser',or
 async function downloadWorkbook(language:string,coverage=false,longText=''){
  // Production runs ExcelJS's browser TextEncoder path; Node's ZIP string path differs.
  Object.defineProperty(process,'browser',{value:true,configurable:true});
- vi.stubGlobal('navigator',{language});
+ (await import('./i18n')).initializeLocale(language);
  vi.stubGlobal('document',{createElement:()=>({click:vi.fn(),href:'',download:''})});
  let downloaded:Blob|undefined;
  vi.spyOn(URL,'createObjectURL').mockImplementation(blob=>{downloaded=blob as Blob;return 'blob:export-test';});

@@ -44,7 +44,7 @@ describe('actionable report quality',()=>{
   expect(find).toHaveBeenCalledWith('p');expect(loaded[0].hisStart).toBe(source.hisStart);
  });
  it('provides the same actionable explanation in English and preserves equipment names',async()=>{
-  vi.stubGlobal('navigator',{language:'en-US'});vi.resetModules();
+  vi.resetModules();(await import('./i18n')).initializeLocale('en-US');
   const {makeSnapshot:make}=await import('./exports');const {reportQualityText,reportWarnings}=await import('./reportQuality');
   const s=make(request,result,'Energy profile','cubeTest',new Date('2026-10-24T02:10:57+08:00'),[],[source]);
   expect(reportQualityText(s,'missing',points[0])).toContain('Missing start reading: history begins at 2026-10-24 01:45');

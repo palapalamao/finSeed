@@ -9,10 +9,10 @@ import type {EnerCubixRecord,ReportRequest,ReportResult} from '../../src/types';
 const replay=JSON.parse(readFileSync(new URL('../fixtures/leak-legacy-replay.json',import.meta.url),'utf8')) as {request:ReportRequest;records:EnerCubixRecord[];report:ReportResult};
 for(const language of ['zh-CN','en-US'])test(`shows bounded recovered child usage in ${language}`,async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
+
  const result=structuredClone(replay.report),request=replay.request;
  const records:EnerCubixRecord[]=[...replay.records,{id:'legacy-template',kind:'template',name:'October 24 recovery',request}];
- const state=await installTransport(page,{records});
+ const state=await installTransport(page,{userLocale:language,records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   state.requests.push({path:'report',body:route.request().postDataJSON()});
   await route.fulfill({json:{ok:true,data:result}});

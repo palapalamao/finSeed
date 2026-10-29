@@ -8,8 +8,7 @@ const records:EnerCubixRecord[]=[{id:'site',kind:'space',name:'Site'},{id:'elect
 
 for(const language of ['zh-CN','en-US'])test(`readonly physical comparison distinguishes defaults, none and subset in ${language}`,async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
- const state=await installTransport(page,{records:structuredClone(records),canWrite:false});
+ const state=await installTransport(page,{userLocale:language,records:structuredClone(records),canWrite:false});
  const scopeCalls:string[]=[];
  await page.route('**/comparison-scopes?*',async route=>{scopeCalls.push(new URL(route.request().url()).searchParams.get('nodeIds')!);expect(route.request().method()).toBe('GET');await route.fulfill({json:{ok:true,data:{scopes}}});});
  await openView(page,'leak');await checkNode(page,'Master');
@@ -37,7 +36,7 @@ for(const language of ['zh-CN','en-US'])test(`readonly physical comparison disti
 });
 
 test('saving a new template preserves physical basis and an explicit empty selection',async({page})=>{
- const state=await installTransport(page,{records:structuredClone(records)});
+ const state=await installTransport(page,{userLocale:'zh',records:structuredClone(records)});
  await page.route('**/comparison-scopes?*',route=>route.fulfill({json:{ok:true,data:{scopes}}}));
  await openView(page,'leak');await checkNode(page,'Master');
  await page.locator('.comparison-members').getByRole('button',{name:'不选分表',exact:true}).click();
@@ -50,7 +49,7 @@ test('saving a new template preserves physical basis and an explicit empty selec
 
 test('ignores a stale scope response after the selected master changes',async({page})=>{
  const extra:EnerCubixRecord[]=[{id:'other',kind:'totalMeter',name:'Alternate',spaceId:'site',categoryId:'electric',expressionId:'virtual'}];
- await installTransport(page,{records:[...structuredClone(records),...extra],canWrite:false});
+ await installTransport(page,{userLocale:'zh',records:[...structuredClone(records),...extra],canWrite:false});
  let release:()=>void=()=>{},complete:()=>void=()=>{};const held=new Promise<void>(resolve=>release=resolve),finished=new Promise<void>(resolve=>complete=resolve);let first=false;
  await page.route('**/comparison-scopes?*',async route=>{
   const ids=new URL(route.request().url()).searchParams.get('nodeIds');
