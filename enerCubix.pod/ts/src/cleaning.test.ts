@@ -66,7 +66,7 @@ describe('cleaning report evidence',()=>{
 describe('cleaning service errors',()=>{
  afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
  it.each(['zh-CN','en-US'])('localizes diagnostic fields and booleans for %s without changing numeric evidence',async(language)=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language});
+  vi.resetModules();(await import('./i18n')).initializeLocale(language);
   const {reportLabels,reportCellText,readableReportValue}=await import('./reportDisplay');
   const {makeSnapshot}=await import('./exports');
   const request:ReportRequest={kind:'profile',nodeIds:['meter'],from:'2026-10-04T00:00:00+08:00',to:'2026-10-04T02:00:00+08:00',metric:'energy',period:'hour',perArea:false};
@@ -79,7 +79,7 @@ describe('cleaning service errors',()=>{
   expect(detail).toEqual({previousValue:32760,emitted:true,substituted:false,intervalSeconds:3600});
  });
  it.each(['zh-CN','en-US'])('localizes processing counts in reports for %s',async(language)=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language});const {reportLabels}=await import('./reportDisplay');
+  vi.resetModules();(await import('./i18n')).initializeLocale(language);const {reportLabels}=await import('./reportDisplay');
   const expected=language==='zh-CN'?['输出读数数','空值数','拒绝数','回绕数','已移除 NA 数','诊断明细已截断']:['Output readings','Null count','Rejected count','Rollover count','Removed NA count','Diagnostics truncated'];
   expect(['outputCount','nullCount','rejectedCount','rolloverCount','removedNACount','detailsTruncated'].map(key=>reportLabels[key])).toEqual(expected);
   const {cleaningScopeText,cleaningReason}=await import('./cleaning');
@@ -87,13 +87,13 @@ describe('cleaning service errors',()=>{
   expect(cleaningScopeText('sourceIntervals')).toBe(language==='zh-CN'?'源点区间处理次数；输出点数和覆盖率按当前对象计算':'Source interval processing counts; output readings and coverage describe the current object');
  });
  it('localizes core validation and source failures for Chinese users',async()=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language:'zh-CN'});const {serverMessage}=await import('./i18n');
+  vi.resetModules();(await import('./i18n')).initializeLocale('zh-CN');const {serverMessage}=await import('./i18n');
   expect(serverMessage('deltaMax unit is incompatible with kWh')).toBe('deltaMax 的单位与 kWh 不兼容');
   expect(serverMessage('missingCleaningProfile')).toBe('清洗方案缺失，或源点未由此方案管理');
   expect(serverMessage('History exceeds 1000000 raw samples')).toContain('请缩短查询范围');
  });
  it('localizes repository and source failures for English users',async()=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language:'en-US'});const {serverMessage}=await import('./i18n');
+  vi.resetModules();(await import('./i18n')).initializeLocale('en-US');const {serverMessage}=await import('./i18n');
   expect(serverMessage('清洗点位原生标签类型无效')).toBe('The cleaning point has invalid native tag types.');
   expect(serverMessage('missingSource')).toBe('The cleaning source point or equipment is missing or cannot be read.');
   expect(serverMessage('externalFunctionManaged')).toBe('Managed by an external function.');

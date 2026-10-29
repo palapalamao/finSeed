@@ -2,14 +2,16 @@ import {afterEach,beforeAll,describe,expect,it,vi} from 'vitest';
 import {utilityScopeAllowed} from './dimensionTree';
 import type {ReportSnapshot} from './types';
 
+// Prepare the large UI dependency graph outside the individual rendering checks.
+beforeAll(async()=>{await import('./ReportView');},120000);
+
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
-beforeAll(async()=>{await import('./ReportView');},30000);
 function source(basis='knownUsage'):ReportSnapshot{
  const from='2026-10-01T00:00:00+08:00',to='2026-10-02T00:00:00+08:00';
  return {title:'End uses',project:'cubeTest',generatedAt:from,request:{kind:'utility',dimension:'metering',nodeIds:['a','b','c'],from,to,period:'day',metric:'energy',perArea:false},result:{kind:'utility',from,to,period:'day',warnings:[],summary:{},rows:[],series:[],extra:{utilityShares:[{id:'e|lighting',name:'Lighting',utilityId:'lighting',categoryId:'e',unit:'kWh',value:300,percentage:basis==='knownUsage'?50:null,percentageBasis:basis,meterIds:['a','b']},{id:'e|power',name:'Power',utilityId:'power',categoryId:'e',unit:'kWh',value:300,percentage:basis==='knownUsage'?50:null,percentageBasis:basis,meterIds:['c']}],utilityMembers:[{nodeId:'a',name:'Light A',utilityId:'lighting',utilityName:'Lighting',categoryId:'e',unit:'kWh',value:100,quality:'ok',coverage:1},{nodeId:'b',name:'Light B',utilityId:'lighting',utilityName:'Lighting',categoryId:'e',unit:'kWh',value:200,quality:'ok',coverage:1},{nodeId:'c',name:'Power C',utilityId:'power',utilityName:'Power',categoryId:'e',unit:'kWh',value:300,quality:'ok',coverage:1}]}}};
 }
 async function render(s:ReportSnapshot,language:string){
- vi.resetModules();vi.stubGlobal('navigator',{language,languages:[language]});
+ vi.resetModules();(await import('./i18n')).initializeLocale(language);
  const [{createElement},{renderToStaticMarkup},{ReportView}]=await Promise.all([import('react'),import('react-dom/server'),import('./ReportView')]);
  return renderToStaticMarkup(createElement(ReportView,{snapshot:s}));
 }

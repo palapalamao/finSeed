@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 const uiVersion=JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;
 
 for(const en of [false,true])test(`stale frontend shows its real version and offers reload in ${en?'English':'Chinese'}`,async({page})=>{
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),en?'en-US':'zh-CN');
- const state=await installTransport(page);
+
+ const state=await installTransport(page,{userLocale:en?'en-US':'zh-CN'});
  await page.route('**/api/testproject/ext/enerCubix/v1/catalog',route=>route.fulfill({json:{ok:true,data:{version:'0.12.99',project:'testproject',storageModel:'nativeEquip',user:{name:'Test',canWrite:true},records:state.records}}}));
  await page.goto('/#/energyFlow?project=testproject');
  await expect(page.locator('.nav-version').last()).toHaveText('v'+uiVersion);

@@ -4,8 +4,8 @@ import type {ChangeMessage} from '../../src/changeMessages';
 
 for(const language of ['zh-CN','en-US'])test(`message center keeps alarms and shows paginated changes in ${language}`,async({page},testInfo)=>{
  const zh=language==='zh-CN';const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
- const state=await installTransport(page,{canWrite:false});
+
+ const state=await installTransport(page,{userLocale:language,canWrite:false});
  state.records.push({id:'master2',kind:'totalMeter',name:'备用总电表'});
  const changes:ChangeMessage[]=Array.from({length:31},(_,index)=>({id:`change-${index}`,ts:`2026-10-26T02:${String(index).padStart(2,'0')}:00+08:00`,action:'updated',category:'relationship',objectId:'meter1',objectName:`分表变更${index+1}`,objectKind:'meter',actor:index?'operator1':undefined,changes:[{field:'meterParentId',before:'master1',after:'master2'},{field:'includeInTotals',before:true,after:false}]}));
  const offsets:number[]=[];

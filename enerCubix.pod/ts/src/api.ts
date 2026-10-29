@@ -10,10 +10,7 @@ export function unwrap<T>(value:unknown,status=200):T {
  if(body.ok!==true||status<200||status>=300)throw new ApiError(body.error?.code||`http_${status}`,body.error?.msg?serverMessage(body.error.msg):t("请求失败，请检查当前 FIN 会话与项目权限。"));
  if(!('data'in body))throw new ApiError('invalid_response',t("FIN 响应缺少数据。"));return body.data as T;
 }
-export function projectFromLocation(location:Pick<Location,'hash'|'search'|'pathname'>):string {
- const hashQuery=location.hash.split('?')[1]||'';
- return new URLSearchParams(hashQuery).get('project')||new URLSearchParams(location.search).get('project')||decodeURIComponent(location.pathname.match(/^\/api\/([^/]+)\//)?.[1]||'');
-}
+export {projectFromLocation} from './projectLocation';
 export class EnerCubixApi {
  readonly base:string;
  constructor(project:string){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开能源魔方，或在地址的 #/profile?project=项目名 中指定项目。"));this.base=`/api/${encodeURIComponent(project)}/ext/enerCubix/v1`;}

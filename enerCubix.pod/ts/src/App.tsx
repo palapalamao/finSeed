@@ -12,7 +12,6 @@ import {analysisGroups} from './navigation';
 import {BrandMark,productName,productTagline} from './brand';
 import {type Catalog,type ReportKind,type ReportRequest} from './types';
 import {version as uiVersion} from '../package.json';
-import {LanguageSwitcher} from './LanguageSwitcher';
 
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
 type View=ReportKind|ManageView|'messages';
@@ -60,7 +59,6 @@ export function App(){
     {navigation()}
     <Space className="header-tools" size={8}>
      <span className="project-context" title={project}>{project||t('未指定项目')}</span>
-     <LanguageSwitcher/>
      <Tag className="access-tag" color={catalog?.user.canWrite?'cyan':'default'}>{catalog?.user.canWrite?t('项目管理'):t('只读访问')}</Tag>
      <span className="user-context"><UserOutlined/><span>{catalog?.user.name||t('FIN 用户')}</span></span>
      <Button type="text" icon={<ReloadOutlined/>} aria-label={t('刷新项目')} loading={loading} onClick={()=>void reload()}/>

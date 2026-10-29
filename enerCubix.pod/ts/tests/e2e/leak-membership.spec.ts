@@ -8,11 +8,11 @@ import type {EnerCubixRecord,ReportRequest,ReportResult} from '../../src/types';
 const native=JSON.parse(readFileSync(new URL('../fixtures/leak-native-report.json',import.meta.url),'utf8')) as {request:ReportRequest;report:ReportResult};
 for(const language of ['zh-CN','en-US'])test(`renders available own consumption and an unavailable balance in ${language} on desktop and mobile`,async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',err=>errors.push(err.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
+
  const result=structuredClone(native.report),request=native.request;
  const master=request.nodeIds[0],own=result.extra!.leakOwnUsage as Record<string,unknown>[],category=String(own.find(row=>row.nodeId===master)!.categoryId);
  const records:EnerCubixRecord[]=[{id:category,kind:'category',name:'Electric',unit:'kWh'},...own.map(row=>({id:String(row.nodeId),kind:row.nodeId===master?'totalMeter' as const:'meter' as const,name:String(row.name),pointId:String(row.pointId),categoryId:category,includeInTotals:true,...(row.nodeId===master?{autoSum:true}:{meterParentId:master})})),{id:'native-template',kind:'template',name:'Stored balance',request}];
- const state=await installTransport(page,{records});
+ const state=await installTransport(page,{userLocale:language,records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   state.requests.push({path:'report',body:route.request().postDataJSON()});
   await route.fulfill({json:{ok:true,data:result}});

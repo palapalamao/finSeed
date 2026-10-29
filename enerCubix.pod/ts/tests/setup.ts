@@ -1,4 +1,5 @@
-import {beforeEach,vi} from 'vitest';
-// Existing regression fixtures explicitly exercise the Chinese interface.
-vi.stubGlobal('navigator',{language:'zh-CN',languages:['zh-CN']});
-beforeEach(()=>vi.stubGlobal('navigator',{language:'zh-CN',languages:['zh-CN']}));
+import {initializeLocale} from '../src/i18n';
+import {beforeEach} from 'vitest';
+// Existing regression fixtures explicitly exercise a Chinese FIN user.
+initializeLocale('zh-CN');
+beforeEach(async()=>{(await import('../src/i18n')).initializeLocale('zh-CN');});

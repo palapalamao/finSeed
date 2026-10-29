@@ -12,9 +12,9 @@ const fixture=JSON.parse(readFileSync(new URL('../fixtures/leak-current-relation
 for(const language of ['zh-CN','en-US'])test(`shows October 24 using current relationships in ${language}`,async({page},testInfo)=>{
  const result=structuredClone(fixture.report),request=fixture.request;
  const errors:string[]=[];page.on('pageerror',err=>errors.push(err.message));
- await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
+
  const records=[...fixture.records,{id:'current-template',kind:'template',name:'Current relationships',request}];
- const state=await installTransport(page,{records});
+ const state=await installTransport(page,{userLocale:language,records});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   state.requests.push({path:'report',body:route.request().postDataJSON()});
   await route.fulfill({json:{ok:true,data:result}});

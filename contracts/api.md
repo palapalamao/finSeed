@@ -3,6 +3,8 @@
 FIN 5.3.0.2761. Same-origin authenticated JSON API at `/api/{project}/ext/enerCubix/v1`.
 Success `{ok:true,data:...}`; failure `{ok:false,error:{code,msg}}` and non-2xx HTTP status. Never fall back to demo data. FIN native identity; admin-only mutations. Use `finCsrfFetch` from haystack-nclient for requests.
 
+GET `session` (0.12.16+) returns `{locale:string}` from the authenticated FIN request context. The frontend reads it with same-origin credentials and no caching before loading translated UI modules. Interface text, browser title and native application title follow this FIN user language; Chinese variants use Simplified Chinese, unsupported languages fall back to English. Browser preferences, retained local language choices and URL language parameters do not override the FIN user. Missing, expired or unreadable sessions stop startup with an error instead of guessing a language. Business names remain unchanged.
+
 ## Current data-source and version boundary
 
 Since 0.12.9, every measured, physical or virtual device reads energy exclusively from its explicitly configured primary point's native FIN history. FIN owns collection and history storage; EnergyCubix reads, cleans, calculates and presents results without a second time-series fact store. A missing primary or missing primary history stays missing: auxiliary histories, old minute batches, current child sums and formula-input histories are never substitutes for that device's own history. Contribution members independently read their own primaries.

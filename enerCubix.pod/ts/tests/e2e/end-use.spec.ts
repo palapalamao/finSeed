@@ -30,8 +30,7 @@ for(const language of ['zh-CN','en-US']){
  const en=language==='en-US';
  test(`shared end-use pie, own main and overlap export in ${language}`,async({page},info)=>{
   const data=setup(en),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
-  await installTransport(page,{records:data.records});
+  await installTransport(page,{userLocale:language,records:data.records});
   await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>route.fulfill({json:{ok:true,data:data.report(route.request().postDataJSON())}}));
   await page.goto('/#/utility?project=testproject&template=pie');await page.getByRole('button',{name:en?'Query':'查询',exact:true}).click();
   await expect(page.locator('.utility-chart')).toHaveCount(1);await expect(page.locator('.utility-total')).toContainText('600');
@@ -47,8 +46,7 @@ for(const language of ['zh-CN','en-US']){
   await page.goto('/#/utility?project=testproject&template=overlap');await page.getByRole('button',{name:en?'Query':'查询',exact:true}).click();await expect(page.locator('.utility-group .ant-alert')).toContainText(en?'selected scopes overlap':'计量范围重叠');await expect(page.locator('.utility-chart')).toHaveCount(0);await expect(page.locator('.utility-member-table tr[data-row-key]')).toHaveCount(2);expect(errors).toEqual([]);
  });
  test(`end-use flow mode and old template compatibility in ${language}`,async({page},info)=>{
-  const data=setup(en),state=await installTransport(page,{records:data.records});
-  await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),language);
+  const data=setup(en),state=await installTransport(page,{userLocale:language,records:data.records});
   await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{const q=route.request().postDataJSON() as ReportRequest;state.requests.push({path:'report',body:q as unknown as Record<string,unknown>});await route.fulfill({json:{ok:true,data:data.report(q)}});});
   await page.goto('/#/energyFlow?project=testproject');
   await page.getByText(en?'By end use':'按能耗分项',{exact:true}).click();await page.locator('.report-dimension-select .ant-radio-button-wrapper').filter({hasText:en?'Metering':'计量'}).click();await page.locator('.object-select-button').click();
