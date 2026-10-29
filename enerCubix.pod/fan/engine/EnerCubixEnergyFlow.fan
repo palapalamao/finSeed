@@ -172,7 +172,7 @@ internal class EnerCubixEnergyFlow
     flow:=compatible(graphs,roots,plan,total)
     return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
       "summary":["value":strictTotal.value,"unit":unit,"selectionTotals":[total]],
-      "extra":["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]]]
+      "extra":costEvidence(["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]])]
   }
 
   ** Reuse the physical-boundary resolver directly; this is not a leak report.
@@ -315,7 +315,16 @@ internal class EnerCubixEnergyFlow
     }
     return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
       "summary":["value":strictTotal.value,"unit":unit,"selectionTotals":[total]],
-      "extra":["energyFlow":compatible(graphs,roots,plan,total).set("basis","endUse"),"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]]]
+      "extra":costEvidence(["energyFlow":compatible(graphs,roots,plan,total).set("basis","endUse"),"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]])]
+  }
+
+  private Str:Obj? costEvidence(Str:Obj? extra)
+  {
+    if (request["metric"] != "cost") return extra
+    tariffs:=ctx.usedTariffs.dup.setAll(knownCtx.usedTariffs)
+    extra["tariffSnapshot"]=tariffs.keys.sort.map |id->[Str:Obj?]| {tariffs[id]}
+    extra["costBasis"]="closedIntervalsAtStartTariff"
+    return extra
   }
 
   private Void build(Str id,Str? parent,EnerCubixValue? parentValue,Str[] path,Bool grouping)

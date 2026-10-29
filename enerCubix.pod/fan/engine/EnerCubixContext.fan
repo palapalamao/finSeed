@@ -303,8 +303,11 @@ internal class EnerCubixContext
   {
     t := tariff(r)
     if (t == null) return EnerCubixValue(null,"missingTariff",raw.sources)
-    snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId"].contains(key)}
-    usedTariffs[r["id"].toStr]=snapshot.dup.set("nodeId",r["id"])
+    if (!usedTariffs.containsKey(r["id"].toStr))
+    {
+      snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId"].contains(key)}
+      usedTariffs[r["id"].toStr]=snapshot.dup.set("nodeId",r["id"])
+    }
     mode := t["mode"]?.toStr ?: "flat"
     if (mode == "monthlyBlock" || mode == "yearlyBlock")
     {

@@ -109,6 +109,24 @@ class EnerCubixCostConsistencyTest : Test
     verifyNull(row["value"]);verifyEq(row["sourceIds"],["missing-primary"])
   }
 
+  Void testDifferentMeterTariffsShareOneDeduplicatedCostAcrossViews()
+  {
+    rs:=records.dup.addAll([["id":"b","kind":"meter","name":"B","spaceId":"s","organizationId":"o","categoryId":"e","pointId":"pb","tariffId":"tb","utilityId":"u"],["id":"tb","kind":"tariff","name":"B tariff","mode":"flat","rate":5f,"band":"flat"]])
+    hs:=histories.dup.add(["pointId":"pb","mode":"interval","quality":"ok","unit":"kWh","samples":[["ts":at(0),"value":2f]]])
+    ["space","metering","organization"].each |dimension|
+    {
+      ["profile","ranking","proportion","utility","daily","workingHours","workingDays","dashboard"].each |kind|
+      {
+        req:=request(kind).set("dimension",dimension).set("nodeIds",dimension == "space" ? ["s","m"] : (dimension == "organization" ? ["o","m"] : ["m","b"]))
+        result:=EnerCubixEngine.report(req,rs,hs)
+        total:=EnerCubixMath.maps(((Map)result["summary"])["selectionTotals"]).first
+        verifyEq(total["knownValue"],60f,"$kind $dimension")
+        verifyEq(EnerCubixMath.strings(total["meterIds"]).sort,["b","m"])
+        verifyEq(EnerCubixMath.strings(total["sourceIds"]).sort,["p","pb"])
+      }
+    }
+  }
+
   private Str:Obj? request(Str kind) { ["kind":kind,"nodeIds":["m"],"from":at(0),"to":at(150),"asOf":at(150),"period":"hour","metric":"cost","perArea":false,"workHours":[1]] }
   private [Str:Obj?][] records() { [["id":"s","kind":"space","name":"Space"],["id":"o","kind":"organization","name":"Organization"],["id":"m","kind":"meter","name":"Meter","spaceId":"s","organizationId":"o","categoryId":"e","pointId":"p","utilityId":"u"],["id":"e","kind":"category","name":"Electricity","unit":"kWh"],["id":"u","kind":"utility","name":"Lighting","categoryId":"e"],["id":"t","kind":"tariff","name":"Four bands","categoryId":"e","isDefault":true,"mode":"weekly","rate":2f,"band":"flat","rules":[["startHour":0,"endHour":1,"rate":3f,"band":"sharp"],["startHour":1,"endHour":2,"rate":1f,"band":"valley"]]],["id":"cal","kind":"calendar","name":"Unrelated calendar","workDays":[2],"workHours":[1],"peakHours":[0]]] }
   private [Str:Obj?][] histories() { [["pointId":"p","mode":"interval","quality":"cleaned","unit":"kWh","samples":Obj?[,],"intervals":[["from":at(0),"to":at(60),"value":10f,"quality":"cleaned"],["from":at(60),"to":at(120),"value":20f,"quality":"filtered"]]]] }

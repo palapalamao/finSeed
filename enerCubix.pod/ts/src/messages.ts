@@ -1613,6 +1613,10 @@ Object.assign(englishMessages, {
 });
 
 Object.assign(englishMessages,{
+ '费用概况':'Cost overview','费用对比':'Cost comparison','费用显示口径':'Cost display basis','历史费用与未来预测':'Historical cost and future forecast',
+ '总表与分表按各自费率独立计价，按同一范围核对已有费用。':'Main meters and submeters use their own tariffs. Compare available cost within the same scope.',
+ '按费率快照逐表计计价；时段费率按闭合主点区间起点，不摊分；阶梯费率要求完整周期基线。':'Each meter uses its frozen tariff rules. Time-of-use rates follow closed primary intervals by start time without proration; block rates require a complete cycle baseline.',
+ '范围预测费用合计（已去重）':'Predicted cost in scope (deduplicated)','费率快照':'Tariff snapshot','配置版本':'Configuration version',
  '费用汇总':'Cost summary','费用差额':'Cost difference','尖峰谷平时段':'Tariff time band','尖峰谷平区间总量（非日均）':'Time-band interval totals (not daily averages)','尖峰谷平汇总口径':'Time-band aggregation basis',
  '本次总分表比较范围':'Total and submeter comparison scope',
  '比较分表由服务端按物理计量边界解析，不受“计入合计”开关限制。临时选择仅用于本次查询和模板，不修改表计配置。':'The server resolves submeters from the physical metering boundary, regardless of Include in totals. Temporary selections apply to this query and its template without changing meter configuration.',
