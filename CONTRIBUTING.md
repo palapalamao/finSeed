@@ -8,11 +8,11 @@ Start with one owner, a bounded change and observable acceptance criteria. Use a
 
 ## 分支流程 / Branch workflow
 
-`developer` 是开发主分支，`main` 用于稳定发布。所有新任务从最新 `developer` 拆出 `codex/<任务ID>-<简短名称>`，验证后向 `developer` 提交 PR；发布时再按授权从 `developer` 合入 `main`。
+`developer` 是开发主分支，`main` 用于稳定发布。日常开发与修复默认直接在最新 `developer` 上进行；仅在并行隔离需要时拆出短期 `codex/<任务ID>-<简短名称>`，验证后合回 `developer` 并清理。发布时再按授权从 `developer` 合入 `main`。
 
-Use `developer` as the development and integration branch, and `main` for stable releases. Start each new task from the latest `developer`, name its branch `codex/<task-id>-<short-name>`, and target `developer` in its PR. Release integration into `main` follows the release owner's authorization.
+Use the latest `developer` directly for routine development and fixes, and keep `main` for stable releases. Create a short-lived `codex/<task-id>-<short-name>` branch only when concurrent work needs isolation; merge it into `developer` after verification and remove it. Release integration into `main` follows the release owner's authorization.
 
-命令行示例；替换任务名称与工作区路径 / CLI example; replace the task name and checkout path:
+需要并行隔离时的命令行示例；替换任务名称与工作区路径 / CLI example for isolated concurrent work; replace the task name and checkout path:
 
 ```powershell
 git fetch origin

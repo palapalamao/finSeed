@@ -94,8 +94,8 @@ flowchart LR
 
 ## 6. 并行开发和代码集成
 
-- `developer` 是唯一开发主分支和集成基线；`main` 用于稳定发布。所有新功能、缺陷修复及任务分支从最新 `developer` 拆出，完成验证后合回 `developer`；发布时再由发布负责人按授权合入 `main`。
-- 新任务使用独立 Git worktree／分支，分支默认 `codex/<任务ID>-<简短名称>`。创建前刷新远端引用；Codex 托管工作区显式指定最新 `developer` 提交或 `origin/developer`，命令行示例见 [开发入口](../../CONTRIBUTING.md)。不得直接沿用旧任务分支、旧 `main` 或任意当前 HEAD 作为起点。
+- `developer` 是唯一开发主分支和集成基线；日常开发与缺陷修复默认直接在最新 `developer` 上进行，`main` 用于稳定发布。发布时再由发布负责人按授权合入 `main`。
+- 仅在并行隔离确有需要时使用独立 Git worktree／短期分支，分支默认 `codex/<任务ID>-<简短名称>`，验证后合回 `developer` 并清理。创建前刷新远端引用；Codex 托管工作区显式指定最新 `developer` 提交或 `origin/developer`，命令行示例见 [开发入口](../../CONTRIBUTING.md)。不得直接沿用旧任务分支、旧 `main` 或任意当前 HEAD 作为起点。
 - 优先复用基线和归属均合适的现有工作区，不为只读研究新建工作区。已有分支保留原历史，接续任务先核对与 `developer` 的差异，再按归属集成，不批量重置或强推。
 - 不在其他任务正在使用的工作区切分支、重新安装依赖或覆盖构建输出。端口、临时目录、SDK 副本和验收实例也要分配归属。
 - 一个文件在同一时段只有一个集成负责人。涉及 `ReportWorkspace.tsx`、`ReportView.tsx`、`types.ts`、后端报告引擎等公共位置时，先约定最小接口与合入顺序；不同工作区仍可能产生冲突。

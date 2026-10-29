@@ -10,7 +10,7 @@
 ## 分支与开发基线
 
 - `developer` 是唯一开发主分支和功能集成基线；`main` 用于稳定发布。
-- 所有新功能、缺陷修复及任务分支必须从最新 `developer` 拆出，默认命名 `codex/<任务ID>-<简短名称>`；完成验证后合回 `developer`，发布时再由发布负责人按授权合入 `main`。
+- 日常开发与缺陷修复默认直接在最新 `developer` 上进行。仅在并行隔离确有需要时，从最新 `developer` 拆出短期 `codex/<任务ID>-<简短名称>` 分支；完成验证后合回 `developer` 并清理，发布时再由发布负责人按授权合入 `main`。
 - 创建工作区前先刷新远端引用并核对基线。Codex `create_worktree` 必须显式指定最新 `developer` 提交或 `origin/developer`，命令行新任务使用 `origin/developer`；不得沿用旧任务分支、旧 `main` 或任意当前 HEAD 作为默认起点。
 - 已有工作区的未提交内容按原归属保留；接续任务先核对与 `developer` 的差异，不批量重置、改写历史或强推。
 
