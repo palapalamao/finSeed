@@ -1613,6 +1613,7 @@ Object.assign(englishMessages, {
 });
 
 Object.assign(englishMessages,{
+ '费用汇总':'Cost summary','费用差额':'Cost difference','尖峰谷平时段':'Tariff time band','尖峰谷平区间总量（非日均）':'Time-band interval totals (not daily averages)','尖峰谷平汇总口径':'Time-band aggregation basis',
  '本次总分表比较范围':'Total and submeter comparison scope',
  '比较分表由服务端按物理计量边界解析，不受“计入合计”开关限制。临时选择仅用于本次查询和模板，不修改表计配置。':'The server resolves submeters from the physical metering boundary, regardless of Include in totals. Temporary selections apply to this query and its template without changing meter configuration.',
  '比较范围读取失败，请重新选择对象或查询。':'Could not load the comparison scope. Reselect the objects or query again.',
@@ -1688,3 +1689,19 @@ Object.assign(englishMessages,{
 });
 
 Object.assign(englishMessages,{'范围分项已有合计（已去重）':'Available end-use total in scope (deduplicated)','该合计只统计参与分表；总表自身用量在各图中单独展示。':'This total includes participating submeters only. Each main meter’s own usage is shown separately in its graph.'});
+Object.assign(englishMessages,{
+ '尖时':'Sharp peak','尖峰时段':'Sharp-peak hours','混合时段':'Mixed periods','按尖峰谷平配色':'Color by sharp peak / peak / flat / valley',
+ '默认时段分类':'Default time-band category','时段分类':'Time-band category',
+ '分类用于尖峰谷平展示，单价独立配置；未分类不按价格猜测。':'Time-band labels control the four-band display. Configure prices separately; unlabeled bands are never inferred from prices.',
+ '颜色按各表实际费率的时段分类及日期例外；无费率时使用日历。同一小时跨日期或表计分类不同时显示混合时段，未分类显示灰色。':'Colors follow each meter’s tariff bands and date exceptions, falling back to the calendar when no tariff is assigned. Different bands across dates or meters appear as mixed periods; unlabeled periods are gray.',
+ '下方尖峰谷平表为查询区间总量，非日均，单位随所选指标显示。':'The time-band table shows totals for the query range, rather than daily averages, in the selected metric’s units.',
+ '显示可计价的已有费用小计，不代表完整账单；缺测与 NA 不补零，阶梯基线不足时不计价。':'Available priced cost is a subtotal, not a complete bill. Missing data and NA remain missing; block tariffs require a complete billing baseline.',
+ '已有费用小计':'Available cost subtotal','已有费用':'Available cost','范围已有费用合计（已去重）':'Available cost in scope (deduplicated)',
+ '完整区间费用':'Complete interval cost','费用覆盖明细':'Cost coverage details','工作时段已有费用':'Available working-period cost','非工作时段已有费用':'Available non-working-period cost',
+ '本期已有费用':'Available current-period cost','对比期已有费用':'Available comparison-period cost','已有费用占比':'Available cost share','已有费用排名':'Available cost ranking',
+ '逐表计费用模型汇总':'Sum of meter cost models',
+ '费用预测先按各表计历史费用建模，再按去重成员汇总；估计历史费用模式，不包含未来费率调整，不是账单。误差范围为各表计历史误差参考范围的合计，不保证未来覆盖率。':'Cost forecasts model each meter’s historical cost and aggregate deduplicated members. They estimate historical cost patterns, exclude future tariff changes and are not bills. The summed historical error ranges do not guarantee future coverage.',
+ '费用流向表示金额分布；不同表计费率可能不同，金额差额不能作为能耗损耗或泄漏结论。':'Cost flows show monetary distribution. Tariffs may differ between meters; monetary differences do not establish energy losses or leaks.',
+ '费用计价依据':'Cost calculation basis','闭合主点区间按起点费率计价；不摊分，缺测不补零。':'Closed primary-point intervals use the tariff at their start. Intervals are not prorated and missing data is not zero-filled.',
+ '历史逐表计费用模式，未包含未来费率调整':'Historical meter cost patterns, excluding future tariff changes','预测依据':'Forecast basis','预测去重表计':'Deduplicated forecast meters'
+});

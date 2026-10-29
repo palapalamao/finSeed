@@ -15,7 +15,8 @@ internal class EnerCubixForecast
     while (cursor < to) { days++; cursor=EnerCubixMath.nextBucket(cursor,"day") }
     if (days < 28 || days > 180) throw ArgErr("训练范围须为 28 至 180 个完整日")
     if (to > EnerCubixMath.bucket(DateTime.now.toTimeZone(tz),"day")) throw ArgErr("训练截止时间不能超过今天零点，不能使用未来或未完成的历史")
-    if (request["metric"] != "energy" || request["period"] != "day") throw ArgErr("能耗预测使用每日能耗")
+    if (!["energy","cost"].contains(request["metric"]) || request["period"] != "day") throw ArgErr("预测使用每日能耗或费用")
+    if (request["metric"] == "cost" && request["perArea"] == true) throw ArgErr("费用预测不支持面积归一化")
     selected:=EnerCubixMath.strings(request["nodeIds"])
     if (selected.isEmpty || selected.size > 10) throw ArgErr("每次请选择 1 至 10 个预测对象")
   }

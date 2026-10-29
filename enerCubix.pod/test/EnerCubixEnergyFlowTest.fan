@@ -119,7 +119,7 @@ class EnerCubixEnergyFlowTest : Test
 
   Void testRejectsUnsupportedScopeAndMetrics()
   {
-    req:=request; req["metric"]="cost"; verifyErr(ArgErr#) { EnerCubixEngine.report(req,records,histories) }
+    req:=request; req["metric"]="coal"; verifyErr(ArgErr#) { EnerCubixEngine.report(req,records,histories) }
     req=request; req["perArea"]=true; verifyErr(ArgErr#) { EnerCubixEngine.report(req,records,histories) }
     req=request; req["nodeIds"]=["main","other"]
     selected:=EnerCubixEngine.report(req,records,histories)

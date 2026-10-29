@@ -5,8 +5,8 @@ import {forecastChartOptions} from './forecast';
 import {comparisonChartOptions} from './comparison';
 import {compactReportTime,isProfileReference,numberText} from './reportDisplay';
 export const palette=['#137f7a','#3976ba','#b6842c','#7865af','#60aab3','#bb7463'];
-export const loadBandNames={peak:t("峰时"),valley:t("谷时"),flat:t("平时"),unknown:t("未分类")};
-export const loadBandColors={peak:'#dc9f36',valley:'#29a28b',flat:'#1576a7',unknown:'#8896a4'};
+export const loadBandNames={sharp:t("尖时"),mixed:t("混合时段"),peak:t("峰时"),valley:t("谷时"),flat:t("平时"),unknown:t("未分类")};
+export const loadBandColors={sharp:'#b94052',mixed:'#7865af',peak:'#dc9f36',valley:'#29a28b',flat:'#1576a7',unknown:'#8896a4'};
 export type AxisBounds=Record<string,{min?:number;max?:number}>;
 export function shareChartOptions(rows:Record<string,unknown>[],groupByNode=false,names:Record<string,string>={}):EChartsCoreOption{
  const groups=new Map<string,typeof rows>();rows.forEach(row=>{const key=`${groupByNode?`${row.nodeId||''} / `:''}${row.categoryId||''} / ${row.unit||''}`;groups.set(key,[...(groups.get(key)||[]),row]);});const entries=Array.from(groups.entries());

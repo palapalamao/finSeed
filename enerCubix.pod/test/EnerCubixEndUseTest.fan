@@ -193,7 +193,7 @@ class EnerCubixEndUseTest : Test
     req:=request("utility",["a","c"]);req["metric"]="cost"
     shares:=extra(EnerCubixEngine.report(req,rs,histories),"utilityShares")
     verifyEq(shares.find |s| {s["utilityId"] == "lighting"}["percentage"],25f)
-    verify(shares.all |s| {!s.containsKey("knownPercentage")})
+    verifyEq(shares.find |s| {s["utilityId"] == "lighting"}["knownPercentage"],25f)
     group:=Str:Obj?["id":"g","kind":"group","name":"Group"]
     rs=records.add(group);rs.findAll |m| {["main","a","b","c"].contains(m["id"])}.each |m| {m["parentId"]="g"}
     req=request("utility",["g"]);req.remove("dimension")

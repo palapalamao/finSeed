@@ -119,6 +119,7 @@ internal class EnerCubixReport
   Str:Obj? forecast(EnerCubixLine[] lines)
   {
     forecasts:=[Str:Obj?][,]; backtests:=[Str:Obj?][,]; scores:=[Str:Obj?][,]
+    meterFits:=Str:[Str:Obj?][:]
     horizon:=(EnerCubixMath.num(request["forecastDays"]) ?: 7f).toInt
     lines.each |line| {
       dates:=DateTime[,]; values:=Float?[,]; historyPoints:=[Str:Obj?][,]; sources:=Str[,]
@@ -134,6 +135,27 @@ internal class EnerCubixReport
         cursor=end
       }
       fit:=EnerCubixForecast.fit(values,horizon)
+      if (metric == "cost")
+      {
+        members:=ctx.scopeMeters(line.nodeId,line.category)
+        fits:=members.map |meter->[Str:Obj?]|
+        {
+          id:=meter["id"].toStr
+          if (!meterFits.containsKey(id))
+          {
+            own:=this.line(id,line.category); daily:=Float?[,]; day:=from
+            while (day < to)
+            {
+              end:=EnerCubixMath.nextBucket(day,"day")
+              amount:=own.total(own.ticks.findAll |tick| {tick.ts >= day && tick.ts < end})
+              daily.add(amount.reliable ? amount.value : null);day=end
+            }
+            meterFits[id]=EnerCubixForecast.fit(daily,horizon)
+          }
+          return meterFits[id]
+        }
+        fit=EnerCubixCostForecast.combine(fits,values,horizon)
+      }
       simulated:=sources.unique.any |id| { ctx.byPoint[id]?.simulated == true }
       meta:=fit.dup
       ["predictions","backtests","modelScores"].each |key| { meta.remove(key) }
@@ -167,6 +189,17 @@ internal class EnerCubixReport
     extra["forecasts"]=forecasts; extra["backtests"]=backtests; extra["modelScores"]=scores
     extra["forecastFrom"]=to.toIso
     extra["algorithm"]="weekly-selection-v1"
+    if (metric == "cost")
+    {
+      members:=ctx.selectionMeters(meterFits.keys.map |id->[Str:Obj?]| {ctx.byId[id]})
+      ids:=members.map |meter->Str| {meter["id"].toStr}
+      [Str:Obj?][] fits:=ids.map |id->[Str:Obj?]| {meterFits[id]}
+      valid:=!fits.isEmpty && fits.all |fit| {fit["status"] == "ok"}
+      total:=0f
+      if (valid) fits.each |fit| {((Float[])fit["predictions"]).each |value| {total+=value}}
+      summary["forecastTotals"]=[["meterIds":ids,"unit":"元","value":valid && EnerCubixMath.num(total) != null ? total : null,"quality":valid ? "predicted" : "insufficientHistory"]]
+      extra["forecastBasis"]="historicalMeterCostPatterns";extra["forecastMeterIds"]=ids
+    }
     return result
   }
 
@@ -555,18 +588,10 @@ internal class EnerCubixReport
 
   private Void daily(EnerCubixLine[] lines)
   {
-    calendar:=ctx.calendar
-    if (calendar == null) ctx.warn("未配置日历，无法划分峰谷平时段")
-    bandOf:=|Int hour->Str|
-    {
-      if (calendar == null) return "unknown"
-      if (EnerCubixMath.containsNum(calendar["peakHours"],hour)) return "peak"
-      if (EnerCubixMath.containsNum(calendar["valleyHours"],hour)) return "valley"
-      return "flat"
-    }
     loadBands:=[Str:Obj?][,]
     lines.each |l|
     {
+      bandOf:=|EnerCubixTick tick->Str| {ctx.timeBand(l.nodeId,l.category,tick.ts,tick.end,l.utility)}
       grouped:=Int:EnerCubixTick[][:]
       l.ticks.each |t| { if (!grouped.containsKey(t.ts.hour)) grouped[t.ts.hour]=EnerCubixTick[,]; grouped[t.ts.hour].add(t) }
       points:=[Str:Obj?][,]
@@ -577,7 +602,8 @@ internal class EnerCubixReport
         if (!v.reliable) v=EnerCubixValue(null,v.quality,v.sources)
         if (!l.ratio && !l.gauge && !ticks.isEmpty) v=v.scale(1f/ticks.size.toFloat)
         at:=from.date.toDateTime(Time(hour,0),ctx.tz)
-        band:=bandOf(hour)
+        distinct:=ticks.map |tick->Str| {bandOf(tick)}.unique
+        band:=distinct.size == 1 ? distinct.first : (distinct.isEmpty ? "unknown" : "mixed")
         point:=v.point(at); point["band"]=band; points.add(point)
         row:=baseRow(l,"hour:$hour",v); row["hour"]=hour; row["ts"]=at.toIso; row["samples"]=ticks.size; row["band"]=band
         if (displaysKnown(l))
@@ -591,15 +617,17 @@ internal class EnerCubixReport
         rows.add(row)
       }
       series.add(seriesMap(l,points))
-      bands:=calendar == null ? ["unknown"] : ["peak","valley","flat"]
+      classified:=l.ticks.map |tick->Str| {bandOf(tick)}.unique
+      bands:=classified == ["unknown"] ? ["unknown"] : ["sharp","peak","flat","valley","mixed","unknown"]
+      if (classified.contains("unknown")) ctx.warn("部分时段未配置尖峰谷平分类，保留为未分类")
       bands.each |band|
       {
-        ticks:=l.ticks.findAll |t| { bandOf(t.ts.hour) == band }
+        ticks:=l.ticks.findAll |t| { bandOf(t) == band }
         total:=ticks.isEmpty ? EnerCubixValue(0f,"ok") : EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.value })
         if (!ticks.isEmpty && (l.gauge || l.ratio))
         {
           total=EnerCubixValue(null,"invalidMetric",total.sources)
-          ctx.warn("${l.name}: 峰谷平区间总量需要能耗计量数据")
+          ctx.warn("${l.name}: 尖峰谷平区间总量需要能耗计量数据")
         }
         row:=baseRow(l,"band:$band",total); row["band"]=band
         if (displaysKnown(l)) row.setAll(EnerCubixKnownUsage.fields(ticks.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(ticks)))
@@ -831,7 +859,14 @@ internal class EnerCubixReport
   private Str:Obj? result()
   {
     if (ctx.dimension != null) extra["dimension"]=ctx.dimension.dimension
-    if (knownCtx == null && !["trend"].contains(kind)) extra["usagePolicy"]=metric == "cost" ? "billingRequiresCompleteCoverage" : (kind == "forecast" ? "completeTrainingHistoryRequired" : (kind == "regression" ? "completePairsRequired" : "comparableCoverageRequired"))
+    if (metric == "cost")
+    {
+      extra["costBasis"]="closedIntervalsAtStartTariff"
+      tariffs:=ctx.usedTariffs.dup
+      if (knownCtx != null) tariffs.setAll(knownCtx.usedTariffs)
+      extra["tariffSnapshot"]=tariffs.keys.sort.map |id->[Str:Obj?]| {tariffs[id]}
+    }
+    if (knownCtx == null && !["trend"].contains(kind)) extra["usagePolicy"]=kind == "forecast" ? "completeTrainingHistoryRequired" : (metric == "cost" ? "billingRequiresCompleteCoverage" : (kind == "regression" ? "completePairsRequired" : "comparableCoverageRequired"))
     return ["kind":kind,"from":from.toIso,"to":to.toIso,"asOf":dataCutoff.toIso,"period":period,"series":series,"rows":rows,"warnings":ctx.warnings,"summary":summary,"extra":extra]
   }
 }

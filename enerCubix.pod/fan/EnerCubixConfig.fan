@@ -95,6 +95,7 @@ const class EnerCubixConfig
       if (rec["isDefault"] == true && all.any |r| { r["id"] != id && r["kind"] == "tariff" && r["isDefault"] == true && r["categoryId"] == rec["categoryId"] }) throw ArgErr("每个分类只能有一个默认费率")
       mode := rec["mode"] as Str ?: "flat"
       if (!["flat", "absolute", "weekly", "monthlyBlock", "yearlyBlock"].contains(mode)) throw ArgErr("无效计费类型")
+      if (rec["band"] != null && !["sharp","peak","flat","valley","unknown"].contains(rec["band"])) throw ArgErr("无效费率时段分类")
       last := 0f
       List blocks := (rec["blocks"] as List) ?: Obj?[,]
       if (mode.endsWith("Block") && blocks.isEmpty) throw ArgErr("请设置阶梯费率")
@@ -111,6 +112,7 @@ const class EnerCubixConfig
         ((List)((rec[key] as List) ?: Obj?[,])).each |v|
         {
           rule := v as Map ?: throw ArgErr("费率规则格式无效")
+          if (rule["band"] != null && !["sharp","peak","flat","valley","unknown"].contains(rule["band"])) throw ArgErr("无效费率时段分类")
           if (number(rule["rate"]) < 0f) throw ArgErr("费率不得为负数")
           start := number(rule["startHour"], 0f); end := number(rule["endHour"], 24f)
           if (start < 0f || end > 24f || start >= end) throw ArgErr("时段应满足 0≤开始<结束≤24")
@@ -122,13 +124,15 @@ const class EnerCubixConfig
     if (kind == "calendar")
     {
       if (rec["isDefault"] == true && all.any |r| { r["id"] != id && r["kind"] == "calendar" && r["isDefault"] == true }) throw ArgErr("只能有一个默认日历")
-      ["peakHours", "valleyHours", "workHours"].each |key|
+      ["sharpHours", "peakHours", "valleyHours", "workHours"].each |key|
       {
         ((List)((rec[key] as List) ?: Obj?[,])).each |v| { n := number(v); if (n < 0f || n > 23f || n != n.floor) throw ArgErr("小时必须为0至23的整数") }
       }
       List peaks := (rec["peakHours"] as List) ?: Obj?[,]
       List valleys := (rec["valleyHours"] as List) ?: Obj?[,]
+      List sharp := (rec["sharpHours"] as List) ?: Obj?[,]
       if (peaks.any |v| { valleys.contains(v) }) throw ArgErr("峰时段与谷时段不能重叠")
+      if (sharp.any |v| {peaks.contains(v) || valleys.contains(v)}) throw ArgErr("尖、峰、谷时段不能重叠")
       ((List)((rec["workDays"] as List) ?: Obj?[,])).each |v| { n := number(v); if (n < 1f || n > 7f) throw ArgErr("工作日必须为1至7") }
       List exceptions := rec["exceptions"] as List ?: Obj?[,]
       dates := Str[,]

@@ -47,6 +47,7 @@ internal class EnerCubixContext
   private EnerCubixContext? strictContext
   private DateTime? knownEnd
   Str:[Str:Obj?] knownReads := [:]
+  Str:[Str:Obj?] usedTariffs := [:]
   private Int knownDetailCount := 0
 
   private EnerCubixValue sumValues(EnerCubixValue[] values)
@@ -302,9 +303,13 @@ internal class EnerCubixContext
   {
     t := tariff(r)
     if (t == null) return EnerCubixValue(null,"missingTariff",raw.sources)
+    snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId"].contains(key)}
+    usedTariffs[r["id"].toStr]=snapshot.dup.set("nodeId",r["id"])
     mode := t["mode"]?.toStr ?: "flat"
     if (mode == "monthlyBlock" || mode == "yearlyBlock")
     {
+      // A known subtotal cannot establish a cumulative billing tier.
+      if (strictContext != null) return strictContext.node(r["id"].toStr,r["categoryId"].toStr,from,to,"cost")
       cycle := EnerCubixMath.bucket(from,mode == "yearlyBlock" ? "year" : "month")
       // Baseline is meter-specific. Missing preceding hours invalidate the price band.
       meterId:=r["id"].toStr
@@ -332,6 +337,26 @@ internal class EnerCubixContext
     }
     if (raw.value == null) return raw
     // Split within an hour for absolute dates and fractional start/endHour rules.
+    bounds := tariffBounds(t,from,to)
+    if (strictContext != null && bounds.size > 2)
+    {
+      recordId:=r["id"].toStr; point:=r["pointId"].toStr
+      previous:=knownReads.remove("$recordId|$point|${from.ticks}|${to.ticks}")
+      knownDetailCount-=EnerCubixMath.maps(previous?.get("intervals")).size
+    }
+    parts:=EnerCubixValue[,]
+    for (i:=0;i<bounds.size-1;i++)
+    {
+      a:=bounds[i]; b:=bounds[i+1]
+      energy:=bounds.size == 2 ? raw : rawNode(r,a,b,path)
+      rate:=rateAt(t,a)
+      parts.add(rate == null ? EnerCubixValue(null,"missingTariff",raw.sources) : energy.scale(rate))
+    }
+    return sumValues(parts)
+  }
+
+  private DateTime[] tariffBounds(Str:Obj? t, DateTime from, DateTime to)
+  {
     bounds := [from,to]
     rules := EnerCubixMath.maps(t["rules"]).addAll(EnerCubixMath.maps(t["exceptions"]))
     rules.each |rule|
@@ -340,7 +365,7 @@ internal class EnerCubixContext
       {
         text:=rule[key]?.toStr
         if (text == null) return
-        at:=DateTime.fromIso(text,false)
+        at:=text.size == 10 ? Date.fromStr(text,false)?.toDateTime(Time.defVal,tz) : DateTime.fromIso(text,false)
         if (at != null && at > from && at < to) bounds.add(at.toTimeZone(tz))
       }
       ["startHour","endHour"].each |key|
@@ -350,16 +375,35 @@ internal class EnerCubixContext
         if (at > from && at < to) bounds.add(at)
       }
     }
-    bounds=bounds.unique.sort
-    parts:=EnerCubixValue[,]
-    for (i:=0;i<bounds.size-1;i++)
+    return bounds.unique.sort
+  }
+
+  ** Bands are explicit tariff labels, never guessed from relative prices.
+  ** The calendar remains a fallback for projects without a tariff.
+  Str timeBand(Str id, Str category, DateTime from, DateTime to, Str? utility := null)
+  {
+    bands:=Str[,]
+    scopeMeters(id,category,Str[,],utility).each |meter|
     {
-      a:=bounds[i]; b:=bounds[i+1]
-      energy:=bounds.size == 2 ? raw : rawNode(r,a,b,path)
-      rate:=rateAt(t,a)
-      parts.add(rate == null ? EnerCubixValue(null,"missingTariff",raw.sources) : energy.scale(rate))
+      t:=tariff(meter)
+      if (t == null)
+      {
+        bands.add(calendar == null ? "unknown" : (EnerCubixMath.containsNum(calendar["sharpHours"],from.hour) ? "sharp" : (EnerCubixMath.containsNum(calendar["peakHours"],from.hour) ? "peak" : (EnerCubixMath.containsNum(calendar["valleyHours"],from.hour) ? "valley" : "flat"))))
+        return
+      }
+      bounds:=tariffBounds(t,from,to)
+      for (i:=0;i<bounds.size-1;i++) bands.add(bandAt(t,bounds[i]))
     }
-    return EnerCubixValue.sum(parts)
+    distinct:=bands.unique
+    return distinct.size == 1 ? distinct.first : (distinct.isEmpty ? "unknown" : "mixed")
+  }
+
+  private Str bandAt(Str:Obj? tariff, DateTime at)
+  {
+    band:=tariff["band"] as Str ?: "unknown"
+    if (tariff["mode"] != "flat") EnerCubixMath.maps(tariff["rules"]).each |rule| {if (matches(rule,at)) band=rule["band"] as Str ?: "unknown"}
+    EnerCubixMath.maps(tariff["exceptions"]).each |rule| {if (matches(rule,at)) band=rule["band"] as Str ?: "unknown"}
+    return ["sharp","peak","flat","valley"].contains(band) ? band : "unknown"
   }
 
   private Float? blockPrice(Str:Obj? tariff, Float use)

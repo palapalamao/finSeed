@@ -7,7 +7,7 @@ internal class EnerCubixEnergyFlow
     this.ctx=ctx; this.request=request; this.from=from; this.to=to; this.histories=histories
     dim=ctx.dimension ?: throw ArgErr("Invalid report dimension")
     category=request["categoryId"]?.toStr ?: ""
-    unit=ctx.unit("",category,"energy")
+    unit=ctx.unit("",category,request["metric"] as Str ?: "energy")
     cutoff:=EnerCubixKnownUsage.cutoff(request)
     knownCtx=EnerCubixContext.known(ctx,to < cutoff ? to : cutoff)
   }
@@ -64,8 +64,8 @@ internal class EnerCubixEnergyFlow
   ** Explicit objects ignore automatic inclusion. Group membership preserves it.
   static Str:Obj? scope(Str:Obj? req, EnerCubixDimension dim)
   {
-    if (!["metering","space","organization"].contains(req["dimension"]) || req["metric"] != "energy" || req["perArea"] == true)
-      throw ArgErr("能流图仅支持区间能耗，不支持费用或面积归一化")
+    if (!["metering","space","organization"].contains(req["dimension"]) || !["energy","cost"].contains(req["metric"]) || req["perArea"] == true)
+      throw ArgErr("能流图支持能耗或费用，不支持面积归一化")
     category:=req["categoryId"]?.toStr ?: ""
     cat:=dim.records.find |r| {r["id"] == category && r["kind"] == "category"}
     if (cat == null || (cat["unit"]?.toStr ?: "").isEmpty) throw ArgErr("能流图请选择有计量单位的能源类型")
@@ -240,7 +240,7 @@ internal class EnerCubixEnergyFlow
       else if (knownOverflow) balanceQuality="negativeBalance"
       strictComplete:=good(own) && readings.all |v| {good(v)} && [id].dup.addAll(members.map |m->Str| {m["id"].toStr}).all |meterId| {EnerCubixMath.maps(overview["rows"]).find |r| {r["id"] == meterId}?.get("complete") == true}
       row:=base(id,id,ctx.displayName(id),"meter",null,own,known)
-      row.setAll(["hasChildren":!members.isEmpty,"submeter":subtotal.value,"knownSubmeter":knownSubtotal.value,"knownSubmeterQuality":knownSubtotal.quality,"difference":difference,"balanceQuality":balanceQuality,"balanceMode":mode,"lossEligible":weightedSafe && strictComplete && EnerCubixBalance.eligible(mode,own,subtotal)])
+      row.setAll(["hasChildren":!members.isEmpty,"submeter":subtotal.value,"knownSubmeter":knownSubtotal.value,"knownSubmeterQuality":knownSubtotal.quality,"difference":difference,"balanceQuality":balanceQuality,"balanceMode":mode,"lossEligible":request["metric"] != "cost" && weightedSafe && strictComplete && EnerCubixBalance.eligible(mode,own,subtotal)])
       nodes.add(row)
       members.map |m->Str| {m["utilityId"] as Str ?: ""}.unique.sort.each |utility|
       {
@@ -393,7 +393,7 @@ internal class EnerCubixEnergyFlow
     if (difference != null && difference < 0f && difference.abs <= (value.value.abs+1f)*0.000000001f) difference=0f
     if (difference != null && difference < 0f) {quality="negativeBalance";ctx.warn(ctx.displayName(id)+": 分表合计大于总表，差额为负，请核对计量关系与数据")}
     row["submeter"]=subtotal.value;row["knownSubmeter"]=knownSubtotal.value;row["knownSubmeterQuality"]=knownSubtotal.quality;row["difference"]=difference;row["balanceQuality"]=quality
-    row["balanceMode"]=mode;row["lossEligible"]=!grouping && ["ok","estimated","derived","cleaned","corrected"].contains(quality) && EnerCubixBalance.eligible(mode,value,subtotal)
+    row["balanceMode"]=mode;row["lossEligible"]=request["metric"] != "cost" && !grouping && ["ok","estimated","derived","cleaned","corrected"].contains(quality) && EnerCubixBalance.eligible(mode,value,subtotal)
     children.each |child|
     {
       before:=nodes.size;build(child,occurrence,value,path.dup.add(id),grouping)
@@ -506,7 +506,7 @@ internal class EnerCubixEnergyFlow
     while (cursor < to)
     {
       end:=EnerCubixMath.floorHour(cursor)+1hr;if (end > to) end=to
-      pieces.add((known ? knownCtx : ctx).node(id,category,cursor,end));cursor=end
+      pieces.add((known ? knownCtx : ctx).node(id,category,cursor,end,request["metric"] as Str ?: "energy"));cursor=end
     }
     value:=known ? EnerCubixKnownUsage.combine(pieces) : EnerCubixValue.sum(pieces)
     if (!known && request["flowMode"] == "endUse" && value.value == null && value.quality == "missing" && knownUsage(id).quality == "na") value=EnerCubixValue(null,"na",value.sources)

@@ -1,5 +1,12 @@
 // Only service-owned messages are translated. Captured names and identifiers are preserved.
 export const serverMessages:Record<string,string>={
+ '无效费率时段分类':'Invalid tariff time-band category',
+ '部分时段未配置尖峰谷平分类，保留为未分类':'Some periods have no tariff time-band label and remain unclassified',
+ '尖、峰、谷时段不能重叠':'Sharp-peak, peak and valley hours must not overlap',
+ '能流图支持能耗或费用，不支持面积归一化':'Flow diagrams support energy or cost, without area normalization',
+ '预测使用每日能耗或费用':'Forecasts use daily energy or cost',
+ '费用预测不支持面积归一化':'Cost forecasts do not support area normalization',
+ '{0}: 尖峰谷平区间总量需要能耗计量数据':'{0}: Time-band totals require energy-meter data',
  '报表只读主能耗点，不再创建或重算派生归档':'Reports read only the primary energy point. Derived archives are no longer created or recalculated.',
  '所有表计必须指定主能耗点，缺测不会由归档或公式替代':'Every meter needs a primary energy point. Archives or formulas cannot replace missing data.',
  '虚拟表也必须选择已有主能耗点，请先在 FIN 中准备设备和点位':'Virtual meters also need an existing primary energy point. Prepare the equipment and point in FIN first.',

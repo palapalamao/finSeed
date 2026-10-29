@@ -3,7 +3,7 @@ import dayjs,{type Dayjs} from 'dayjs';
 import type {EChartsCoreOption} from 'echarts/core';
 import type {ReportResult} from './types';
 import {displaySeriesName,compactReportTime,numberText} from './reportDisplay';
-export const forecastModels:Record<string,string>={seasonalNaive:t("上周同期"),weekdayMean:t("近期同星期均值"),dampedTrend:t("周周期＋衰减趋势")};
+export const forecastModels:Record<string,string>={meterSum:t("逐表计费用模型汇总"),seasonalNaive:t("上周同期"),weekdayMean:t("近期同星期均值"),dampedTrend:t("周周期＋衰减趋势")};
 export const forecastStatuses:Record<string,string>={ok:t("可预测"),insufficientHistory:t("有效历史不足"),insufficientBacktest:t("回测范围不足"),invalidForecast:t("预测计算异常")};
 export function forecastRange(days:number,rolling:boolean,cutoff:Dayjs,now=dayjs()):[Dayjs,Dayjs]{const end=(rolling?now:cutoff).startOf('day');return [end.subtract(days,'day'),end];}
 export function forecastChartOptions(result:ReportResult,palette:string[]):EChartsCoreOption{

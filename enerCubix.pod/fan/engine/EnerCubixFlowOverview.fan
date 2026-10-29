@@ -101,7 +101,7 @@ internal const class EnerCubixFlowOverview
         else windows.add(["from":start.toIso,"to":end.toIso,"pointId":source])
       }
       values:=EnerCubixValue[,]; completeValues:=EnerCubixValue[,]; periods:=[Str:Obj?][,]
-      metric:=ownIds == null ? "energy" : (request["metric"] as Str ?: "energy")
+      metric:=request["metric"] as Str ?: "energy"
       category:=meter["categoryId"].toStr; unit:=strict.unit(id,category,metric)
       covered:=0f; lifetime:=0f
       windows.each |window|

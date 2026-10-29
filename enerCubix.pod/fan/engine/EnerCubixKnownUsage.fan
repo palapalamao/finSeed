@@ -2,7 +2,7 @@
 internal class EnerCubixKnownUsage
 {
   static Bool supported(Str kind, Str metric)
-  { metric != "cost" && !["trend","forecast","regression","cop","leak"].contains(kind) }
+  { !["trend","forecast","regression","cop","leak"].contains(kind) }
 
   static DateTime cutoff(Str:Obj? request)
   {

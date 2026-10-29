@@ -81,7 +81,8 @@ class EnerCubixForecastTest : Test
   {
     req:=[Str:Obj?]["kind":"forecast","nodeIds":["m"],"from":"2010-01-01T00:00:00Z","to":"2010-02-26T00:00:00Z","metric":"energy","period":"day","forecastDays":7]
     EnerCubixForecast.validate(req)
-    ["forecastDays":"invalid","metric":"cost","period":"hour","nodeIds":Str[,],"from":"2010-02-01T00:00:00Z"].each |v,k| {
+    EnerCubixForecast.validate(req.dup.set("metric","cost"))
+    ["forecastDays":"invalid","metric":"coal","period":"hour","nodeIds":Str[,],"from":"2010-02-01T00:00:00Z"].each |v,k| {
       bad:=req.dup.set(k,v); verifyErr(ArgErr#) { EnerCubixForecast.validate(bad) }
     }
   }

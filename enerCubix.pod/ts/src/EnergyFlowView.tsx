@@ -9,7 +9,7 @@ import './energyFlow.css';
 const formatter=new Intl.NumberFormat(locale,{maximumFractionDigits:2});
 const percentageFormatter=new Intl.NumberFormat(locale,{maximumFractionDigits:1});
 const valueText=(value:number|null)=>value!==null&&Number.isFinite(value)?formatter.format(value):'—';
-const nodeLabel=(node:EnergyFlowNode)=>node.nodeType==='summary'?t('能源汇总'):node.nodeType==='difference'?node.balanceMode==='consistency'?t('计算差额'):t('计量差额'):node.nodeType==='utility'&&!node.utilityId?t('未指定分项'):node.name;
+const nodeLabel=(node:EnergyFlowNode)=>node.nodeType==='summary'?t(node.unit==='元'?'费用汇总':'能源汇总'):node.nodeType==='difference'?node.unit==='元'?t('费用差额'):node.balanceMode==='consistency'?t('计算差额'):t('计量差额'):node.nodeType==='utility'&&!node.utilityId?t('未指定分项'):node.name;
 const percentageText=(value:number|null,percentage:number|null)=>value!==null&&value!==0&&percentage!==null&&Number.isFinite(percentage)?`${percentageFormatter.format(percentage)}%`:'—';
 const shareText=(node:EnergyFlowNode)=>percentageText(energyFlowNodeValue(node),node.percentage);
 const qualityText=(quality:string)=>({overlappingScopes:t('来源重叠'),accountingIncomplete:t('贡献范围无法完整解析'),comparisonUnavailable:t('贡献范围无法完整解析'),comparisonUnresolved:t('贡献范围无法完整解析'),comparisonNonAdditive:t('此公式不能按成员并集直接求和'),ok:t('完整'),good:t('完整'),derived:t('计算值'),estimated:t('估算值'),cleaned:t('已清洗'),corrected:t('回绕已修正'),substituted:t('含替代值'),filtered:t('有效用量小计'),na:'NA',missing:t('缺测'),negativeBalance:t('分表大于总表'),topologyIncomplete:t('计量关系不完整'),topologyUnknown:t('历史计量关系尚未确认'),invalid:t('无效数据'),negative:t('无效数据'),zero:t('零用量'),leaf:t('计量终点'),notApplicable:t('不适用')} as Record<string,string>)[quality]||t('其他质量（{0}）',quality);
