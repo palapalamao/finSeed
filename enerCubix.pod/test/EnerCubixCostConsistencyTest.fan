@@ -36,6 +36,45 @@ class EnerCubixCostConsistencyTest : Test
     verifyEq(bands.find |r| {r["band"] == "valley"}["knownValue"],20f)
   }
 
+  Void testVirtualCostFlowUsesTheSamePrimaryMeterSelection()
+  {
+    rs:=records.addAll([["id":"b","kind":"totalMeter","name":"B","spaceId":"s","organizationId":"o","categoryId":"e","pointId":"pb","autoSum":true,"meterOrigin":["type":"virtual","reason":"submeterSum"]],["id":"child","kind":"meter","name":"Child","spaceId":"s","organizationId":"o","categoryId":"e","pointId":"pc","meterParentId":"m","utilityId":"u"]])
+    rs.find |r| {r["id"] == "m"}.setAll(["kind":"totalMeter","autoSum":true,"meterOrigin":["type":"virtual","reason":"submeterSum"]])
+    rs.addAll([["id":"sa","kind":"space","name":"Floor A","parentId":"s"],["id":"sb","kind":"space","name":"Floor B","parentId":"s"]])
+    rs.findAll |r| {["m","child"].contains(r["id"])}.each |r| {r["spaceId"]="sa"}
+    rs.find |r| {r["id"] == "b"}["spaceId"]="sb"
+    hs:=histories.addAll([["pointId":"pb","mode":"interval","unit":"kWh","samples":[["ts":at(0),"value":2f]]],["pointId":"pc","mode":"interval","unit":"kWh","samples":[["ts":at(0),"value":1000f]]]])
+    ["metering","space","organization"].each |dimension|
+    {
+      ["relations","endUse"].each |mode|
+      {
+        ids:=mode == "endUse" || dimension == "metering" ? ["m","b","child","m"] : (dimension == "space" ? ["s","m"] : ["o","m"])
+        profile:=EnerCubixEngine.report(request("profile").set("dimension",dimension).set("nodeIds",ids),rs,hs)
+        verifyEq(EnerCubixMath.maps(((Map)profile["summary"])["selectionTotals"]).first["knownValue"],56f)
+        result:=EnerCubixEngine.report(request("energyFlow").set("dimension",dimension).set("flowMode",mode).set("nodeIds",ids).set("categoryId","e"),rs,hs)
+        total:=EnerCubixMath.maps(((Map)result["summary"])["selectionTotals"]).first
+        verifyEq(total["knownValue"],56f,"$mode $dimension total=$total")
+        verifyNull(total["value"])
+        verifyEq(total["meterIds"],["b","m"])
+        verifyEq(EnerCubixMath.strings(total["sourceIds"]).sort,["p","pb"])
+        accounting:=(Map)((Map)result["extra"])["energyFlowAccounting"]
+        verifyEq(accounting["unionValue"],56f)
+        verifyEq(accounting["basis"],"meterCostScope")
+      }
+    }
+    rs.addAll([["id":"sc","kind":"space","name":"Other floor"],["id":"standalone","kind":"meter","name":"Standalone","spaceId":"sc","categoryId":"e","pointId":"ps"]])
+    hs.add(["pointId":"ps","mode":"interval","unit":"kWh","samples":[["ts":at(0),"value":1f]]])
+    automatic:=EnerCubixEngine.report(request("energyFlow").set("dimension","metering").set("nodeIds",Str[,]).set("categoryId","e"),rs,hs)
+    automaticTotal:=EnerCubixMath.maps(((Map)automatic["summary"])["selectionTotals"]).first
+    verifyEq(automaticTotal["knownValue"],59f)
+    verifyEq(automaticTotal["meterIds"],["b","m","standalone"])
+    rs.find |r| {r["id"] == "m"}["pointId"]="missing-primary"
+    result:=EnerCubixEngine.report(request("energyFlow").set("dimension","metering").set("categoryId","e"),rs,hs)
+    total:=EnerCubixMath.maps(((Map)result["summary"])["selectionTotals"]).first
+    verifyNull(total["knownValue"])
+    verifyEq(total["sourceIds"],["missing-primary"])
+  }
+
   Void testCostForecastIsTheSumOfCanonicalMeterModels()
   {
     rs:=records.dup.add(["id":"b","kind":"meter","name":"B","spaceId":"s","organizationId":"o","categoryId":"e","pointId":"pb"])

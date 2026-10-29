@@ -151,6 +151,7 @@ internal class EnerCubixEnergyFlow
     if (accounting["basis"] == "unavailable") strictTotal=EnerCubixValue(null,accounting["unionQuality"].toStr)
     total:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strictTotal.value,"quality":strictTotal.quality,"meterIds":accounting["memberIds"],"sourceIds":strictTotal.sources]
     total.setAll(EnerCubixKnownUsage.fields(knownTotal))
+    if (request["metric"] == "cost") total=costScopeTotal(roots.dup.addAll(EnerCubixMath.maps(plan["unassigned"])),accounting)
     overview["selectionTotals"]=[total]
     rows:=[Str:Obj?][,];series:=[Str:Obj?][,]
     graphs.each |g|
@@ -171,7 +172,7 @@ internal class EnerCubixEnergyFlow
     }
     flow:=compatible(graphs,roots,plan,total)
     return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
-      "summary":["value":strictTotal.value,"unit":unit,"selectionTotals":[total]],
+      "summary":["value":total["value"],"unit":unit,"selectionTotals":[total]],
       "extra":costEvidence(["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]])]
   }
 
@@ -301,7 +302,9 @@ internal class EnerCubixEnergyFlow
     branchUnion:=EnerCubixKnownUsage.combine(owners.keys.sort.map |id->EnerCubixValue| {knownUsage(id)})
     accounting:=Str:Obj?["canAdd":safe,"basis":safe ? "physicalBoundary" : "unavailable","memberIds":owners.keys.sort,"sharedMemberIds":shared,"sharedMembers":shared.map |id->[Str:Obj?]| {["meterId":id,"objectIds":owners[id]]},"unionValue":safe ? branchUnion.value : null,"unionQuality":safe ? branchUnion.quality : accountingQuality]
     total:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strictTotal.value,"quality":strictTotal.quality,"meterIds":roots.map |r->Str| {r["id"].toStr},"sourceIds":strictTotal.sources]
-    total.setAll(EnerCubixKnownUsage.fields(knownTotal));overview["selectionTotals"]=[total]
+    total.setAll(EnerCubixKnownUsage.fields(knownTotal))
+    if (request["metric"] == "cost") total=costScopeTotal(roots,accounting)
+    overview["selectionTotals"]=[total]
     rows:=[Str:Obj?][,];series:=[Str:Obj?][,]
     graphs.each |g|
     {
@@ -314,7 +317,7 @@ internal class EnerCubixEnergyFlow
       }
     }
     return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
-      "summary":["value":strictTotal.value,"unit":unit,"selectionTotals":[total]],
+      "summary":["value":total["value"],"unit":unit,"selectionTotals":[total]],
       "extra":costEvidence(["energyFlow":compatible(graphs,roots,plan,total).set("basis","endUse"),"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]])]
   }
 
@@ -325,6 +328,26 @@ internal class EnerCubixEnergyFlow
     extra["tariffSnapshot"]=tariffs.keys.sort.map |id->[Str:Obj?]| {tariffs[id]}
     extra["costBasis"]="closedIntervalsAtStartTariff"
     return extra
+  }
+
+  ** Cost scope uses the same primary-meter frontier as other reports. Graph
+  ** contribution references cannot replace, invalidate, or add to these readings.
+  private Str:Obj? costScopeTotal([Str:Obj?][] roots,Str:Obj? accounting)
+  {
+    candidates:=roots.map |root->[Str:Obj?][]| {ctx.scopeMeters(root["id"].toStr,category)}.flatten
+    meters:=ctx.selectionMeters(candidates)
+    ids:=meters.map |m->Str| {m["id"].toStr}
+    strict:=EnerCubixValue.sum(ids.map |id->EnerCubixValue| {usage(id)})
+    known:=EnerCubixKnownUsage.combine(ids.map |id->EnerCubixValue| {knownUsage(id)})
+    quality:=dim.quality(candidates.unique)
+    if (quality != null)
+    {
+      strict=EnerCubixValue(null,quality,strict.sources)
+      if (quality != "accountingIncomplete") known=EnerCubixValue(null,quality,known.sources)
+    }
+    accounting.setAll(["basis":"meterCostScope","memberIds":ids,"canAdd":quality == null && candidates.size == meters.size,"unionValue":known.value,"unionQuality":known.quality])
+    total:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strict.value,"quality":strict.quality,"scopeQuality":quality,"meterIds":ids,"sourceIds":strict.sources]
+    return total.setAll(EnerCubixKnownUsage.fields(known))
   }
 
   private Void build(Str id,Str? parent,EnerCubixValue? parentValue,Str[] path,Bool grouping)

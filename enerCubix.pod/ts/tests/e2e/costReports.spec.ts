@@ -27,7 +27,7 @@ function costResult(request:ReportRequest):ReportResult{
  if(request.kind==='energyFlow'){
   const node={id:'meter1',nodeId:'meter1',name:'测试分表',nodeType:'meter',categoryId:'cat1',unit:'元',value:null,knownValue:12,knownQuality:'filtered',quality:'incompleteInterval',sourceIds:['point1'],submeter:null,difference:null,balanceQuality:'missing',hasChildren:false,percentage:null,lossEligible:false};
   const graph={graphId:'meter1',objectId:'meter1',basis:'metering',categoryId:'cat1',unit:'元',focusId:'meter1',rootIds:['meter1'],nodes:[node],links:[],unassigned:[],contributionMemberIds:['meter1'],sharedMemberIds:[],additive:true};
-  result.extra={...result.extra,energyFlow:graph,energyFlowGraphs:[graph],energyFlowAccounting:{basis:'physicalBoundary',canAdd:true,memberIds:['meter1'],sharedMemberIds:[],sharedMembers:[],unionValue:12,unionQuality:'filtered'}};
+  result.extra={...result.extra,energyFlow:graph,energyFlowGraphs:[graph],energyFlowAccounting:{basis:'meterCostScope',canAdd:true,memberIds:['meter1'],sharedMemberIds:[],sharedMembers:[],unionValue:12,unionQuality:'filtered'}};
  }
  return result;
 }
@@ -76,7 +76,20 @@ for(const language of ['zh-CN','en-US'])for(const width of [1440,390])test.descr
     await expect(page.locator('.load-band-legend')).toContainText(zh?'尖时':'Sharp peak');
     expect(await page.locator('body').evaluate(body=>body.scrollWidth<=innerWidth+1)).toBe(true);
    }
-   if(view==='energyFlow')await expect(page.locator('.energy-flow-view').first()).toContainText('12');
+   if(view==='energyFlow'){
+    await expect(page.locator('.energy-flow-view').first()).toContainText('12');
+    await expect(page.locator('.energy-flow-accounting')).toContainText(zh?'范围已有费用合计（已去重）':'Available cost in scope (deduplicated)');
+    await expect(page.locator('.energy-flow-accounting')).toContainText(zh?'分表和公式引用不重复计入':'Submeters and formula references are not added again');
+    expect(await page.locator('body').evaluate(body=>body.scrollWidth<=innerWidth+1)).toBe(true);
+    await page.getByRole('button',{name:zh?'导出当前报表':'Export current report'}).click();
+    const item=page.getByRole('menuitem',{name:zh?'Excel 工作簿 (.xlsx)':'Excel workbook (.xlsx)',exact:true});
+    await expect(item).toHaveAttribute('data-menu-id',/^rc-menu-uuid-/);
+    const download=page.waitForEvent('download');await item.click();
+    const file=await (await download).path(),zip=await JSZip.loadAsync(await readFile(file!));
+    const text=await zip.file('xl/sharedStrings.xml')!.async('string');
+    expect(text).toContain(zh?'主能耗点费用范围':'Primary energy-point cost scope');
+    expect(text).not.toContain('meterCostScope');
+   }
   }
  });
  test('saves explicit four-band tariff labels without changing the price',async({page})=>{
