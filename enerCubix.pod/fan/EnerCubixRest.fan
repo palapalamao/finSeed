@@ -28,7 +28,7 @@ const class EnerCubixRest : WebMod
       Obj? data
       switch (route)
       {
-        case "session": data=["locale":hx::HxCoreFuncs.context.get("locale")]
+        case "session": data=["locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")

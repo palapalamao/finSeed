@@ -1,6 +1,8 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+ '跟随 FIN 用户语言':'Follow FIN user language',
+ '无法保存语言设置，请检查浏览器的站点存储权限。':'Unable to save the language preference. Check this site’s browser storage permissions.',
  '无法读取 FIN 用户语言，请重新打开应用。':'Unable to read your FIN user language. Reopen the application.',
  "数据提示（{0} 条）":"Data notices ({0})",
  "数据清洗与覆盖情况（{0} 项）":"Data cleaning and coverage ({0} entries)",

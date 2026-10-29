@@ -11,6 +11,7 @@
 .primary-navigation .nav-active{color:#137f7a;font-weight:600;background:#f3faf9}
 .primary-navigation .nav-active:after{content:'';position:absolute;bottom:0;left:10px;right:10px;height:3px;background:#137f7a}
 .header-tools{flex-shrink:0}
+.language-switcher{display:inline-flex;align-items:center;gap:6px;padding-inline:8px}
 .project-context{display:block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 10px;border:1px solid #e0e7eb;border-radius:5px;color:#556875;font-size:12px}
 .user-context{display:flex;gap:6px;align-items:center;font-size:12px;white-space:nowrap}
 .user-context>span:last-child{max-width:100px;overflow:hidden;text-overflow:ellipsis}

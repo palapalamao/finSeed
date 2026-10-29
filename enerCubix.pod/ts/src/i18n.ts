@@ -10,7 +10,11 @@ export const languageDefinitions={
  'en-US':{label:'English',dayjsLocale:'en',messages:englishMessages,serverMessages}
 };
 export type Locale=keyof typeof languageDefinitions;
-/** FIN's authenticated request locale is the only language source. */
+export type LanguagePreference=Locale|'auto';
+export let languagePreference:LanguagePreference='auto';
+let preferenceKey:string|undefined;
+const isLocale=(value:unknown):value is Locale=>typeof value==='string'&&Object.hasOwn(languageDefinitions,value);
+/** FIN's authenticated request locale is the default language source. */
 export function resolveFinLocale(language:string):Locale{
  const preferred=language.trim().toLowerCase().replaceAll('_','-');
  return (Object.keys(languageDefinitions) as Locale[]).find(value=>value.split('-')[0]===preferred.split('-')[0])||'en-US';
@@ -45,8 +49,19 @@ export function serverMessage(source:string):string{
  return source;
 }
 
-export function initializeLocale(finLanguage:string){
- locale=resolveFinLocale(finLanguage);
+export function changeLanguage(preference:LanguagePreference){
+ if(!preferenceKey||preference===languagePreference||(preference!=='auto'&&!isLocale(preference)))return;
+ try{
+  if(preference==='auto')localStorage.removeItem(preferenceKey);else localStorage.setItem(preferenceKey,preference);
+ }catch{throw new Error(t('无法保存语言设置，请检查浏览器的站点存储权限。'));}
+ location.reload();
+}
+
+export function initializeLocale(finLanguage:string,username?:string){
+ preferenceKey=username?'enerCubix.locale.v2.'+encodeURIComponent(username):undefined;
+ languagePreference='auto';
+ try{const saved=preferenceKey?localStorage.getItem(preferenceKey):null;if(isLocale(saved))languagePreference=saved;}catch{/* Keep the authenticated FIN language when storage is unavailable. */}
+ locale=languagePreference==='auto'?resolveFinLocale(finLanguage):languagePreference;
  activeLanguage=languageDefinitions[locale];
  dayjs.locale(activeLanguage.dayjsLocale);
  if(typeof document!=='undefined'){

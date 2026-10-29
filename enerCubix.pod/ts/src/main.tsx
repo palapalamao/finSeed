@@ -2,14 +2,15 @@ import '@ant-design/v5-patch-for-react-19';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {initializeLocale,t} from './i18n';
-import {loadFinLocale} from './session';
+import {loadFinSession} from './session';
 import './styles.css';
 import './enercubix.css';
 async function bootstrap(){
  const root=document.getElementById('root')!;
  root.textContent='…';
  try{
-  initializeLocale(await loadFinLocale(location));
+  const session=await loadFinSession(location);
+  initializeLocale(session.locale,session.username);
   const {App}=await import('./App');
   ReactDOM.createRoot(root).render(<React.StrictMode><App/></React.StrictMode>);
  }catch(error){

@@ -97,7 +97,7 @@ for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.descr
   await expect(page.getByRole('heading',{name:zh?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
   await expect(page).toHaveTitle(zh?'能源魔方 · 楼宇能源分析':'EnergyCubix · Building Energy Analytics');
   await expect(page.locator('html')).toHaveAttribute('lang',zh?'zh-CN':'en-US');
-  await expect(page.locator('.language-switcher')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:zh?'切换语言':'Switch language',exact:true})).toBeVisible();
   state.userLocale=zh?'en':'zh';
   await page.reload();
   await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
@@ -110,7 +110,7 @@ for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.descr
 test('waits for FIN locale before mounting UI modules and permits retry after a failed bootstrap',async({page})=>{
  await installTransport(page,{userLocale:'zh'});
  let release:()=>void=()=>{};const pending=new Promise<void>(resolve=>release=resolve);
- await page.route('**/api/testproject/ext/enerCubix/v1/session',async route=>{await pending;await route.fulfill({json:{ok:true,data:{locale:'zh'}}});});
+ await page.route('**/api/testproject/ext/enerCubix/v1/session',async route=>{await pending;await route.fulfill({json:{ok:true,data:{locale:'zh',username:'test-user'}}});});
  await page.goto('/#/profile?project=testproject');
  await expect(page.locator('.app-layout')).toHaveCount(0);
  release();
@@ -124,6 +124,61 @@ test('waits for FIN locale before mounting UI modules and permits retry after a 
  await page.unroute('**/api/testproject/ext/enerCubix/v1/session',invalid);
  await page.getByRole('button',{name:'Reconnect',exact:true}).click();
  await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
+});
+
+for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.describe(`manual language ${finLanguage} ${mobile?'mobile':'desktop'}`,()=>{
+ test.use({viewport:mobile?{width:390,height:844}:{width:1440,height:1000}});
+ test('switches both ways, remembers only this FIN user and restores the FIN language',async({page})=>{
+  const zh=finLanguage==='zh';const state=await installTransport(page,{userLocale:finLanguage,username:'alice'});
+  await openView(page,'profile');
+  const choose=async(english:boolean,label:string)=>{
+   await page.getByRole('button',{name:english?'Switch language':'切换语言',exact:true}).click();
+   const item=page.getByRole('menuitem',{name:label,exact:true});
+   // rc-menu assigns item IDs after its client-side initialization effect.
+   await expect(item).toHaveAttribute('data-menu-id',/^rc-menu-uuid-/);
+   await Promise.all([page.waitForEvent('load',{timeout:10000}),item.click()]);
+  };
+  await choose(!zh,zh?'English':'中文');
+  await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
+  await expect(page).toHaveTitle(zh?'EnergyCubix · Building Energy Analytics':'能源魔方 · 楼宇能源分析');
+  await expect(page).toHaveURL(/#\/profile\?project=testproject$/);
+  await page.reload();
+  await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
+  state.username='bob';await page.reload();
+  await expect(page.getByRole('heading',{name:zh?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
+  state.username='alice';await page.reload();
+  await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
+  await choose(zh,zh?'中文':'English');
+  await expect(page.getByRole('heading',{name:zh?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
+  await choose(!zh,zh?'跟随 FIN 用户语言':'Follow FIN user language');
+  await expect(page.locator('html')).toHaveAttribute('lang',zh?'zh-CN':'en-US');
+  state.userLocale=zh?'en':'zh';await page.reload();
+  await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
+  if(mobile)expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+ });
+});
+
+test('manual English applies to date controls, charts and Excel exports while preserving business names',async({page})=>{
+ await installTransport(page,{userLocale:'zh',username:'alice'});await openView(page,'profile');
+ await page.getByRole('button',{name:'切换语言',exact:true}).click();await page.getByRole('menuitem',{name:'English',exact:true}).click();
+ await page.getByPlaceholder('Start date',{exact:true}).click();
+ await expect(page.locator('.ant-picker-dropdown:visible').getByRole('button',{name:'Choose a month',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await checkNode(page);await page.getByRole('button',{name:/Query$/}).click();
+ await expect(page.locator('.report-chart canvas').first()).toBeVisible();
+ await page.getByRole('button',{name:'Export current report'}).click();
+ const pending=page.waitForEvent('download');await page.getByRole('menuitem',{name:'Excel workbook (.xlsx)'}).click();
+ const download=await pending;expect(download.suggestedFilename()).toContain('Consumption profile');
+ const zip=await JSZip.loadAsync(await readFile((await download.path())!));
+ const shared=await zip.file('xl/sharedStrings.xml')!.async('string');
+ expect(shared).toContain('Source points');expect(shared).toContain('测试分表');expect(shared).not.toContain('统计明细');
+});
+
+test('reports blocked preference storage and keeps the current working interface',async({page})=>{
+ await page.addInitScript(()=>{Object.defineProperty(window,'localStorage',{configurable:true,get:()=>{throw new Error('blocked');}});});
+ await installTransport(page,{userLocale:'en',username:'alice'});await openView(page,'profile');
+ await page.getByRole('button',{name:'Switch language',exact:true}).click();await page.getByRole('menuitem',{name:'中文',exact:true}).click();
+ await expect(page.getByText('Unable to save the language preference. Check this site’s browser storage permissions.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Consumption profile',exact:true})).toBeVisible();
 });
 
 test('a native login challenge during locale startup requests sign-in without accessing business data',async({page})=>{
