@@ -1297,7 +1297,7 @@ export const englishMessages:Record<string,string> = {
   "概况图表类型": "Overview chart type",
   "柱状图": "Bar chart",
   "折线图": "Line chart",
-  "参考曲线独立展示，不参与用量合计。": "Reference curves are displayed separately and excluded from consumption totals.",
+  "参考曲线以折线叠加显示，使用右侧独立坐标轴，不参与用量合计。": "Reference lines overlay the consumption chart on independent right axes and are excluded from consumption totals.",
   "空白柱位或折线断点表示缺测；均值与最高用量仅在数据完整时显示。": "Blank bars or line gaps indicate missing data. Means and peak consumption appear only when data is complete.",
   "均用量": "Average consumption",
   "最高": "Peak",

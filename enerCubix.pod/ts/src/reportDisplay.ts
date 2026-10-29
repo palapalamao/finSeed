@@ -120,10 +120,19 @@ export function leakGroups(snapshot:ReportSnapshot){
  const {result}=snapshot;
  return result.series.map(series=>{const node=series.nodeId||series.id.split('|')[0];const matches=(row:Record<string,unknown>)=>(row.nodeId===node||!row.nodeId&&result.series.length===1)&&(!row.categoryId||row.categoryId===series.categoryId)&&(!row.unit||row.unit===series.unit);const branches=(Array.isArray(result.extra?.leakBranches)?result.extra.leakBranches:[]) as Record<string,unknown>[];const totals=(Array.isArray(result.extra?.leakTotals)?result.extra.leakTotals:[]) as Record<string,unknown>[];return {series,total:totals.find(matches),result:{...result,series:[series],rows:result.rows.filter(matches),extra:{...result.extra,leakBranches:branches.filter(matches)}}};});
 }
+export function isProfileReference(series:Series,referenceIds:readonly string[]=[]){
+ return series.id.endsWith('|reference')||referenceIds.includes(series.nodeId||series.id.split('|')[0]);
+}
 export function profileGroups(snapshot:ReportSnapshot){
  const groups=new Map<string,{title:string;series:Series[]}>();
- for(const series of snapshot.result.series){const node=series.nodeId||series.id.split('|')[0];const reference=series.id.endsWith('|reference')||snapshot.request.referenceIds?.includes(node);const role=reference?t("参考曲线"):snapshot.result.kind==='primary'?t("折算对比"):t("用量对比");const kind=snapshot.display?.meterKinds[node];const category=series.categoryId?referenceName(snapshot,series.categoryId,'categoryId'):'';const key=`${series.categoryId||''}|${series.unit}|${role}`;const group=groups.get(key)||{title:[category,role,t(series.unit)].filter(Boolean).join(' · '),series:[]};group.series.push(!reference&&(kind==='totalMeter'||kind==='meter')?{...series,name:`${series.name}（${kind==='totalMeter'?(snapshot.display?.meterOrigins?.[node]&&snapshot.display.meterOrigins[node].type!=='unconfirmed'?meterOriginLabel(snapshot.display.meterOrigins[node]):t("总表")):t("分表")}）`}:series);groups.set(key,group);}
- return [...groups.values()];
+ for(const series of snapshot.result.series){const node=series.nodeId||series.id.split('|')[0];const reference=isProfileReference(series,snapshot.request.referenceIds);const role=reference?t("参考曲线"):snapshot.result.kind==='primary'?t("折算对比"):t("用量对比");const kind=snapshot.display?.meterKinds[node];const category=series.categoryId?referenceName(snapshot,series.categoryId,'categoryId'):'';const key=`${series.categoryId||''}|${series.unit}|${role}`;const group=groups.get(key)||{title:[category,role,t(series.unit)].filter(Boolean).join(' · '),series:[]};group.series.push(!reference&&(kind==='totalMeter'||kind==='meter')?{...series,name:`${series.name}（${kind==='totalMeter'?(snapshot.display?.meterOrigins?.[node]&&snapshot.display.meterOrigins[node].type!=='unconfirmed'?meterOriginLabel(snapshot.display.meterOrigins[node]):t("总表")):t("分表")}）`}:series);groups.set(key,group);}
+ const result=[...groups.values()];
+ if(snapshot.result.kind!=='profile')return result;
+ const references=snapshot.result.series.filter(series=>isProfileReference(series,snapshot.request.referenceIds));
+ const consumption=result.filter(group=>!isProfileReference(group.series[0],snapshot.request.referenceIds));
+ // Like SEED, append the selected reference lines to each consumption chart.
+ // Retain reference-only results when no consumption series was returned.
+ return consumption.length?consumption.map(group=>({...group,series:[...group.series,...references]})):result;
 }
 export function profileStats(snapshot:ReportSnapshot,series:Series){
  const {from,to}=snapshot.result;const period=snapshot.request.period;const expectedTimes=new Set<number>();

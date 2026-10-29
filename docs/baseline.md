@@ -46,6 +46,8 @@
 
 源码补证：`seed-windows/SpiderService/EnergyAlert.cs` 读取小时用量并检查组及表阈值，`MySQLDAL/seed_energy_db_tbl_energy_alert.cs` 查询 `tbl_space_hourly` 的 `amount`，因此报警按小时检查。`seed-web-app/js/views/dashboard/dashboard3d-view.js` 按返回项目创建轮播卡、默认 20 秒；`settings/DashboardConfig/dashboardContent-view.js` 保存显示分类。
 
+参考曲线补证（2026-10-30）：上述固定 Web 提交的 `seed-web-app/js/views/energy/profile/profile-chart-view.js`，`generateWidget` 先创建各能源图，再调用 `addSeriesWithAxis`；后者第 218–239 行通过 `chart.addAxis({opposite:true})` 和 `chart.addSeries({type:'line',yAxis:series.name})` 将参考点折线叠加至原图的右侧独立轴。该文件 SHA-256 为 `050F4D88F94A1011EED70482E7A3625DE74202C42354615B35BE0228FAB243E8`。EnerCubix 的 profile 据此将参考曲线加入每个分类／单位的用量图，保留缺测断点和独立轴，不另列参考图或将其计入用量卡片；此处为源码依据，不代表旧 SEED 或新 FIN 实机验收。
+
 分项补证：`seed-windows/SpiderService/CalculateHourly.cs` 的 `CaculateSpaceUtilityHour` 先处理有分项属性的总表，再计算其他分项。FIN Seed 按同分项总表优先，跳过根本不含所查分项的子组；匹配分项而历史缺失的对象仍保留缺测。此规则有独立 144/216/240 预期值测试，普通能耗与泄漏规则保持独立。
 
 差异边界：FIN 原生登录、用户、角色、密码、采集器和原始历史库替代旧独立底座；旧登录宣传图、主题设置及独立账户管理不实现。旧的异常原始历史改写行为不迁移；FIN Seed 保留原始历史，以空值、质量和来源表达异常。
