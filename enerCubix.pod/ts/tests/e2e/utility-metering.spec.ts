@@ -13,8 +13,8 @@ function records():EnerCubixRecord[]{return [
 for(const locale of ['zh-CN','en-US'] as const)for(const mobile of [false,true]){
  test(`utility metering selection and shallow object trees ${locale} ${mobile?'mobile':'desktop'}`,async({page})=>{
   await page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});
-  await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),locale);
-  const state=await installTransport(page,{records:records()});await openView(page,'utility');
+
+  const state=await installTransport(page,{userLocale:locale,records:records()});await openView(page,'utility');
   const metering=page.getByRole('radio',{name:locale==='zh-CN'?'计量':'Metering',exact:true});
   await expect(metering).toBeEnabled();await page.locator('label').filter({has:metering}).click();await openObjects(page);
   const titles=page.locator('.object-panel .ant-tree-title');

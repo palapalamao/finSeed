@@ -13,7 +13,7 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview"].contains(route)
+      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
@@ -28,6 +28,7 @@ const class EnerCubixRest : WebMod
       Obj? data
       switch (route)
       {
+        case "session": data=["locale":hx::HxCoreFuncs.context.get("locale")]
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")

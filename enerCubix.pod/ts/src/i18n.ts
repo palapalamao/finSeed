@@ -10,47 +10,22 @@ export const languageDefinitions={
  'en-US':{label:'English',dayjsLocale:'en',messages:englishMessages,serverMessages}
 };
 export type Locale=keyof typeof languageDefinitions;
-export type LanguagePreference=Locale|'auto';
-export const localeStorageKey='enerCubix.locale.v1';
-type BrowserLanguage={language?:string;languages?:readonly string[]};
-const isLocale=(value:unknown):value is Locale=>typeof value==='string'&&Object.hasOwn(languageDefinitions,value);
-
-function preferenceStorage():Storage|undefined{
- try{return typeof localStorage==='undefined'?undefined:localStorage;}catch{return undefined;}
-}
-
-export function readLanguagePreference(storage:Pick<Storage,'getItem'>|undefined=preferenceStorage(),search=typeof location==='undefined'?'':location.search):LanguagePreference{
- const override=new URLSearchParams(search).get('enerCubixLang');
- if(override==='auto'||isLocale(override))return override;
- try{const saved=storage?.getItem(localeStorageKey);return isLocale(saved)?saved:'auto';}catch{return 'auto';}
-}
-
-/** Browsers normally inherit the OS language; the first browser preference wins. */
-export function detectLocale(browser:BrowserLanguage={},systemLanguage=''):Locale{
- const preferred=(browser.language?.trim()||browser.languages?.find(value=>value.trim())||systemLanguage).toLowerCase().replaceAll('_','-');
+/** FIN's authenticated request locale is the only language source. */
+export function resolveFinLocale(language:string):Locale{
+ const preferred=language.trim().toLowerCase().replaceAll('_','-');
  return (Object.keys(languageDefinitions) as Locale[]).find(value=>value.split('-')[0]===preferred.split('-')[0])||'en-US';
 }
 
-// Resolve once per page load so module-level labels, controls and exports agree.
-export const languagePreference=readLanguagePreference();
-export const locale=languagePreference==='auto'?detectLocale(typeof navigator==='undefined'?{}:navigator,Intl.DateTimeFormat().resolvedOptions().locale):languagePreference;
-const activeLanguage=languageDefinitions[locale];
-dayjs.locale(activeLanguage.dayjsLocale);
-
-export function changeLanguage(preference:LanguagePreference){
- if(preference===languagePreference)return;
- const next=new URL(location.href);let saved=false;
- try{const storage=preferenceStorage();if(storage){if(preference==='auto')storage.removeItem(localeStorageKey);else storage.setItem(localeStorageKey,preference);saved=true;}}catch{/* The URL retains this tab's selection if browser storage is blocked. */}
- if(saved)next.searchParams.delete('enerCubixLang');else next.searchParams.set('enerCubixLang',preference);
- if(next.href===location.href)location.reload();else location.replace(next.href);
-}
+// main.tsx initializes this before importing any modules with translated labels.
+export let locale:Locale='en-US';
+let activeLanguage=languageDefinitions[locale];
 
 export function t(source:string,...values:unknown[]):string{
  const message=locale==='zh-CN'?source:activeLanguage.messages[source]??activeLanguage.serverMessages[source]??englishMessages[source]??serverMessages[source]??source;
  return message.replace(/\{(\d+)\}/g,(token,index:string)=>Number(index)<values.length?String(values[Number(index)]):token);
 }
 
-const serviceMessages={...serverMessages,...activeLanguage.serverMessages};
+const serviceMessages=serverMessages;
 const serverPatterns=Object.entries(serviceMessages).filter(([source])=>/\{\d+\}/.test(source)).map(([source,message])=>({
  pattern:new RegExp('^'+source.split(/\{\d+\}/).map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('(.+?)')+'$'),message,
  translateReason:source.startsWith('{0}：{1}，至少需要')
@@ -70,7 +45,12 @@ export function serverMessage(source:string):string{
  return source;
 }
 
-export function initializeLocale(){
- document.documentElement.lang=locale;
- document.title=t('能源魔方 · 楼宇能源分析');
+export function initializeLocale(finLanguage:string){
+ locale=resolveFinLocale(finLanguage);
+ activeLanguage=languageDefinitions[locale];
+ dayjs.locale(activeLanguage.dayjsLocale);
+ if(typeof document!=='undefined'){
+  document.documentElement.lang=locale;
+  document.title=t('能源魔方 · 楼宇能源分析');
+ }
 }

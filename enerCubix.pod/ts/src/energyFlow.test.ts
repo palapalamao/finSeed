@@ -160,10 +160,10 @@ describe('energy flow rendered details',()=>{
   expect(html.match(/data-flow-row="zero"[\s\S]*?<\/tr>/)?.[0]).not.toContain('0%');
  });
  it('localizes system labels in English while preserving real Chinese meter names',async()=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language:'en-US'});
+  vi.resetModules();(await import('./i18n')).initializeLocale('en-US');
   try{const {EnergyFlowView:EnglishView}=await import('./EnergyFlowView');
    const html=renderToStaticMarkup(createElement(EnglishView,{snapshot:snapshot(),onFocus:()=>{},exporting:false}));
    expect(html).toContain('Utility summary');expect(html).toContain('Metering difference');expect(html).toContain('>能源汇总');expect(html).not.toContain('返回概览');
-  }finally{vi.stubGlobal('navigator',{language:'zh-CN'});vi.resetModules();}
+  }finally{(await import('./i18n')).initializeLocale('zh-CN');vi.resetModules();}
  });
 });

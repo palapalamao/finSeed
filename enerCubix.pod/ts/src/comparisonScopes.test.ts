@@ -14,7 +14,7 @@ describe('readonly comparison scope API',()=>{
 });
 describe('comparison scope reasons',()=>{
  it.each(['zh-CN','en-US'])('presents the frozen physical union without summing master groups in %s',async language=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language});
+  vi.resetModules();(await import('./i18n')).initializeLocale(language);
   const {readableReportValue}=await import('./reportDisplay');
   const source:ReportSnapshot={title:'Balance',project:'test',generatedAt:'2026-10-26',request:{kind:'leak',nodeIds:['master'],from:'2026-10-01',to:'2026-10-02',period:'day',metric:'energy',perArea:false},result:{kind:'leak',from:'2026-10-01',to:'2026-10-02',period:'day',series:[],rows:[],warnings:[],summary:{},extra:{comparisonUnion:[{categoryId:'electric',unit:'kWh',meterIds:['a'],sourceIds:['p'],value:17.25,knownValue:17.25,quality:'ok',knownQuality:'ok',scopeQuality:'ok',basis:'physicalBoundary',completeSelection:false}]}},display:{objects:{electric:'Electric',a:'Frozen branch A'},sources:{p:'Frozen source'},meterKinds:{}}};
   const before=structuredClone(source),text=JSON.stringify(readableReportValue(source,'',source.result.extra));
@@ -22,7 +22,7 @@ describe('comparison scope reasons',()=>{
   expect(text).toContain('Frozen branch A');expect(text).toContain('Frozen source');expect(text).toContain('17.25');expect(text).not.toContain('completeSelection');expect(source).toEqual(before);
  });
  it.each(['zh-CN','en-US'])('localizes boundary quality and generic validation errors in %s',async language=>{
-  vi.resetModules();vi.stubGlobal('navigator',{language});
+  vi.resetModules();(await import('./i18n')).initializeLocale(language);
   const[{serverMessage},{qualityLabel}]=await Promise.all([import('./i18n'),import('./reportQuality')]);
   for(const code of ['comparisonEmpty','comparisonPartial','comparisonUnavailable','comparisonUnresolved','comparisonNonAdditive','comparisonMissingSource','comparisonCycle','comparisonIncompatible'])expect(qualityLabel(code)).not.toContain(code);
   for(const code of ['comparisonInvalidBasis','comparisonMasterRequired','comparisonInvalidMembers'])expect(serverMessage(code)).not.toContain(code);

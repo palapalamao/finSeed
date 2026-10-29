@@ -3,10 +3,10 @@ import {installTransport,openView,testRecords} from './fixtures';
 
 for(const [language,mobile]of [['zh-CN',false],['en-US',false],['zh-CN',true]] as const)test(`report explains missing readings in ${language}${mobile?' on mobile':''}`,async({page})=>{
  await page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});
- await page.addInitScript(locale=>localStorage.setItem('enerCubix.locale.v1',locale),language);
+
  await page.clock.setFixedTime(new Date('2026-10-24T02:10:57+08:00'));
  const request={kind:'profile',nodeIds:['master1'],from:'2026-10-24T00:00:00+08:00',to:'2026-10-24T03:00:00+08:00',period:'hour',metric:'energy',perArea:false};
- await installTransport(page,{records:[...testRecords(),{id:'quality-template',kind:'template',name:'缺测提示测试',request}]});
+ await installTransport(page,{userLocale:language,records:[...testRecords(),{id:'quality-template',kind:'template',name:'缺测提示测试',request}]});
  await page.route('**/api/testproject/ext/enerCubix/v1/report',async route=>{
   const points=[0,1,2].map(hour=>({ts:`2026-10-24T0${hour}:00:00+08:00`,value:null,quality:'missing',sourceIds:['point2']}));
   await route.fulfill({json:{ok:true,data:{kind:'profile',from:request.from,to:request.to,period:'hour',series:[{id:'master1',nodeId:'master1',name:'测试总表',unit:'kWh',points}],rows:points,summary:{totals:[{id:'master1',name:'测试总表',value:null,quality:'missing'}]},warnings:['测试总表 : missing','测试总表: missing']}}});

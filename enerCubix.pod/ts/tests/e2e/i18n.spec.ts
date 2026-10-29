@@ -7,7 +7,7 @@ for(const language of ['zh-CN','zh-TW','en-US','de-DE']){
  test.describe(language,()=>{
   test.use({locale:language});
   const chinese=language.startsWith('zh');
-  test('automatically localizes navigation, query and report while retaining project names',async({page})=>{
+  test('uses FIN user language for navigation, query and report while retaining project names',async({page})=>{
    const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
    const state=await installTransport(page);
    await openView(page,'profile');
@@ -81,46 +81,47 @@ test.describe('English controls and exports',()=>{
  });
  test('localizes a known service error and handles a missing project',async({page})=>{
   await installTransport(page,{status:401});await page.goto('/#/dashboard?project=testproject');
-  await expect(page.getByText('Your FIN session has expired. Sign in to FIN again.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Your FIN session is no longer valid. Sign in to FIN again.',{exact:true})).toBeVisible();
   await page.goto('/');
   await expect(page.getByText('No FIN project specified',{exact:true})).toBeVisible();
-  await expect(page.getByRole('navigation').getByRole('button',{name:'Overview',exact:true})).toBeVisible();
  });
 });
 
-test.describe('manual language selection',()=>{
- test.use({locale:'zh-CN'});
- test('switches both ways, persists across reloads and restores automatic language',async({page})=>{
-  await installTransport(page);await openView(page,'profile');
-  await page.getByRole('button',{name:'切换语言',exact:true}).click();
-  await page.getByRole('menuitem',{name:'English',exact:true}).click();
-  await expect(page.locator('html')).toHaveAttribute('lang','en-US');
-  await expect(page.getByRole('heading',{name:'Consumption profile',exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/#\/profile\?project=testproject$/);
+for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.describe(`FIN language ${finLanguage} ${mobile?'mobile':'desktop'}`,()=>{
+ test.use({locale:finLanguage==='zh'?'en-US':'zh-CN',viewport:mobile?{width:390,height:844}:{width:1440,height:1000}});
+ test('ignores conflicting browser, URL and saved language and re-reads the signed-in user on reload',async({page})=>{
+  const zh=finLanguage==='zh';
+  await page.addInitScript(value=>localStorage.setItem('enerCubix.locale.v1',value),zh?'en-US':'zh-CN');
+  const state=await installTransport(page,{userLocale:finLanguage});
+  await page.goto('/?enerCubixLang='+encodeURIComponent(zh?'en-US':'zh-CN')+'#/profile?project=testproject');
+  await expect(page.getByRole('heading',{name:zh?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
+  await expect(page).toHaveTitle(zh?'能源魔方 · 楼宇能源分析':'EnergyCubix · Building Energy Analytics');
+  await expect(page.locator('html')).toHaveAttribute('lang',zh?'zh-CN':'en-US');
+  await expect(page.locator('.language-switcher')).toHaveCount(0);
+  state.userLocale=zh?'en':'zh';
   await page.reload();
-  await expect(page.getByRole('heading',{name:'Consumption profile',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Switch language',exact:true}).click();
-  await page.getByRole('menuitem',{name:'中文',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'切换语言',exact:true}).click();
-  await page.getByRole('menuitem',{name:'English',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Consumption profile',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Switch language',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Use system language',exact:true}).click();
-  await expect(page.locator('html')).toHaveAttribute('lang','zh-CN');
-  await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
+  await expect(page).toHaveTitle(zh?'EnergyCubix · Building Energy Analytics':'能源魔方 · 楼宇能源分析');
+  expect(state.requests.filter(r=>r.path==='session')).toHaveLength(2);
+  if(mobile)expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
  });
- test('can switch on mobile even when browser storage is blocked',async({page})=>{
-  await page.setViewportSize({width:390,height:844});
-  await page.addInitScript(()=>{Object.defineProperty(window,'localStorage',{configurable:true,get:()=>{throw new Error('blocked');}});});
-  await installTransport(page);await openView(page,'profile');
-  await page.getByRole('button',{name:'切换语言',exact:true}).click();
-  await page.getByRole('menuitem',{name:'English',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Consumption profile',exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/enerCubixLang=en-US/);
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.getByRole('button',{name:'Switch language',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Use system language',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
- });
+});
+
+test('waits for FIN locale before mounting UI modules and permits retry after a failed bootstrap',async({page})=>{
+ await installTransport(page,{userLocale:'zh'});
+ let release:()=>void=()=>{};const pending=new Promise<void>(resolve=>release=resolve);
+ await page.route('**/api/testproject/ext/enerCubix/v1/session',async route=>{await pending;await route.fulfill({json:{ok:true,data:{locale:'zh'}}});});
+ await page.goto('/#/profile?project=testproject');
+ await expect(page.locator('.app-layout')).toHaveCount(0);
+ release();
+ await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
+ await page.unroute('**/api/testproject/ext/enerCubix/v1/session');
+ const invalid=async(route:import('@playwright/test').Route)=>route.fulfill({json:{ok:true,data:{}}});
+ await page.route('**/api/testproject/ext/enerCubix/v1/session',invalid);
+ await page.reload();
+ await expect(page.getByRole('alert')).toHaveText('Unable to read your FIN user language. Reopen the application.');
+ await expect(page.locator('.app-layout')).toHaveCount(0);
+ await page.unroute('**/api/testproject/ext/enerCubix/v1/session',invalid);
+ await page.getByRole('button',{name:'Reconnect',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'能耗概况',exact:true})).toBeVisible();
 });
