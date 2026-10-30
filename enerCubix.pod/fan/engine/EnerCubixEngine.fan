@@ -142,17 +142,23 @@ internal class EnerCubixTick
   EnerCubixValue? numerator
   EnerCubixValue? denominator
   EnerCubixValue? known
+  EnerCubixValue? baseValue
+  EnerCubixValue? baseKnown
+  EnerCubixValue? baseNumerator
+  EnerCubixValue? baseDenominator
 }
 
 internal class EnerCubixLine
 {
   new make(Str id, Str nodeId, Str name, Str category, Str unit)
-  { this.id=id; this.nodeId=nodeId; this.name=name; this.category=category; this.unit=unit }
+  { this.id=id; this.nodeId=nodeId; this.name=name; this.category=category; this.unit=unit; this.baseUnit=unit }
   Str id
   Str nodeId
   Str name
   Str category
   Str unit
+  Str baseUnit
+  Str:Obj? normalizationArea := [:]
   Bool gauge := false
   Bool ratio := false
   Bool leak := false
@@ -160,6 +166,9 @@ internal class EnerCubixLine
   Bool reference := false
   Str? utility
   EnerCubixTick[] ticks := [,]
+
+  EnerCubixValue baseTotal() { EnerCubixValue.sum(ticks.map |t->EnerCubixValue| {t.baseValue ?: t.value}) }
+  EnerCubixValue baseKnownTotal() { EnerCubixKnownUsage.combine(ticks.map |t->EnerCubixValue| {(t.baseKnown ?: t.known) ?: EnerCubixValue()}) }
 
   EnerCubixValue knownTotal(EnerCubixTick[] values := ticks)
   { EnerCubixKnownUsage.combine(values.map |t->EnerCubixValue| { t.known ?: EnerCubixValue() }) }

@@ -94,24 +94,8 @@ class EnerCubixDimension
   ** One denominator for the union; overlapping selected child scopes add no area.
   internal EnerCubixValue selectionArea(Str[] selected)
   {
-    ids:=selected.map |id->Str| { canonical(id) }.unique
-    scopes:=ids.findAll |id| { scope(id) }
-    scopes=scopes.findAll |id| { !scopes.any |other| { id != other && within(id,other,dimension) } }
-    [Str:Obj?][] meters:=ids.findAll |id| { r:=byId[id]; return r != null && included(r) }.map |id->[Str:Obj?]| { (Str:Obj?)byId[id] }
-    covered:=Str[,]
-    scopes.each |id| { covered.addAll(members(id).map |m->Str| { m["id"].toStr }) }
-    meters=frontier(meters.findAll |Str:Obj? m->Bool| { !covered.contains(m["id"].toStr) })
-    if (!scopes.isEmpty && !meters.isEmpty) return EnerCubixValue(null,"ambiguousArea")
-    [Str:Obj?][] areas:=scopes.isEmpty ? meters : scopes.map |id->[Str:Obj?]| { (Str:Obj?)byId[id] }
-    if (areas.isEmpty) return EnerCubixValue(null,"missingArea")
-    total:=0f; missing:=false
-    areas.each |Str:Obj? r|
-    {
-      area:=EnerCubixMath.num(r["area"])
-      if (area == null || area <= 0f) missing=true
-      else total+=area
-    }
-    return missing ? EnerCubixValue(null,"missingArea") : EnerCubixValue(total,"ok")
+    area:=EnerCubixArea(records).selection(selected,this)
+    return EnerCubixValue(EnerCubixMath.num(area["value"]),area["quality"].toStr)
   }
 
   Str? quality([Str:Obj?][] candidates)

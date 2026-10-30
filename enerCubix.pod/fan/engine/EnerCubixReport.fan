@@ -3,12 +3,14 @@ internal class EnerCubixReport
   new make(EnerCubixContext ctx, Str:Obj? request, DateTime from, DateTime to, Str kind, Str period, Str metric)
   {
     this.ctx=ctx; this.request=request; this.from=from; this.to=to; this.kind=kind; this.period=period; this.metric=metric
+    areas=EnerCubixArea(ctx.byId.vals)
     dataCutoff=EnerCubixKnownUsage.cutoff(request)
     if (EnerCubixKnownUsage.supported(kind,metric))
     {
       knownCtx=EnerCubixContext.known(ctx,to < dataCutoff ? to : dataCutoff)
     }
   }
+  private EnerCubixArea areas
   private EnerCubixContext ctx
   private EnerCubixContext? knownCtx
   private DateTime dataCutoff
@@ -30,6 +32,7 @@ internal class EnerCubixReport
     if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定分项"))
     out:=EnerCubixLine("$id|$category"+(utility == null ? "" : "|$utility"),id,name,category,ctx.unit(id,category,metric))
     out.utility=utility
+    out.normalizationArea=areas.node(id)
     activeKnown:=knownCtx
     if (knownCtx != null && end != to) activeKnown=EnerCubixContext.known(ctx,end < dataCutoff ? end : dataCutoff)
     out.gauge=r?.get("kind") == "sensor"
@@ -89,26 +92,21 @@ internal class EnerCubixReport
       }
       if (out.leak && (numerator?.reliable == false || denominator?.reliable == false))
         value=EnerCubixValue(null,EnerCubixValue.worse(numerator?.quality ?: "missing",denominator?.quality ?: "missing"),value.sources)
+      baseValue:=value; baseKnown:=known; baseNumerator:=numerator; baseDenominator:=denominator
       if (request["perArea"] == true)
       {
-        area:=EnerCubixMath.num(r?.get("area"))
         if (out.ratio) ctx.warn("COP is a ratio; per-area normalization does not apply")
-      else if (area == null || area <= 0f)
-      {
-        value=EnerCubixValue(null,"missingArea",value.sources)
-        if (known != null) known=EnerCubixValue(null,"missingArea",known.sources)
-        if (numerator != null) numerator=EnerCubixValue(null,"missingArea",numerator.sources)
-        if (denominator != null) denominator=EnerCubixValue(null,"missingArea",denominator.sources)
-      }
         else
         {
-          value=value.scale(1f/area)
-          known=known?.scale(1f/area)
-          numerator=numerator?.scale(1f/area); denominator=denominator?.scale(1f/area)
+          value=EnerCubixArea.scale(value,out.normalizationArea)
+          if (known != null) known=EnerCubixArea.scale(known,out.normalizationArea)
+          if (numerator != null) numerator=EnerCubixArea.scale(numerator,out.normalizationArea)
+          if (denominator != null) denominator=EnerCubixArea.scale(denominator,out.normalizationArea)
         }
       }
       if (value.value == null) ctx.warn("${out.name}: ${value.quality}")
       tick:=EnerCubixTick(cursor,next,value,numerator,denominator); tick.known=known
+      tick.baseValue=baseValue;tick.baseKnown=baseKnown;tick.baseNumerator=baseNumerator;tick.baseDenominator=baseDenominator
       out.ticks.add(tick); cursor=next
     }
     if (request["perArea"] == true && !out.ratio) out.unit+="/m²"
@@ -200,6 +198,7 @@ internal class EnerCubixReport
       summary["forecastTotals"]=[["meterIds":ids,"unit":"元","value":valid && EnerCubixMath.num(total) != null ? total : null,"quality":valid ? "predicted" : "insufficientHistory"]]
       extra["forecastBasis"]="historicalMeterCostPatterns";extra["forecastMeterIds"]=ids
     }
+    recordLineAreas(lines)
     return result
   }
 
@@ -253,10 +252,37 @@ internal class EnerCubixReport
       reads:=EnerCubixKnownUsage.evidence(knownCtx.knownReads.vals)
       extra["knownUsage"]=["basis":"closedSourceIntervals","asOf":dataCutoff.toIso,"sourceUsage":reads,"detailsTruncated":reads.any |row| { row["detailsTruncated"] == true }]
     }
+    recordLineAreas(lines)
     if (kind == "leak") leakTotals(lines)
     if (kind == "utility") extra["details"]=extra["utilityMembers"]
     else if (ctx.dimension != null) dimensionDetails(lines)
     return result
+  }
+
+  private Void recordLineAreas(EnerCubixLine[] lines)
+  {
+    if (request["perArea"] == true) lines.findAll |l| {!l.reference && !l.gauge && !l.ratio}.each |l|
+    {
+      base:=displaysKnown(l) ? l.baseKnownTotal : l.baseTotal
+      recordArea(l.nodeId,l.name,l.category,base,l.baseUnit,available(l),l.unit,l.normalizationArea,l.leak ? "difference" : "ownUsage")
+    }
+  }
+
+  private Void recordArea(Str id, Str? name, Str category, EnerCubixValue base, Str baseUnit, EnerCubixValue value, Str unit, Str:Obj? area, Str basis)
+  {
+    list:=extra["areaBasis"] as List
+    if (list == null) {list=[Str:Obj?][,];extra["areaBasis"]=list}
+    row:=Str:Obj?["nodeId":id,"categoryId":category,"baseValue":base.value,"baseUnit":baseUnit,"value":value.value,"unit":unit,"area":area,"basis":basis]
+    if (name != null) row["name"]=name
+    list.add(row)
+  }
+
+  private Str:Obj? leakBase(EnerCubixLine line, EnerCubixTick[] ticks)
+  {
+    total:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| {t.baseNumerator ?: EnerCubixValue()})
+    sub:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| {t.baseDenominator ?: EnerCubixValue()})
+    difference:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| {t.baseValue ?: t.value})
+    return ["total":total.value,"submeter":sub.value,"difference":difference.value,"unit":line.baseUnit]
   }
 
   private Void dimensionDetails(EnerCubixLine[] lines)
@@ -329,30 +355,13 @@ internal class EnerCubixReport
       unit:=selected.first?.unit ?: ""
       if (request["perArea"] == true)
       {
-        area:=ctx.dimension?.selectionArea(lines.findAll |l| {!l.reference}.map |l->Str| {l.nodeId})
-        if (area == null)
-        {
-          ids:=lines.findAll |l| {!l.reference}.map |l->Str| {l.nodeId}.unique
-          scopes:=ids.findAll |Str id->Bool|
-          {
-            return ["parentId","meterParentId"].all |key->Bool|
-            {
-              seen:=Str[,]; parent:=ctx.byId[id]?.get(key) as Str
-              while (parent != null && !seen.contains(parent))
-              {
-                if (ids.contains(parent)) return false
-                seen.add(parent); parent=ctx.byId[parent]?.get(key) as Str
-              }
-              return true
-            }
-          }
-          values:=scopes.map |Obj? id->Float?| {EnerCubixMath.num(ctx.byId[id.toStr]?.get("area"))}
-          area=values.any |v| {v == null || v <= 0f} ? EnerCubixValue(null,"missingArea") : EnerCubixValue(values.reduce(0f) |Float sum,Float n->Float| {sum+n},"ok")
-        }
-        extra["normalizationArea"]=["value":area.value,"quality":area.quality,"unit":"m²"]
-        if (area.value == null || area.value <= 0f) ctx.warn("所选对象合计: "+area.quality)
-        strict=area.value == null || area.value <= 0f ? EnerCubixValue(null,area.quality,strict.sources) : strict.scale(1f/area.value)
-        if (known != null) known=area.value == null || area.value <= 0f ? EnerCubixValue(null,area.quality,known.sources) : known.scale(1f/area.value)
+        area:=areas.selection(lines.findAll |l| {!l.reference}.map |l->Str| {l.nodeId},ctx.dimension)
+        extra["normalizationArea"]=area
+        if (area["value"] == null) ctx.warn("所选对象合计: "+area["quality"])
+        base:=known ?: strict
+        strict=EnerCubixArea.scale(strict,area)
+        if (known != null) known=EnerCubixArea.scale(known,area)
+        recordArea("__selection__",null,category,base,selected.first?.baseUnit ?: "",known ?: strict,unit,area,"selection")
       }
       row:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strict.value,"valueType":strict.valueType,"quality":strict.quality,"scopeQuality":quality,"sourceIds":strict.sources,"meterIds":meters.map |m->Str| {m["id"].toStr}]
       if (known != null) row.setAll(EnerCubixKnownUsage.fields(known))
@@ -502,6 +511,7 @@ internal class EnerCubixReport
         total:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.numerator ?: EnerCubixValue() })
         sub:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.denominator ?: EnerCubixValue() })
         row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=v.value
+        if (request["perArea"] == true) row["baseUsage"]=leakBase(l,ticks)
         row["totalQuality"]=total.quality; row["submeterQuality"]=sub.quality
         row["balanceMode"]=l.balanceMode; row["lossEligible"]=physicalMetric && v.value != null && v.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
         row["percentage"]=physicalMetric && l.balanceMode == "independent" ? EnerCubixValue.divide(v,total).scale(100f).value : null
@@ -514,8 +524,7 @@ internal class EnerCubixReport
           branchValue:=EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { ctx.node(branchId,l.category,t.ts,t.end,metric) })
           if (request["perArea"] == true)
           {
-            area:=EnerCubixMath.num(ctx.byId[l.nodeId]?.get("area"))
-            branchValue=area == null || area <= 0f ? EnerCubixValue(null,"missingArea",branchValue.sources) : branchValue.scale(1f/area)
+            branchValue=EnerCubixArea.scale(branchValue,l.normalizationArea)
           }
           branchRows.add(["nodeId":l.nodeId,"branchId":branchId,"name":ctx.displayName(branchId),"categoryId":l.category,"unit":l.unit,"ts":key,"value":branchValue.value,"quality":branchValue.quality,"sourceIds":branchValue.sources])
         }
@@ -541,6 +550,7 @@ internal class EnerCubixReport
       difference:=l.total
       row:=baseRow(l,"summary",difference)
       row["total"]=total.value; row["submeter"]=sub.value; row["difference"]=difference.value
+      if (request["perArea"] == true) row["baseUsage"]=leakBase(l,l.ticks)
       row["totalQuality"]=total.quality; row["submeterQuality"]=sub.quality
       row["balanceMode"]=l.balanceMode; row["lossEligible"]=physicalMetric && difference.value != null && difference.value >= 0f && EnerCubixBalance.eligible(l.balanceMode,total,sub)
       row["percentage"]=physicalMetric && l.balanceMode == "independent" ? EnerCubixValue.divide(difference,total).scale(100f).value : null

@@ -35,8 +35,8 @@ internal const class EnerCubixLeakUsage
       if (!ids.contains(master)) return // Keep legacy group reports unchanged.
       overview:=EnerCubixFlowOverview.build(req,current,histories,ids)
       own:=EnerCubixMath.maps(overview["rows"])
-      equip:=current.find |r| {r["id"] == master}
-      if (request["perArea"] == true) own.each |r| {normalize(r,EnerCubixMath.num(equip?.get("area")),total["unit"].toStr)}
+      area:=EnerCubixArea(current).node(master)
+      if (request["perArea"] == true) own.each |r| {normalize(r,area,total["unit"].toStr)}
       own.each |row| {ownRows.add(row.dup.set("masterId",master))}
       main:=own.find |row| {row["nodeId"] == master}
       windows:=[Str:Obj?][,]; unknown:=false
@@ -76,7 +76,7 @@ internal const class EnerCubixLeakUsage
         row:=EnerCubixMath.maps(EnerCubixFlowOverview.build(part,source,histories,[id])["rows"]).first
         if (row != null)
         {
-          if (request["perArea"] == true) normalize(row,EnerCubixMath.num(equip?.get("area")),total["unit"].toStr)
+          if (request["perArea"] == true) normalize(row,area,total["unit"].toStr)
           contributions.add(row.dup.set("from",window["from"]).set("to",window["to"]))
         }
       }
@@ -105,7 +105,7 @@ internal const class EnerCubixLeakUsage
         row["periods"]=parts.map |r->[Str:Obj?][]| {EnerCubixMath.maps(r["periods"])}.flatten
         strict:=EnerCubixValue.sum(parts.map |r->EnerCubixValue| {EnerCubixValue(EnerCubixMath.num(r["completeValue"]),r["completeQuality"].toStr)})
         row["completeValue"]=strict.value;row["completeQuality"]=strict.quality;row["complete"]=parts.all |r| {r["complete"] == true}
-        if (request["perArea"] == true) normalize(row,EnerCubixMath.num(equip?.get("area")),total["unit"].toStr)
+        if (request["perArea"] == true) normalize(row,area,total["unit"].toStr)
         own.add(row);ownRows.add(row.dup.set("masterId",master))
       }
       rows:=EnerCubixMath.maps(result["rows"]).findAll |row| {row["nodeId"] == master && row["categoryId"] == category && row["unit"] == total["unit"]}
@@ -231,18 +231,20 @@ internal const class EnerCubixLeakUsage
   private static Bool unknownIn([Str:Obj?][] segments, DateTime from, DateTime to)
   { segments.any |s| {s["known"] != true && DateTime.fromIso(s["from"].toStr) < to && DateTime.fromIso(s["to"].toStr) > from} }
 
-  private static Void normalize(Str:Obj? row, Float? area, Str unit)
+  private static Void normalize(Str:Obj? row, Str:Obj? areaBasis, Str unit)
   {
+    area:=EnerCubixMath.num(areaBasis["value"])
+    row["baseValue"]=row["value"];row["baseUnit"]=row["unit"]
     values:=EnerCubixMath.maps(row["periods"]).dup.add(row)
     values.each |value|
     {
       n:=EnerCubixMath.num(value["value"])
       value["value"]=area != null && area > 0f && n != null ? n/area : null
-      if (area == null || area <= 0f) value["quality"]="missingArea"
+      if (area == null || area <= 0f) value["quality"]=areaBasis["quality"]
     }
     n:=EnerCubixMath.num(row["completeValue"])
     row["completeValue"]=area != null && area > 0f && n != null ? n/area : null
-    if (area == null || area <= 0f) row["completeQuality"]="missingArea"
+    if (area == null || area <= 0f) row["completeQuality"]=areaBasis["quality"]
     row["unit"]=unit
   }
 
