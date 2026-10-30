@@ -34,6 +34,9 @@ const class EnerCubixLib
   static Dict enerCubixNativeSpaceAcceptance() { jsonResult(EnerCubixNativeSpaceAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
+  static Dict enerCubixAreaAcceptance() { jsonResult(EnerCubixAreaAcceptance(Context.cur).run) }
+
+  @Axon { admin=true }
   static Dict enerCubixNativeAlarmAcceptance() { jsonResult(EnerCubixNativeAlarmAcceptance(Context.cur).run) }
 
   @Axon { admin=true }

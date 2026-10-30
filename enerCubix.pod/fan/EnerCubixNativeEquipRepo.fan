@@ -103,6 +103,17 @@ class EnerCubixNativeEquipRepo
       if (space == null || !(space.has("site") || space.has("floor") || space.has("equip")) || !cx.canRead(space)) throw ArgErr("计量覆盖范围的 FIN 引用无效或无权访问")
       validation=all.dup.add(["id":coverage,"kind":"space","name":space.dis])
     }
+    areaSpace:=record["areaSpaceId"] as Str
+    if (record["areaSource"] == "space" && areaSpace != null)
+    {
+      target:=validation.find |r| { r["id"] == areaSpace || r["nativeSourceId"] == areaSpace }
+      sourceId:=target?.get("nativeSourceId") as Str ?: areaSpace
+      space:=cx.db.readById(Ref(sourceId),false)
+      if (space == null || !(space.has("site") || space.has("floor")) || !cx.canRead(space)) throw ArgErr("invalidAreaSpace")
+      // A coverage placeholder is not an authoritative service-space definition.
+      areaRow:=EnerCubixSpaceArea.referenceRow(areaSpace,space,target)
+      validation=validation.findAll |r| { r["id"] != areaRow["id"] }.dup.add(areaRow)
+    }
     EnerCubixConfig.validate(checked,validation)
   }
 
@@ -110,7 +121,11 @@ class EnerCubixNativeEquipRepo
   {
     all.findAll |r| { r["nativeEquip"] == true }.each |r|
     {
-      try { validate(r,all) }
+      // Area is optional metadata. A lost/inaccessible service space must not
+      // invalidate primary-history consumption; normalization diagnoses it later.
+      checked:=r.dup
+      ["areaSource","areaSpaceId","area"].each |key| { checked.remove(key) }
+      try { validate(checked,all) }
       catch (Err e) { r["configurationError"]=e.msg }
     }
     return all

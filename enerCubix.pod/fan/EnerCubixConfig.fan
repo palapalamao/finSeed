@@ -53,6 +53,14 @@ const class EnerCubixConfig
     }
     if (["meter", "totalMeter"].contains(kind))
     {
+      source:=rec["areaSource"]
+      if (source != null && !["space","custom"].contains(source)) throw ArgErr("invalidAreaSource")
+      if (source == "space")
+      {
+        target:=all.find |r| { r["id"] == rec["areaSpaceId"] || r["nativeSourceId"] == rec["areaSpaceId"] }
+        if (target == null || target["kind"] != "space" || !["site","floor"].contains(target["nativeSourceKind"]?.toStr ?: "")) throw ArgErr("invalidAreaSpace")
+      }
+      if (source == "custom" && rec["area"] != null && number(rec["area"]) <= 0f) throw ArgErr("invalidServiceArea")
       mode := rec["historyMode"] as Str ?: "auto"
       if (!["auto","cumulative","interval"].contains(mode)) throw ArgErr("请选择有效的历史读数类型")
       if (mode != "auto" && rec["pointId"] != null && all.any |r| { r["id"] != id && r["pointId"] == rec["pointId"] && r["historyMode"] != null && r["historyMode"] != "auto" && r["historyMode"] != mode }) throw ArgErr("同一 FIN 点的历史读数类型必须一致")

@@ -355,9 +355,9 @@ internal class EnerCubixReport
       unit:=selected.first?.unit ?: ""
       if (request["perArea"] == true)
       {
-        area:=areas.selection(lines.findAll |l| {!l.reference}.map |l->Str| {l.nodeId},ctx.dimension)
-        extra["normalizationArea"]=area
-        if (area["value"] == null) ctx.warn("所选对象合计: "+area["quality"])
+        area:=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension)
+        if (lines.findAll |l| {!l.reference}.map |l->Str| {l.category}.unique.size == 1) extra["normalizationArea"]=area
+        if (area["value"] == null) ctx.warn(area["quality"].toStr)
         base:=known ?: strict
         strict=EnerCubixArea.scale(strict,area)
         if (known != null) known=EnerCubixArea.scale(known,area)

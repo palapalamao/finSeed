@@ -122,6 +122,19 @@ class EnerCubixServiceAreaTest : Test
     near((Float?)areaBasis(r).find |row| {row["nodeId"] == "a"}["baseValue"],100f)
   }
 
+  Void testEachEnergyUsesItsOwnSelectedServiceSpaces()
+  {
+    rs:=records.add(meter("b","pb").set("categoryId","other"))
+    rs.add(["id":"other","kind":"category","name":"Other energy","unit":"kWh"])
+    rs.add(space("floor-a",1000f));rs.add(space("floor-b",2000f))
+    rs.first.setAll(["areaSource":"space","areaSpaceId":"floor-a"])
+    rs.find |r| {r["id"] == "b"}.setAll(["areaSource":"space","areaSpaceId":"floor-b"])
+    result:=report(rs,"metering",["a","b"])
+    totals:=EnerCubixMath.maps(((Map)result["summary"])["selectionTotals"])
+    near((Float?)totals.find |r| {r["categoryId"] == "electric"}["value"],0.1f)
+    near((Float?)totals.find |r| {r["categoryId"] == "other"}["value"],0.1f)
+  }
+
   private [Str:Obj?][] records() { [meter("a","pa"),["id":"electric","kind":"category","name":"Electricity","unit":"kWh"]] }
   private Str:Obj? meter(Str id,Str point) { ["id":id,"kind":"meter","name":id,"pointId":point,"categoryId":"electric","unit":"kWh","includeInTotals":true] }
   private Str:Obj? space(Str id,Float area) { ["id":id,"kind":"space","name":id,"area":area,"nativeSourceId":id,"nativeSourceKind":"floor"] }

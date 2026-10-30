@@ -3,7 +3,7 @@ using legacy
 using skyarcd
 using util
 
-** Read-through FIN navigation; never persists or changes a native record.
+** Read-through FIN navigation. Area writes use the separate area-only save path.
 class EnerCubixNativeSpace
 {
   Str path := ""
@@ -35,8 +35,8 @@ class EnerCubixNativeSpace
       seen[id]=true
       sourceKind:=rec.has("point") ? "point" : (navPath.segForRec(rec)?.tag ?: "equip")
       node:=Str:Obj?["id":id,"name":rec["navName"] as Str ?: rec.dis,"parentId":parent,"sourceKind":sourceKind,"nativeDis":rec.dis,"mod":EnerCubixRepo.iso(rec["mod"])]
-      area:=rec["area"]
-      if (area is Number) node["area"]=((Number)area).toFloat
+      area:=EnerCubixSpaceArea.squareMetres(rec["area"])
+      if (area != null) node["area"]=area
       if (sourceKind == "point")
       {
         node["unit"]=rec["unit"]?.toStr
@@ -93,7 +93,12 @@ class EnerCubixNativeSpace
           r["nativeSpaceId"]=r["spaceId"] ?: source
         }
       }
-      if (n["area"] != null && r["area"] == null) r["area"]=n["area"]
+      // FIN is authoritative for native space area, including a cleared value.
+      if (["site","floor"].contains(n["sourceKind"]))
+      {
+        r.remove("area")
+        if (n["area"] != null) r["area"]=n["area"]
+      }
       if (isPoint)
       {
         ["unit","his","pointKind","hisMode","energyTags"].each |key| { if (n[key] != null) r[key]=n[key] }
@@ -131,7 +136,7 @@ class EnerCubixNativeSpace
   {
     out:=record.dup
     alarmFields:=record["kind"] == "alarm" ? ["nativeAlarmId","nativeAlarmArchive","nativeRecoveredAt"] : Str[,]
-    out.keys.findAll |key| { (key.startsWith("native") && !alarmFields.contains(key)) || ["configurationError","legacyId","legacyParentId","meterOrigin"].contains(key) }.each |key| { out.remove(key) }
+    out.keys.findAll |key| { (key.startsWith("native") && !alarmFields.contains(key)) || ["configurationError","areaConfigurationError","legacyId","legacyParentId","meterOrigin"].contains(key) }.each |key| { out.remove(key) }
     return out
   }
 

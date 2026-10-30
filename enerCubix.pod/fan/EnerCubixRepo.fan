@@ -11,7 +11,7 @@ class EnerCubixRepo
   private Dict? revision
   new make(Context cx) { this.cx = cx }
 
-  static const [Str:Str] refTags := ["parentId":"enerCubixParentRef", "pointId":"enerCubixPointRef", "categoryId":"enerCubixCategoryRef", "subcategoryId":"enerCubixSubcategoryRef", "utilityId":"enerCubixUtilityRef", "tariffId":"enerCubixTariffRef", "expressionId":"enerCubixExpressionRef", "numeratorId":"enerCubixNumeratorRef", "denominatorId":"enerCubixDenominatorRef", "nodeId":"enerCubixNodeRef", "spaceId":"enerCubixSpaceRef", "meterParentId":"enerCubixMeterParentRef", "organizationId":"enerCubixOrganizationRef", "canonicalId":"enerCubixCanonicalRef", "nativeAlarmId":"enerCubixNativeAlarmRef", "episodeId":"enerCubixAlarmEpisodeRef", "cleaningProfileId":"enerCubixCleaningProfileRef"]
+  static const [Str:Str] refTags := ["parentId":"enerCubixParentRef", "pointId":"enerCubixPointRef", "categoryId":"enerCubixCategoryRef", "subcategoryId":"enerCubixSubcategoryRef", "utilityId":"enerCubixUtilityRef", "tariffId":"enerCubixTariffRef", "expressionId":"enerCubixExpressionRef", "numeratorId":"enerCubixNumeratorRef", "denominatorId":"enerCubixDenominatorRef", "nodeId":"enerCubixNodeRef", "spaceId":"enerCubixSpaceRef", "areaSpaceId":"enerCubixAreaSpaceRef", "meterParentId":"enerCubixMeterParentRef", "organizationId":"enerCubixOrganizationRef", "canonicalId":"enerCubixCanonicalRef", "nativeAlarmId":"enerCubixNativeAlarmRef", "episodeId":"enerCubixAlarmEpisodeRef", "cleaningProfileId":"enerCubixCleaningProfileRef"]
 
   Void mustRead()
   {
@@ -83,6 +83,7 @@ class EnerCubixRepo
   [Str:Obj?] save([Str:Obj?] input, Bool systemWrite := false)
   {
     mustWrite
+    if (input["areaOnly"] == true) return saveSpaceArea(input)
     if (input["kind"] == "cleaningProfile") return EnerCubixCleaningRepo(this).save(input)
     equipStore:=EnerCubixNativeEquipRepo(this)
     if (EnerCubixRelations.meterKinds.contains(input["kind"])) input=equipStore.prepareWrite([input]).first
@@ -119,6 +120,20 @@ class EnerCubixRepo
     diff := previous == null ? Diff.makeAdd(encode(rec), Ref.fromStr(rec["id"].toStr)) : Diff(previous, encode(rec,previous))
     commit([diff], kind == "job" || kind == "alarm")
     return decode(stored(rec["id"].toStr))
+  }
+
+  private [Str:Obj?] saveSpaceArea([Str:Obj?] input)
+  {
+    all:=liveRecords
+    row:=all.find |r| { r["id"] == input["id"] }
+    if (row == null || !EnerCubixSpaceArea.editable(row)) throw ArgErr("spaceAreaOnly")
+    nativeRec:=cx.db.readById(Ref(row["nativeSourceId"].toStr),false)
+    if (nativeRec == null || !cx.canRead(nativeRec) || !cx.canWrite(nativeRec)) throw EnerCubixHttpErr(403,"PERMISSION","spaceAreaForbidden")
+    checkMod(nativeRec,input["mod"])
+    // Only area is committed. Submitted names, placement or source IDs are rejected.
+    patch:=EnerCubixSpaceArea.tags(input,nativeRec)
+    commit([Diff(nativeRec,patch)])
+    return liveRecords.find |r| { r["id"] == input["id"] } ?: throw Err("Native space disappeared after area save")
   }
 
   [Str:Obj?] remove(Str id, Obj? mod)
@@ -384,7 +399,7 @@ class EnerCubixRepo
     request.remove("leakSegment")
     request.remove("_comparisonScope")
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
-    all := (input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin" ? liveRecords : records
+    all := input["perArea"] == true || ((input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin") ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
     if (request["kind"] == "energyFlow") all=flowRecords(all)
     if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)

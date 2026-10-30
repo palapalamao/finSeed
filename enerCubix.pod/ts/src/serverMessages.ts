@@ -440,3 +440,9 @@ Object.assign(chineseServerMessages,{negativeBalance:'分表合计大于总表�
 
 Object.assign(serverMessages,{'{0} : referencePartialCoverage':'{0}: Reference mean uses available hours; some hours are missing or NA.','{0} : referenceMissingData':'{0}: No usable reference observations are available in this range.'});
 Object.assign(chineseServerMessages,{'{0} : referencePartialCoverage':'{0}：参考均值基于已有小时，部分小时缺测或为 NA。','{0} : referenceMissingData':'{0}：此区间没有可用的参考观测值。'});
+
+Object.assign(serverMessages,{"spaceAreaOnly":"Only area can be changed through this editor on a native FIN site or floor. Other properties are maintained in FIN.","spaceAreaForbidden":"You do not have permission to edit the area of this FIN site or floor.","invalidServiceArea":"Area must be a finite number greater than zero.","invalidAreaSource":"Select a valid area source.","invalidAreaSpace":"Select an accessible FIN site or floor as the service space."});
+Object.assign(chineseServerMessages,{"spaceAreaOnly":"原生楼宇和楼层仅允许通过面积入口修改面积，其他属性由 FIN 维护。","spaceAreaForbidden":"没有此 FIN 楼宇或楼层的面积编辑权限。","invalidServiceArea":"面积必须为大于零的有限数值。","invalidAreaSource":"请选择有效的面积来源。","invalidAreaSpace":"请选择可访问的 FIN 楼宇或楼层作为服务空间。"});
+
+Object.assign(serverMessages,{missingArea:'No valid statistical area configured. Available consumption is retained.',ambiguousArea:'Service area boundaries are ambiguous. Reference explicit service spaces to calculate combined intensity.'});
+Object.assign(chineseServerMessages,{missingArea:'未配置有效统计面积，已有用量仍保留。',ambiguousArea:'服务面积边界不明确，请引用明确的服务空间后计算合计单位面积指标。'});

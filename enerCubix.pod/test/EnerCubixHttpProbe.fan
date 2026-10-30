@@ -40,6 +40,7 @@ const class EnerCubixHttpProbe : WebMod
     if (!admin)
     {
       expect(call("records",["record":["kind":"group","name":"must not be created"]]),403)
+      expect(call("records",["record":["id":"missing","kind":"space","areaOnly":true,"area":1000f]]),403)
       expect(call("tree/manage",["action":"previewDelete","items":Obj?[,]]),403)
       expect(call("migration/preview"),403)
       expect(call("migration",["action":"preview"]),403)

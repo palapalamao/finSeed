@@ -36,7 +36,7 @@ class EnerCubixNativeSpaceTest : Test
     verifyEq(find(projected,"point")["nativeSourceId"],"point")
     verifyNull(find(projected,"point")["pointId"])
     verifyNull(find(projected,"point")["includeInTotals"])
-    verifyEq(find(projected,"enerCubix-site")["area"],900f)
+    verifyNull(find(projected,"enerCubix-site")["area"])
     verifyEq(find(projected,"floor-a")["area"],100f)
     verifyEq(find(projected,"manual-space")["nativeHidden"],true)
   }

@@ -1,3 +1,4 @@
+import {areaBasisRows} from './serviceArea';
 import {isReferenceCurve} from './referenceCurves';
 import {t} from './i18n';
 import {productName} from './brand';
@@ -50,7 +51,7 @@ export function meterOriginExportRows(snapshot:ReportSnapshot):string[][]{
  const ids=new Set([...snapshot.result.series.map(series=>series.nodeId||series.id.split('|')[0]),...snapshot.result.rows.map(row=>String(row.nodeId||row.id||''))]);
  return [...ids].flatMap(id=>{const origin=snapshot.display?.meterOrigins?.[id];return snapshot.display?.meterKinds[id]==='totalMeter'&&origin?[[t('表计来源'),t('{0}：{1}；{2}',snapshot.display.objects[id]||id,meterOriginLabel(origin),meterOriginDescription(origin))]]:[];});
 }
-const meta=(s:ReportSnapshot)=>[[t("产品"),productName],[t("项目"),s.project],[t("报表"),s.title],[t("分类筛选"),s.categoryNames?.join('、')||t("全部能源类型")],[t("区间起始（含）"),s.result.from],[t("区间结束（不含）"),s.result.to],...(s.result.rangeAdjustment?[[t("原查询起始（含）"),s.result.rangeAdjustment.requestedFrom],[t("原查询结束（不含）"),s.result.rangeAdjustment.requestedTo]]:[]),[t("生成时间"),s.generatedAt],[t("数据截止"),s.result.asOf||s.request.asOf||s.generatedAt],[t("查询条件"),JSON.stringify(readableReportValue(s,'',s.request))],[t("汇总"),JSON.stringify(readableReportValue(s,'',s.result.summary))],[t("分析结果"),JSON.stringify(readableReportValue(s,'',s.result.extra||{}))],[t("提示"),reportWarnings(s).join('\n')],...meterOriginExportRows(s)];
+const meta=(s:ReportSnapshot)=>[[t("产品"),productName],[t("项目"),s.project],[t("报表"),s.title],[t("分类筛选"),s.categoryNames?.join('、')||t("全部能源类型")],[t("区间起始（含）"),s.result.from],[t("区间结束（不含）"),s.result.to],...(s.result.rangeAdjustment?[[t("原查询起始（含）"),s.result.rangeAdjustment.requestedFrom],[t("原查询结束（不含）"),s.result.rangeAdjustment.requestedTo]]:[]),[t("生成时间"),s.generatedAt],[t("数据截止"),s.result.asOf||s.request.asOf||s.generatedAt],[t("查询条件"),JSON.stringify(readableReportValue(s,'',s.request))],[t("汇总"),JSON.stringify(readableReportValue(s,'',s.result.summary))],[t("分析结果"),JSON.stringify(readableReportValue(s,'',s.result.extra||{}))],[t("提示"),reportWarnings(s).join('\n')],...meterOriginExportRows(s),...areaBasisRows(s).map(row=>[t('单位面积计算依据'),row.join(' | ')])];
 function fitXlsxText(book:Workbook){
  const detailsName=t('长文本明细'),details:(string|number)[][]=[];
  book.eachSheet(sheet=>sheet.eachRow(row=>row.eachCell(cell=>{

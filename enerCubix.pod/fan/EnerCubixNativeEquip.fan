@@ -4,7 +4,7 @@ using util
 ** The only fields EnerCubix owns on an existing FIN equipment record.
 const class EnerCubixNativeEquip
 {
-  static const [Str:Str] scalars := ["name":"enerCubixAlias", "useAlias":"enerCubixUseAlias", "unit":"enerCubixUnit", "area":"enerCubixArea", "maximum":"enerCubixMaximum", "historyMode":"enerCubixHistoryMode", "includeInTotals":"enerCubixIncludeInTotals", "autoSum":"enerCubixAutoSum", "alarmEnabled":"enerCubixAlarmEnabled", "alarmLimit":"enerCubixAlarmLimit", "actualEfficiency":"enerCubixActualEfficiency", "baselineEfficiency":"enerCubixBaselineEfficiency", "location":"enerCubixLocation", "description":"enerCubixDescription"]
+  static const [Str:Str] scalars := ["name":"enerCubixAlias", "useAlias":"enerCubixUseAlias", "unit":"enerCubixUnit", "area":"enerCubixArea", "areaSource":"enerCubixAreaSource", "maximum":"enerCubixMaximum", "historyMode":"enerCubixHistoryMode", "includeInTotals":"enerCubixIncludeInTotals", "autoSum":"enerCubixAutoSum", "alarmEnabled":"enerCubixAlarmEnabled", "alarmLimit":"enerCubixAlarmLimit", "actualEfficiency":"enerCubixActualEfficiency", "baselineEfficiency":"enerCubixBaselineEfficiency", "location":"enerCubixLocation", "description":"enerCubixDescription"]
 
   static Str[] ownedTags()
   { ["enerCubix","enerCubixKind","enerCubixUpdatedAt","enerCubixUpdatedBy","enerCubixCleaningEnabled"].addAll(EnerCubixRepo.refTags.vals).addAll(scalars.vals).unique }
@@ -64,7 +64,7 @@ const class EnerCubixNativeEquip
     EnerCubixRepo.refTags.each |tag,key|
     {
       if (equip[tag] is Ref) out[key]=((Ref)equip[tag]).id
-      else if (equip.has(tag)) out["configurationError"]=tag+" 必须是 FIN Ref 类型"
+      else if (equip.has(tag)) out[key == "areaSpaceId" ? "areaConfigurationError" : "configurationError"]=key == "areaSpaceId" ? "invalidAreaSpace" : tag+" 必须是 FIN Ref 类型"
     }
     scalars.each |tag,key| { value:=equip[tag]; if (value != null) out[key]=value is Number ? ((Number)value).toFloat : value }
     alias:=equip["enerCubixAlias"] as Str
