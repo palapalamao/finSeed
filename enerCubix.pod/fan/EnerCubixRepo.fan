@@ -446,7 +446,7 @@ class EnerCubixRepo
     if (cockpit)
     {
       source:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
-      all=EnerCubixNativeSpace.load(cx).project(source.findAll |r| {r["_comparisonReadable"] != false})
+      all=EnerCubixNativeSpace.load(cx).project(EnerCubixCockpitEfficiency.visible(source.findAll |r| {r["_comparisonReadable"] != false},source))
       EnerCubixCockpit.guardVisibleScope(request,all,source)
     }
     else all=input["perArea"] == true || ((input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin") ? liveRecords : records
