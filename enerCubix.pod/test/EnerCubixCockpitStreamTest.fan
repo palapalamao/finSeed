@@ -76,6 +76,9 @@ class EnerCubixCockpitStreamTest : Test
     finish:=DateTime("2026-01-01T00:00:00Z UTC")
     q:=Str:Obj?["from":start.toIso,"to":finish.toIso,"asOf":finish.toIso,
       "_cockpitReadRanges":[["from":start.toIso,"to":(start+366day).toIso],["from":(start+366day).toIso,"to":finish.toIso]]]
+    // Synthetic generation and per-hour oracle assertions are timed together.
+    // This relaxed test budget verifies equivalence/capacity, not the production
+    // 30-second deadline; wall-time observations are evaluated separately.
     budget:=EnerCubixStreamBudget(50000,200000,20000000,30min)
     began:=Duration.nowTicks
     cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"timeMax":Number.makeDuration(1hr)])
@@ -166,11 +169,13 @@ class EnerCubixCockpitStreamTest : Test
     b.hold(200000);verifyEq(b.peakHeld,200000)
     verifyErr(EnerCubixHttpErr#) |->Void| {b.hold(200001)}
     b=EnerCubixStreamBudget(50000,200000,20000000,-1sec)
-    verifyErr(EnerCubixHttpErr#) |->Void| {b.check}
+    try {b.check;fail("Expected explicit timeout")}
+    catch (EnerCubixHttpErr e) {verifyEq(e.status,504);verifyEq(e.code,"QUERY_TIMEOUT");verifyEq(e.msg,"cockpitQueryTimeout")}
     EnerCubixCockpitGate.enter("stream-test","a")
     try
     {
-      verifyErr(EnerCubixHttpErr#) |->Void| {EnerCubixCockpitGate.enter("stream-test","a")}
+      try {EnerCubixCockpitGate.enter("stream-test","a");fail("Expected admission refusal")}
+      catch (EnerCubixHttpErr e) {verifyEq(e.status,429);verifyEq(e.code,"COCKPIT_BUSY")}
       EnerCubixCockpitGate.enter("stream-test","b")
       try {verifyErr(EnerCubixHttpErr#) |->Void| {EnerCubixCockpitGate.enter("stream-test","c")}}
       finally {EnerCubixCockpitGate.leave("stream-test","b")}
@@ -221,10 +226,11 @@ class EnerCubixCockpitStreamTest : Test
   private Void verifyAnnualSnapshot([Str:Obj?][] histories, DateTime from, DateTime to, DateTime refFrom)
   {
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space","nativeSourceId":"s","nativeLevel":"site"],["id":"m","kind":"meter","spaceId":"s","nativeSpaceId":"s","pointId":"p","categoryId":"c","subcategoryId":"sub","tariffId":"t"],["id":"sub","kind":"subcategory","co2Factor":0.5f],["id":"t","kind":"tariff","mode":"flat","rate":2f,"currency":"CNY"]]
-    input:=Str:Obj?["schemaVersion":1,"requestId":"annual-capacity","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"month","from":from.toIso,"to":to.toIso],"asOf":to.toIso,"comparison":["mode":"custom","from":refFrom.toIso,"to":from.toIso],"modules":["kpis","trend","time","endUse","organization"]]
+    input:=Str:Obj?["schemaVersion":1,"requestId":"annual-capacity","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"month","from":from.toIso,"to":to.toIso],"asOf":to.toIso,"comparison":["mode":"custom","from":refFrom.toIso,"to":from.toIso],"modules":["kpis","trend","time","endUse","organization","balance","efficiency","issues"]]
     calls:=0;began:=Duration.nowTicks
     snapshot:=EnerCubixCockpit.execute(input,rs,|q,records->[Str:Obj?][]| {calls++;return histories},"test",TimeZone.utc,to)
     verifyEq(calls,1)
+    verifyEq(((Map)snapshot["modules"]).keys.sort,["balance","efficiency","endUse","issues","kpis","organization","time","trend"])
     energy:=EnerCubixMath.maps(((Map)((Map)((Map)snapshot["modules"])["kpis"])["data"])["values"]).find |v| {v["id"] == "energy"}
     verifyEq(energy["value"],(to-from).ticks.toFloat/10sec.ticks.toFloat)
     bytes:=JsonOutStream.writeJsonToStr(snapshot).toBuf.size
@@ -232,7 +238,8 @@ class EnerCubixCockpitStreamTest : Test
     verify(bytes <= 8388608)
     ((Map)snapshot["reports"]).each |report|
     {
-      usage:=(Map)((Map)((Map)report)["extra"])["knownUsage"]
+      usage:=((Map)((Map)report)["extra"])["knownUsage"] as Map
+      if (usage == null) return
       verify(usage["sourceUsageRowCount"] > 1000)
       verifyEq(usage["sourceUsageTruncated"],true)
       verifyEq(usage["truncationReason"],"cockpitEvidenceRowLimit")

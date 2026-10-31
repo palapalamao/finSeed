@@ -50,6 +50,45 @@ class EnerCubixCockpitAcceptanceTest : Test
     fixture:=Env.cur.vars["ENERCUBIX_COCKPIT_COMPLETE_FIXTURE"]
     if (fixture != null) File.os(fixture).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
   }
+
+  Void testUnavailableTariffKeepsOtherModulesAndPrimaryEnergy()
+  {
+    rs:=records
+    rs.find |r| {r["id"] == "tariff"}["rate"]="invalid-native-value"
+    result:=run(rs,histories)
+    values:=EnerCubixMath.maps(((Map)((Map)((Map)result["modules"])["kpis"])["data"])["values"])
+    verifyNull(values.find |m| {m["id"] == "cost"}["value"])
+    verifyEq(values.find |m| {m["id"] == "energy"}["value"],300f)
+    verifyEq(values.find |m| {m["id"] == "co2"}["value"],60f)
+    cop:=EnerCubixMath.maps(((Map)((Map)((Map)result["modules"])["efficiency"])["data"])["items"]).first
+    verifyEq(((Map)cop["ratio"])["value"],4f)
+    verifyEq(((Map)result["boundary"])["sourcePointIds"],["pi"])
+  }
+
+  Void testLateHistoryAndNewConfigurationCreateNewSnapshotsWithoutChangingOld()
+  {
+    first:=run(records,histories)
+    hs:=histories
+    ((Map)((List)hs.first["samples"]).last)["value"]=310f
+    late:=run(records,hs)
+    verify(first["snapshotId"] != late["snapshotId"])
+    verifyEq(first["context"],late["context"])
+    verifyEq(((Map)first["provenance"])["configFingerprint"],((Map)late["provenance"])["configFingerprint"])
+    firstValues:=EnerCubixMath.maps(((Map)((Map)((Map)first["modules"])["kpis"])["data"])["values"])
+    lateValues:=EnerCubixMath.maps(((Map)((Map)((Map)late["modules"])["kpis"])["data"])["values"])
+    verifyEq(firstValues.find |m| {m["id"] == "energy"}["value"],300f)
+    verifyEq(lateValues.find |m| {m["id"] == "energy"}["value"],310f)
+    rs:=records
+    rs.find |r| {r["id"] == "tariff"}.setAll(["mod":"new-version","rate":0.6f])
+    newer:=run(rs,histories)
+    verify(((Map)first["provenance"])["configFingerprint"] != ((Map)newer["provenance"])["configFingerprint"])
+    nextValues:=EnerCubixMath.maps(((Map)((Map)((Map)newer["modules"])["kpis"])["data"])["values"])
+    verifyEq(nextValues.find |m| {m["id"] == "cost"}["value"],180f)
+    verifyEq(firstValues.find |m| {m["id"] == "cost"}["value"],150f)
+  }
+
+  private Str:Obj? run([Str:Obj?][] rs,[Str:Obj?][] hs)
+  {EnerCubixCockpit.execute(request,rs,|q,saved->[Str:Obj?][]| {hs},"test",TimeZone.utc,end)}
   private DateTime start() {DateTime.fromIso("2026-10-01T00:00:00Z")}
   private DateTime end() {start+1day}
   private Str:Obj? request() {["schemaVersion":1,"requestId":"joint-acceptance","reportScope":["dimension":"metering","nodeIds":["in"],"selectionIntent":"range"],"focusCategoryId":"elec","time":["preset":"custom","period":"day","from":start.toIso,"to":end.toIso],"asOf":end.toIso,"comparison":["mode":"none"],"modules":["kpis","trend","time","endUse","organization","balance","efficiency","issues"]]}
