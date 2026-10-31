@@ -240,6 +240,21 @@ class EnerCubixCockpitMetricsTest : Test
     verifyErr(ArgErr#) {EnerCubixCockpit.execute(request,rs,|rq,recs->[Str:Obj?][]| {fail("over limit must not read");return histories},"test",TimeZone.utc,now)}
   }
 
+  Void testLastObservedIncludesAuxiliaryAndExcludesUnplannedOrFutureSamples()
+  {
+    hs:=histories
+    hs.first["rawSamples"]=[["ts":at.toIso,"value":100f]]
+    hs.last["rawSamples"]=[["ts":(at+90min).toIso,"value":10f],["ts":(now+1sec).toIso,"value":11f]]
+    hs.add(["pointId":"unplanned","mode":"interval","rawSamples":[["ts":now.toIso,"value":99f]],"samples":[Str:Obj?][,]])
+    result:=run(request,records,hs)
+    verifyEq(((Map)result["provenance"])["sourceLastObservedAt"],(at+90min).toIso)
+    verifyEq(metric(result,"energy")["value"],100f)
+    verifyEq(metric(result,"auxiliaryEnergy")["value"],8f)
+    q:=request; q["time"]=["preset":"custom","period":"hour","from":at.toIso,"to":(at+1hr).toIso]
+    result=run(q,records,hs)
+    verifyEq(((Map)result["provenance"])["sourceLastObservedAt"],at.toIso)
+  }
+
   private [Str:Obj?][] values(Str:Obj? r) {EnerCubixMath.maps(((Map)((Map)((Map)r["modules"])["kpis"])["data"])["values"])}
   private Str:Obj? metric(Str:Obj? r,Str id) {values(r).find |m| {m["id"] == id} ?: throw Err("missing metric $id")}
   private Str:Obj? run(Str:Obj? q,[Str:Obj?][] rs,[Str:Obj?][] hs)

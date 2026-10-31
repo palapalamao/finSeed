@@ -122,16 +122,23 @@ class EnerCubixCockpit
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
+    appliedCleaning:=histories.findAll |h| {h["cleaning"] is Map}.map |h->[Str:Obj?]|
+    {
+      cleaning:=(Map)h["cleaning"]
+      return ["pointId":h["pointId"],"profileId":cleaning["profileId"],"profileVersion":cleaning["profileVersion"],"parameters":cleaning["parameters"]]
+    }.unique.sort |[Str:Obj?] a,[Str:Obj?] b->Int| {a["pointId"].toStr <=> b["pointId"].toStr}
+    configStarts:=histories.findAll |h| {h["historyConfigObservedFrom"] is Str}.map |h->DateTime| {DateTime.fromIso(h["historyConfigObservedFrom"].toStr)}
+    configEnds:=histories.findAll |h| {h["historyConfigObservedTo"] is Str}.map |h->DateTime| {DateTime.fromIso(h["historyConfigObservedTo"].toStr)}
     observed:=DateTime[,]; cutoff:=DateTime.fromIso(request["asOf"].toStr)
     histories.each |h|
     {
-      if (!((Str[])boundary["sourcePointIds"]).contains(h["pointId"])) return
+      if (!EnerCubixMath.strings(historyRequest["_cockpitPointIds"]).contains(h["pointId"])) return
       rows:=EnerCubixMath.maps(h["rawSamples"] ?: h["samples"])
       rows.each |s| {t:=DateTime.fromIso(s["ts"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
       if (rows.isEmpty) EnerCubixMath.maps(h["intervals"]).each |s| {t:=DateTime.fromIso(s["to"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
     }
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
-    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"]]
+    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"historyConfigObservedFrom":configStarts.isEmpty ? null : ((DateTime)configStarts.min).toIso,"historyConfigObservedTo":configEnds.isEmpty ? null : ((DateTime)configEnds.max).toIso]
     limitations:=Str[,]
     if (complete == null) limitations.add(known == null ? "ENERGY_UNAVAILABLE" : "PARTIAL_USAGE")
     if (scope["selectionIntent"] == "explicitObjects" && !overlaps.isEmpty) limitations.add("OVERLAPPING_EXPLICIT_OBJECTS")
