@@ -221,7 +221,7 @@ class EnerCubixCockpitStreamTest : Test
   private Void verifyAnnualSnapshot([Str:Obj?][] histories, DateTime from, DateTime to, DateTime refFrom)
   {
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space","nativeSourceId":"s","nativeLevel":"site"],["id":"m","kind":"meter","spaceId":"s","nativeSpaceId":"s","pointId":"p","categoryId":"c","subcategoryId":"sub","tariffId":"t"],["id":"sub","kind":"subcategory","co2Factor":0.5f],["id":"t","kind":"tariff","mode":"flat","rate":2f,"currency":"CNY"]]
-    input:=Str:Obj?["schemaVersion":1,"requestId":"annual-capacity","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"month","from":from.toIso,"to":to.toIso],"asOf":to.toIso,"comparison":["mode":"custom","from":refFrom.toIso,"to":from.toIso],"modules":["kpis","trend"]]
+    input:=Str:Obj?["schemaVersion":1,"requestId":"annual-capacity","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"month","from":from.toIso,"to":to.toIso],"asOf":to.toIso,"comparison":["mode":"custom","from":refFrom.toIso,"to":from.toIso],"modules":["kpis","trend","time","endUse","organization"]]
     calls:=0;began:=Duration.nowTicks
     snapshot:=EnerCubixCockpit.execute(input,rs,|q,records->[Str:Obj?][]| {calls++;return histories},"test",TimeZone.utc,to)
     verifyEq(calls,1)

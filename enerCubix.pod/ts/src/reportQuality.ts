@@ -14,6 +14,8 @@ for(const code of ['comparisonEmpty','comparisonPartial','comparisonUnavailable'
 qualityLabels.incompleteInterval=t('区间边界未对齐或末段尚未完整');
 qualityLabels.cleaned=t('已清洗');
 qualityLabels.corrected=t('已修正');
+qualityLabels.streamingUnsupportedConfiguration=t('当前清洗规则尚不支持流式读取，请检查配置或缩小查询范围。');
+qualityLabels.streamingReadNotPrepared=t('该统计子区间尚未准备，请刷新或缩小范围。');
 type QualityContext={ts?:unknown;sourceIds?:unknown;role?:unknown};
 const timeText=(value:string)=>value.replace('T',' ').slice(0,16);
 

@@ -1900,3 +1900,54 @@ Object.assign(englishMessages,{
 Object.assign(englishMessages,{'统计面积':'Statistical area','自定义面积':'Custom area','自定义面积边界':'Custom-area boundaries'});
 
 Object.assign(englishMessages,{'{0}：{1} m²（{2}）；来源引用 {3}，版本 {4}，原始面积 {5} {6}':'{0}: {1} m² ({2}); source reference {3}, version {4}, original area {5} {6}'});
+
+Object.assign(englishMessages,{
+ "各小时平均用量": "Average energy usage by hour",
+ "用途分布": "End-use distribution",
+ "工作时段用量": "Working-period usage",
+ "工作日用量": "Working-day usage",
+ "范围内表计用量": "Meter usage in scope",
+ "驾驶舱分析结果": "Cockpit analysis results",
+ "组织分布": "Organization distribution",
+ "完整日热力图": "Complete-day heatmap",
+ "仅显示覆盖完整的当地日；缺测、NA、不完整日和未来时段不补零。": "Only fully covered local days are shown. Missing data, NA, incomplete days and future periods are not zero-filled.",
+ "已排除 {0} 个不完整对象日，已有用量仍保留在趋势和明细中。": "Excluded {0} incomplete object-days. Available usage remains in the trends and details.",
+ "当前范围没有完整日可绘制热力图": "There are no complete days for a heatmap in this scope",
+ "热力图对象": "Heatmap object",
+ "热力图月份": "Heatmap month",
+ "所选时段 {0}：{1} {2}": "Selected interval {0}: {1} {2}",
+ "点击时段可查看绝对时间及数值，重复小时分别保留。": "Select an interval to see its absolute time and value. Repeated hours remain separate.",
+ "查看热力图数值表": "View heatmap values",
+ "驾驶舱分析视角": "Cockpit analysis views",
+ "切换视角只展示当前快照，不改变统计范围或重新读取历史。": "Switching views displays the current snapshot without changing the scope or reading history again.",
+ "该视角暂时不可用，请刷新后重试。": "This view is temporarily unavailable. Refresh to try again.",
+ "当前快照未提供此视角，请刷新查询。": "This snapshot does not contain this view. Refresh the query.",
+ "显示每小时平均能量，单位沿用主点能量单位；不等同于瞬时功率。": "Shows mean hourly energy in the primary point’s energy unit. This is not instantaneous power.",
+ "查看小时均值明细": "View hourly average values",
+ "打开日均用量报告": "Open average daily usage report",
+ "打开对应专业报告": "Open the corresponding professional report",
+ "只按本次有效表计集合的用途属性归组；未指定用途单列，不将物理差额当作用途。": "Groups only the effective meter set by its end-use attributes. Unassigned use is separate; physical differences are not end uses.",
+ "范围包含共享或重叠来源，不计算构成占比；请改选互不重叠的表计。": "The scope contains shared or overlapping sources. Shares are unavailable; select non-overlapping meters.",
+ "打开分项用量报告": "Open end-use usage report",
+ "父组织包含子组织，不将各层级重复合计；未指定组织的用量单列。": "Parent organizations include their descendants. Levels are not added again; unassigned usage is separate.",
+ "范围重叠，保留组织和表计明细，不显示可相加的分布。": "Scopes overlap. Organization and meter details remain available without an additive distribution.",
+ "上级组织": "Parent organization",
+ "查看范围表计明细": "View scope meter details",
+ "专业页对应当前区间；同期比较在驾驶舱卡片查看。": "Professional reports cover the current period. Reference comparisons are shown on the cockpit cards.",
+ "未配置日历，工作时段及工作日分析不可用。": "No calendar is configured; working-period and working-day analyses are unavailable.",
+ "日历缺少有效工作时段或工作日配置。": "The calendar has no valid working-period or working-day configuration.",
+ "仅完整当地日进入热力图，不完整日的已有用量仍保留。": "The heatmap includes complete local days only. Available usage for incomplete days is retained.",
+ "用途范围存在重叠或负值，构成比例不可相加。": "End-use scopes overlap or contain negative values; their shares are not additive.",
+ "未指定组织的表计已单列，不自动分摊。": "Meters without an organization are shown separately and are not allocated automatically.",
+ "组织关系无效，相关表计保留在未归属范围。": "The organization relationship is invalid. Affected meters remain unassigned.",
+ "当前清洗规则尚不支持流式读取，请检查配置或缩小查询范围。": "The current cleaning rule does not support streaming. Check the configuration or reduce the query range.",
+ "该统计子区间尚未准备，请刷新或缩小范围。": "This statistical subrange was not prepared. Refresh or reduce the scope."
+});
+
+Object.assign(englishMessages,{"未指定组织":"Unassigned organization"});
+
+Object.assign(englishMessages,{'构成基于已有用量，不代表完整区间。':'Shares use available usage and do not represent a complete interval.','总量为零或没有可用占比，保留分项数值。':'The total is zero or no share is available. End-use values are retained.'});
+
+Object.assign(englishMessages,{"查看分项表计明细":"View end-use meter details"});
+
+Object.assign(englishMessages,{"部分来源数据不完整，已有用量与完整区间分别保留。":"Some sources are incomplete. Available usage and complete-interval usage remain separate."});

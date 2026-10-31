@@ -85,8 +85,12 @@ internal class EnerCubixCockpitFaces
     report:=EnerCubixHistory.report(q.dup.set("kind","utility"),records,EnerCubixCockpitMetrics.histories(q,histories))
     shares:=EnerCubixMath.maps(((Map)report["extra"])["utilityShares"])
     additive:=boundary["aggregateAllowed"] == true && shares.all |s| {!["overlappingScopes","areaNormalized","negativeConsumption"].contains(s["percentageBasis"])}
+    complete:=shares.all |s| {s["value"] != null && ["ok","good","estimated","derived","cleaned","corrected"].contains(s["quality"])}
+    reasons:=Str[,]
+    if (!additive) reasons.add("NON_ADDITIVE_END_USE")
+    if (!complete) reasons.add("DATA_INCOMPLETE")
     reports["face-endUse"]=report
-    return ["status":shares.isEmpty ? "empty" : (additive ? "ok" : "partial"),"data":["reportRef":"face-endUse","additive":additive,"meterIds":boundary["meterIds"]],"reasonCodes":additive ? Str[,] : ["NON_ADDITIVE_END_USE"]]
+    return ["status":shares.isEmpty ? "empty" : (additive && complete ? "ok" : "partial"),"data":["reportRef":"face-endUse","additive":additive,"meterIds":boundary["meterIds"]],"reasonCodes":reasons]
   }
 
   private static Str:Obj? organization(Str:Obj? report, [Str:Obj?][] records, Str[] ids, Str:Obj? boundary)
@@ -135,6 +139,7 @@ internal class EnerCubixCockpitFaces
       parent:=byId[id]?.get("parentId") as Str
       nodes.add(["id":id,"name":byId[id]?.get("name") ?: "","parentId":groups.containsKey(parent ?: "") ? parent : null,"nodeKind":id == "__unassigned__:organization" ? "unassigned" : "organization","meterIds":members,"unit":units.unique.size == 1 ? units.first : "","value":value,"valueType":value != null ? "number" : (available.quality == "na" ? "na" : "null"),"completeValue":complete.value,"knownValue":available.value,"valueBasis":basis,"quality":complete.value == null ? available.quality : complete.quality,"sourceIds":available.sources])
     }
+    if (nodes.any |n| {n["completeValue"] == null}) reasons.add("DATA_INCOMPLETE")
     return ["status":nodes.isEmpty ? "empty" : (reasons.isEmpty ? "ok" : "partial"),"data":["rootIds":nodes.findAll |n| {n["parentId"] == null}.map |n->Str| {n["id"].toStr},"nodes":nodes,"meterIds":ids,"meterReportRef":"face-meter-profile","additive":boundary["aggregateAllowed"]],"reasonCodes":reasons.unique]
   }
 }

@@ -124,6 +124,20 @@ class EnerCubixCockpitFacesTest : Test
     verifyEq(rows.find |row| {row["nodeId"] == "b"}["working"],75f)
   }
 
+  Void testAssignedIncompleteSourcesDoNotAdvertiseCompleteDistributionModules()
+  {
+    rs:=records;rs.find |r| {r["id"] == "b"}["organizationId"]="department"
+    hs:=histories
+    EnerCubixMath.maps(hs.first["samples"]).each |p| {p["value"]=0f}
+    EnerCubixMath.maps(hs.last["samples"]).each |p| {p["value"]=null;p["valueType"]="na";p["quality"]="na"}
+    r:=EnerCubixCockpit.execute(request,rs,|Str:Obj? x,[Str:Obj?][] saved->[Str:Obj?][]| {hs},"test",TimeZone.utc,end)
+    modules:=(Map)r["modules"]
+    verifyEq(((Map)modules["endUse"])["status"],"partial")
+    verifyEq(((Map)modules["organization"])["status"],"partial")
+    company:=EnerCubixMath.maps(((Map)((Map)modules["organization"])["data"])["nodes"]).find |n| {n["id"] == "company"}
+    verifyEq(company["value"],0f);verifyNull(company["completeValue"])
+  }
+
   private DateTime start() {DateTime.fromIso("2026-10-01T00:00:00Z")}
   private DateTime end() {start+24hr}
   private Str:Obj? request()
