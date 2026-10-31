@@ -18,3 +18,11 @@ export function cockpitSpaceSites(nodes:CockpitSpaceNode[]){
 export function cockpitSpaceIssues(snapshot:CockpitSnapshot,node:CockpitSpaceNode){
  const ids=new Set([node.id,node.nativeId,...node.meterIds]);return (snapshot.modules.issues?.data?.items||[]).filter(item=>ids.has(item.objectId)||item.sourceIds.some(id=>node.sourceIds.includes(id)));
 }
+
+/** Only explicit same-packet memberships are shown. Unknown or inaccessible IDs never become display labels. */
+export function cockpitSpaceAssociations(snapshot:CockpitSnapshot,catalog:Catalog,focused:CockpitSpaceNode){
+ const nodes=snapshot.modules.space?.data?.nodes||[],lookup=(id:string)=>catalog.records.find(row=>row.id===id||row.nativeSourceId===id);
+ const members=focused.meterIds.map(id=>nodes.find(node=>(node.id===id||node.nativeId===id)&&node.nodeKind==='equip'));
+ const items=members.filter((node):node is CockpitSpaceNode=>!!node).map(node=>({node,name:node.name||lookup(node.id)?.name,points:node.sourceIds.map(id=>({id,name:lookup(id)?.name})),issues:(snapshot.modules.issues?.data?.items||[]).filter(item=>item.sourceIds.some(id=>node.sourceIds.includes(id)))}));
+ return {items,unresolved:members.some(node=>!node)||items.some(item=>!item.name||item.points.some(point=>!point.name))};
+}

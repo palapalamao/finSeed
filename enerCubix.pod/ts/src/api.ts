@@ -3,6 +3,7 @@ import {finCsrfFetch} from 'haystack-nclient';
 import type {Catalog,ComparisonScope,FinPoint,ReportRequest,ReportResult,EnerCubixRecord} from './types';
 import type {CleaningPreview} from './cleaning';
 import type {ChangeMessagePage} from './changeMessages';
+import type {CockpitAsset,CockpitAssetCatalog,CockpitHotspot} from './cockpitAssets';
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import {decodeCockpitPayload} from './cockpitPayload';
 export class ApiError extends Error {constructor(public code:string,message:string,public sourceMessage?:string){super(message);this.name='ApiError';}}
@@ -24,6 +25,12 @@ export class EnerCubixApi {
   try{return unwrap<T>(value,response.status);}catch(error){if(response.status===401||error instanceof ApiError&&(['session_expired','unauthorized','http_401'].includes(error.code)))this.onSessionExpired?.();throw error;}
  }
  catalog=()=>this.request<Catalog>('catalog');
+ assets=(signal?:AbortSignal)=>this.request<CockpitAssetCatalog>('cockpit/assets',undefined,signal);
+ uploadAsset=(body:{id?:string;mod?:string;manifestMod:string|null;scopeId:string;name:string;base64:string;clearHotspots?:boolean})=>this.request<CockpitAssetCatalog>('cockpit/assets/upload',body);
+ saveAsset=(body:{id:string;mod:string;manifestMod:string|null;scopeId:string;name:string;hotspots:CockpitHotspot[]})=>this.request<CockpitAssetCatalog>('cockpit/assets/save',body);
+ selectAsset=(id:string|null,manifestMod:string|null)=>this.request<CockpitAssetCatalog>('cockpit/assets/select',{id,manifestMod});
+ deleteAsset=(asset:Pick<CockpitAsset,'id'|'mod'>,manifestMod:string|null)=>this.request<CockpitAssetCatalog>('cockpit/assets/delete',{id:asset.id,mod:asset.mod,manifestMod});
+ assetImageUrl=(asset:Pick<CockpitAsset,'id'|'hash'>)=>this.base+'/cockpit/assets/image?id='+encodeURIComponent(asset.id)+'&hash='+encodeURIComponent(asset.hash);
  points=(q:string,offset=0,limit=100)=>this.request<{items:FinPoint[];total:number;offset:number;limit:number}>(`points?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`);
  save=(record:EnerCubixRecord)=>this.request<EnerCubixRecord>('records',{record});
  remove=(record:EnerCubixRecord)=>this.request<{deleted:string}>('records/delete',{id:record.id,mod:record.mod});

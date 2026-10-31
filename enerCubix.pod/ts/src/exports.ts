@@ -4,7 +4,7 @@ import {isReferenceCurve} from './referenceCurves';
 import {t} from './i18n';
 import {productName} from './brand';
 import type {ComparisonScope,FinPoint,ReportRequest,ReportResult,ReportSnapshot,EnerCubixRecord} from './types';
-import {displaySeriesName,buildReportDisplay,readableReportValue,reportCellText,reportLabel,profileStats} from './reportDisplay';
+import {displaySeriesName,buildReportDisplay,readableReportValue,reportCellText,reportLabel,isReportBusinessKey,profileStats} from './reportDisplay';
 import {reportQualityText,reportWarnings} from './reportQuality';
 import {coverageGroups,coverageStatusText} from './knownUsageCoverage';
 import {meterOriginDescription,meterOriginLabel} from './meterOrigin';
@@ -44,7 +44,7 @@ export function filterSnapshot(snapshot:ReportSnapshot|null,categoryIds:string[]
 export function cellText(value:unknown):string {if(value===null||value===undefined)return '—';if(typeof value==='object')return JSON.stringify(value);return String(value);}
 export function reportTables(snapshot:ReportSnapshot){
  const rows=snapshot.result.rows;
- const keys=Array.from(new Set(rows.flatMap(row=>Object.keys(row)))).filter(key=>key!=='key'&&key!=='id');
+ const keys=Array.from(new Set(rows.flatMap(row=>Object.keys(row)))).filter(key=>key!=='id'&&key!=='key'&&isReportBusinessKey(key));
  return {headers:keys.map(key=>reportLabel(snapshot,key)),rows:rows.map(row=>keys.map(key=>reportCellText(snapshot,key,row[key],true,row))),series:[[t("对象"),t("单位"),t("时间"),t("值"),t("质量"),t("源点")],...snapshot.result.series.flatMap(series=>series.points.map(point=>[displaySeriesName(series),t(series.unit),point.ts,reportCellText(snapshot,'value',point.value,true,point as unknown as Record<string,unknown>),reportQualityText(snapshot,point.quality,{...point,role:series.role}),reportCellText(snapshot,'sourceIds',point.sourceIds)]))]};
 }
 function download(blob:Blob,name:string){const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}

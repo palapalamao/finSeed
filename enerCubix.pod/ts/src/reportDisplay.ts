@@ -1,3 +1,4 @@
+import {diagnosticSidecarLabel,diagnosticUpstreamReason} from './cockpitDiagnostics';
 import {isReferenceCurve,referenceName as curveName} from './referenceCurves';
 import {locale,serverMessage,t,localizedRecord} from './i18n';
 import {meterOrigin,meterOriginLabel} from './meterOrigin';
@@ -37,7 +38,8 @@ Object.assign(reportLabels,{comparisonUnion:t('物理分表并集合计（已去
 return reportLabels;
 }
 export const reportLabels=localizedRecord(makeReportLabels);
-export function reportLabel(snapshot:ReportSnapshot,key:string){if(snapshot.request.metric==='cost'){const label:Record<string,string>={usageBasis:t('费用显示口径'),knownTotals:t('已有费用小计'),knownValue:t('已有费用'),completeValue:t('完整区间费用'),selectionTotals:t('范围已有费用合计（已去重）'),knownCurrent:t('本期已有费用'),knownReference:t('对比期已有费用'),knownWorking:t('工作时段已有费用'),knownNonworking:t('非工作时段已有费用'),costBasis:t('费用计价依据'),forecastBasis:t('预测依据'),forecastMeterIds:t('预测去重表计')};if(label[key])return label[key];}if(snapshot.result.kind==='energyFlow'&&key==='basis')return t('统计依据');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeter')return t('下级已有用量小计');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeterQuality')return t('下级已有量质量');if(snapshot.result.kind==='energyFlow'&&key==='complete')return t('是否完整');if(snapshot.result.kind==='energyFlow'&&key==='coveredSeconds')return t('有效时长（秒）');const objects=snapshot.request.kind==='comparison'&&!snapshot.request.otherFrom;return (objects?({current:t("对象用量"),reference:t("基准用量"),difference:t("差值（对象 − 基准）"),percentage:t("相对基准变化率 (%)")} as Record<string,string>)[key]:undefined)||reportLabels[key]||key;}
+export function isReportBusinessKey(key:string){return !['periodsCaptureId','sourceUsageCaptureId','detailsCaptureId','intervalsCaptureId'].includes(key);}
+export function reportLabel(snapshot:ReportSnapshot,key:string){const diagnostic=diagnosticSidecarLabel(key);if(diagnostic)return diagnostic;if(snapshot.request.metric==='cost'){const label:Record<string,string>={usageBasis:t('费用显示口径'),knownTotals:t('已有费用小计'),knownValue:t('已有费用'),completeValue:t('完整区间费用'),selectionTotals:t('范围已有费用合计（已去重）'),knownCurrent:t('本期已有费用'),knownReference:t('对比期已有费用'),knownWorking:t('工作时段已有费用'),knownNonworking:t('非工作时段已有费用'),costBasis:t('费用计价依据'),forecastBasis:t('预测依据'),forecastMeterIds:t('预测去重表计')};if(label[key])return label[key];}if(snapshot.result.kind==='energyFlow'&&key==='basis')return t('统计依据');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeter')return t('下级已有用量小计');if(snapshot.result.kind==='energyFlow'&&key==='knownSubmeterQuality')return t('下级已有量质量');if(snapshot.result.kind==='energyFlow'&&key==='complete')return t('是否完整');if(snapshot.result.kind==='energyFlow'&&key==='coveredSeconds')return t('有效时长（秒）');const objects=snapshot.request.kind==='comparison'&&!snapshot.request.otherFrom;return (objects?({current:t("对象用量"),reference:t("基准用量"),difference:t("差值（对象 − 基准）"),percentage:t("相对基准变化率 (%)")} as Record<string,string>)[key]:undefined)||reportLabels[key]||key;}
 export const numberText=(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:2,useGrouping:false}).format(value);
 export function displaySeriesName(series:Series):string{
  if(series.role==='reference')return curveName(series,true);
@@ -115,6 +117,7 @@ export function readableReportValue(snapshot:ReportSnapshot,key:string,value:unk
  return value;
 }
 export function reportCellText(snapshot:ReportSnapshot,key:string,value:unknown,precise=false,context?:Record<string,unknown>):string{
+ if(key==='periodsTruncated')return value===true?t('是'):value===false?t('否'):'—';if(key==='periodsTruncationReason')return typeof value==='string'?diagnosticUpstreamReason(value):'—';
  if((key==='value'||key==='total')&&context?.valueType==='na')return 'NA';
  const readable=readableReportValue(snapshot,key,value,context);
  if(readable===null||readable===undefined)return '—';

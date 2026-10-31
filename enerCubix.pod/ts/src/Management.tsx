@@ -13,9 +13,10 @@ import {names,nodeKinds,type Catalog,type FinPoint,type Kind,type EnerCubixRecor
 import {NativeEquipEnrollDrawer} from './NativeEquipEnrollDrawer';
 import {MeterManager} from './MeterManager';
 import {OtherSettings} from './OtherSettings';
-export type ManageView='tree'|'categories'|'tariffs'|'calendars'|'expressions'|'copConfig'|'templates'|'settings'|'otherSettings'|'bindings'|'tasks';
-export const manageKinds:Record<ManageView,Kind[]>={tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
-export const manageTitles:Record<ManageView,string>={tree:t("计量对象管理"),categories:t("能源分类与分项"),tariffs:t("费率管理"),calendars:t("日历与时段"),expressions:t("计算公式"),copConfig:t("COP 配置"),templates:t("报表模板"),settings:t("概览设置"),otherSettings:t("其他配置"),bindings:t("参考点绑定"),tasks:t("计算与报警任务")};
+import {SpaceAssets} from './SpaceAssets';
+export type ManageView='spaceAssets'|'tree'|'categories'|'tariffs'|'calendars'|'expressions'|'copConfig'|'templates'|'settings'|'otherSettings'|'bindings'|'tasks';
+export const manageKinds:Record<ManageView,Kind[]>={spaceAssets:[],tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
+export const manageTitles:Record<ManageView,string>={spaceAssets:t("空间素材配置"),tree:t("计量对象管理"),categories:t("能源分类与分项"),tariffs:t("费率管理"),calendars:t("日历与时段"),expressions:t("计算公式"),copConfig:t("COP 配置"),templates:t("报表模板"),settings:t("概览设置"),otherSettings:t("其他配置"),bindings:t("参考点绑定"),tasks:t("计算与报警任务")};
 export function treeData(records:EnerCubixRecord[],query=''):DataNode[]{
  const nodes=records.filter(record=>nodeKinds.includes(record.kind));
  const build=(parentId:string|undefined,path:Set<string>):DataNode[]=>nodes.filter(record=>(record.parentId||undefined)===parentId).filter(record=>!path.has(record.id!)).map(record=>{const children=build(record.id,new Set([...path,record.id!]));return {key:record.id!,title:<span><span>{record.name}</span><span className="tree-kind">{names[record.kind]}</span></span>,children,isLeaf:!children.length};});
@@ -24,7 +25,7 @@ export function treeData(records:EnerCubixRecord[],query=''):DataNode[]{
  const filter=(items:DataNode[]):DataNode[]=>items.flatMap(node=>{const record=nodes.find(record=>record.id===node.key);const children=filter(node.children||[]);return record?.name.toLowerCase().includes(query.toLowerCase())||children.length?[{...node,children}]:[];});return query?filter([...roots,...orphans]):[...roots,...orphans];
 }
 interface Props {onOpenTemplate?:(record:EnerCubixRecord)=>void;view:ManageView;api:EnerCubixApi;catalog:Catalog;reload:()=>Promise<void>}
-export function Management(props:Props){return props.view==='tree'?<MeterManager api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='otherSettings'?<OtherSettings api={props.api} catalog={props.catalog} reload={props.reload}/>:<ConfigurationManagement {...props}/>;}
+export function Management(props:Props){return props.view==='spaceAssets'?<SpaceAssets api={props.api} catalog={props.catalog}/>:props.view==='tree'?<MeterManager api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='otherSettings'?<OtherSettings api={props.api} catalog={props.catalog} reload={props.reload}/>:<ConfigurationManagement {...props}/>;}
 function ConfigurationManagement({view,api,catalog,reload,onOpenTemplate}:Props){
  const[editing,setEditing]=useState<Partial<EnerCubixRecord>|null>(null);const[saving,setSaving]=useState(false);const[selected,setSelected]=useState<string>();const[search,setSearch]=useState('');const[pointsOpen,setPointsOpen]=useState(false);const[transfer,setTransfer]=useState<{action:'copy'|'move';record:EnerCubixRecord}|null>(null);const[parentId,setParentId]=useState<string>();const[taskRange,setTaskRange]=useState<[Dayjs,Dayjs]>(presetRange('thisMonth'));const[taskBusy,setTaskBusy]=useState(false);
  const[nativeEnrollId,setNativeEnrollId]=useState<string>();const records=catalog.records;const canWrite=catalog.user.canWrite;const current=records.find(record=>record.id===selected);const[bulkKeys,setBulkKeys]=useState<string[]>([]);const[bulkBusy,setBulkBusy]=useState(false);

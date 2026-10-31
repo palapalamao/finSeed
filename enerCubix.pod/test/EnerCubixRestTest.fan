@@ -18,6 +18,15 @@ class EnerCubixRestTest : Test
     verifyErr(EnerCubixHttpErr#) { EnerCubixRest.readBody("abcd".in,3) }
   }
 
+  Void testOnlyAssetUploadHasLargerByteBoundedTransport()
+  {
+    verifyEq(EnerCubixRest.bodyLimit("cockpit/assets/upload"),3145728)
+    verifyEq(EnerCubixRest.bodyLimit("records"),2097152)
+    verifyEq(EnerCubixRest.bodyLimit("cockpit"),2097152)
+    verifyEq(EnerCubixRest.readBody("中文".in,6,true),"中文")
+    verifyErr(EnerCubixHttpErr#) {EnerCubixRest.readBody("中文".in,5,true)}
+    ["cockpit/assets/upload","cockpit/assets/save","cockpit/assets/select","cockpit/assets/delete"].each |route| {verify(!EnerCubixRest.readPost(route))}
+  }
   Void testOnlyExplicitReadPostsBypassWritePermission()
   {
     ["report","cockpit","cleaning/preview"].each |route| { verify(EnerCubixRest.readPost(route)) }

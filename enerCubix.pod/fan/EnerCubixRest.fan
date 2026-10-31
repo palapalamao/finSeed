@@ -13,14 +13,14 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview"].contains(route)
+      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
       {
         if (!readPost(route)) repo.mustWrite
         if (!req.headers.get("Content-Type","").lower.startsWith("application/json")) throw ArgErr("请求必须使用 application/json")
-        raw := readBody(req.in)
+        raw := readBody(req.in,bodyLimit(route),route == "cockpit/assets/upload")
         parsed := JsonInStream(raw.in).readJson
         if (parsed isnot Map) throw ArgErr("请求必须为 JSON 对象")
         body = (Str:Obj?)parsed
@@ -28,6 +28,14 @@ const class EnerCubixRest : WebMod
       Obj? data
       switch (route)
       {
+        case "cockpit/assets": data=EnerCubixCockpitAssets(repo).list
+        case "cockpit/assets/upload": data=EnerCubixCockpitAssets(repo).upload(body)
+        case "cockpit/assets/save": data=EnerCubixCockpitAssets(repo).save(body)
+        case "cockpit/assets/select": data=EnerCubixCockpitAssets(repo).select(body)
+        case "cockpit/assets/delete": data=EnerCubixCockpitAssets(repo).remove(body)
+        case "cockpit/assets/image":
+          image:=EnerCubixCockpitAssets(repo).image(req.uri.query["id"] ?: "",req.uri.query["hash"] ?: "")
+          sendImage(image); return
         case "session": data=["locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
@@ -66,6 +74,21 @@ const class EnerCubixRest : WebMod
     }
   }
 
+  private Void sendImage(Str:Obj? image)
+  {
+    bytes:=(Buf)image["bytes"]
+    res.statusCode=200
+    res.headers["Content-Type"]=image["mime"].toStr
+    res.headers["Content-Length"]=bytes.size.toStr
+    res.headers["Cache-Control"]="no-store"
+    res.headers["X-Content-Type-Options"]="nosniff"
+    res.headers["Content-Security-Policy"]="default-src 'none'; sandbox"
+    res.headers["Cross-Origin-Resource-Policy"]="same-origin"
+    res.out.writeBuf(bytes); res.out.flush; res.done
+  }
+
+  internal static Int bodyLimit(Str route) {route == "cockpit/assets/upload" ? 3145728 : 2097152}
+
   private Void send(Int status, [Str:Obj?] body)
   {
     res.statusCode=status
@@ -83,14 +106,19 @@ const class EnerCubixRest : WebMod
     return val
   }
 
-  internal static Str readBody(InStream input, Int limit := 2097152)
+  internal static Str readBody(InStream input, Int limit := 2097152, Bool utf8ByteBound := false)
   {
     out := StrBuf()
+    byteCount:=0
     while (true)
     {
       c := input.readChar
       if (c == null) break
-      if (out.size >= limit) throw EnerCubixHttpErr(413,"TOO_LARGE","请求内容过大")
+      if(c < 128)byteCount++
+      else if(c < 2048)byteCount+=2
+      else if(c < 65536)byteCount+=3
+      else byteCount+=4
+      if (out.size >= limit || (utf8ByteBound && byteCount > limit)) throw EnerCubixHttpErr(413,"TOO_LARGE","请求内容过大")
       out.addChar(c)
     }
     return out.toStr
