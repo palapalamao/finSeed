@@ -236,15 +236,23 @@ internal class EnerCubixCockpitMetrics
     strict:=row == null ? null : EnerCubixMath.num(row["value"])
     known:=row == null ? null : EnerCubixMath.num(row["knownValue"])
     quality:=row?.get("quality") as Str ?: "missing"
-    if (["filtered","substituted","na"].contains(quality)) strict=null
+    if (["filtered","substituted","na","estimated"].contains(quality)) strict=null
     na:=row?.get("valueType") == "na" || row?.get("knownValueType") == "na"
     if (strict == null && known == null && na) quality="na"
     reason:=row?.get("scopeQuality") as Str
     if (boundary["aggregateAllowed"] == false) reason=boundary["reasonCode"] as Str ?: "overlappingScopes"
     if (reason != null) {strict=null;known=null;quality=reason}
-    basis:=strict != null ? "complete" : (known != null ? "knownSubtotal" : "unavailable")
-    if ((strict ?: known) != null && (quality == "substituted" || row?.get("knownQuality") == "substituted")) basis="cleanedWithReplacement"
-    return ["id":id,"categoryId":category,"value":strict ?: known,"valueType":(strict ?: known) != null ? "number" : (na ? "na" : "null"),"unit":row?.get("unit") ?: "","quality":strict == null && known != null ? "partial" : quality,"valueBasis":basis,"completeValue":strict,"knownValue":known,"sourceIds":row?.get("sourceIds") ?: Str[,],"reasonCodes":strict == null ? [quality] : Str[,],"boundaryId":boundary["id"],"coverage":((Map)report["extra"])["usageCoverage"] ?: Obj?[,]]
+    // Match the professional reports: explicit missing known usage never falls
+    // back to a strict interpolated value. Raw strict evidence stays in reports.
+    displayed:=row?.containsKey("knownValue") == true ? known : (strict ?: known)
+    if (displayed == null)
+    {
+      strict=null
+      if (reason == null) quality=na ? "na" : (row?.get("knownQuality") as Str ?: quality)
+    }
+    basis:=displayed == null ? "unavailable" : (strict != null ? "complete" : "knownSubtotal")
+    if (displayed != null && (quality == "substituted" || row?.get("knownQuality") == "substituted")) basis="cleanedWithReplacement"
+    return ["id":id,"categoryId":category,"value":displayed,"valueType":displayed != null ? "number" : (na ? "na" : "null"),"unit":row?.get("unit") ?: "","quality":strict == null && known != null ? "partial" : quality,"valueBasis":basis,"completeValue":strict,"knownValue":known,"sourceIds":row?.get("sourceIds") ?: Str[,],"reasonCodes":strict == null ? [quality] : Str[,],"boundaryId":boundary["id"],"coverage":((Map)report["extra"])["usageCoverage"] ?: Obj?[,]]
   }
 
   private static Void invalidate(Str:Obj? value, Str reason)

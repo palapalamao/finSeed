@@ -13,7 +13,7 @@ async function setup(page:Page,language:string){
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);
   if(control.status!==200)return route.fulfill({status:409,json:{ok:false,error:{code:'CONFIGURATION_CHANGED',msg:'cockpitConfigurationChanged'}}});
   const snapshot=structuredClone(raw);snapshot.requestId=request.requestId;snapshot.snapshotId='metric-'+requests.length;snapshot.context.project='testproject';snapshot.context.reportScope=request.reportScope;snapshot.context.auxiliaryCategoryId=request.auxiliaryCategoryId;snapshot.context.time={...snapshot.context.time,...request.time,from:request.time.from||raw.context.time.from,to:request.time.to||raw.context.time.to};
-  snapshot.context.comparison={...snapshot.context.comparison,...request.comparison};
+  snapshot.context.comparison={...snapshot.context.comparison,...request.comparison,mode:request.time.preset==='custom'&&request.comparison?.mode==='presetDefault'?'none':request.comparison?.mode||'none'};
   const values=snapshot.modules.kpis!.data!.values,energy=values.find(v=>v.id==='energy')!;
   if(control.mode==='partial'){energy.value=70;energy.completeValue=null;energy.valueBasis='knownSubtotal';energy.reasonCodes=['partial'];energy.comparison={...energy.comparison!,comparable:false,changeRate:null,reasonCodes:['INCOMPLETE_COVERAGE']};}
   if(control.mode==='fallback'){values[2]={id:'areaIntensity',value:null,valueType:'null',unit:'kWh/m²',quality:'missingArea',valueBasis:'unavailable',sourceIds:[],reasonCodes:['missingArea']};values[3]={id:'activeAlarms',value:0,valueType:'number',unit:'count',quality:'ok',valueBasis:'currentState',sourceIds:[],stateObservedAt:snapshot.generatedAt};}

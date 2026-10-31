@@ -255,6 +255,31 @@ class EnerCubixCockpitMetricsTest : Test
     verifyEq(((Map)result["provenance"])["sourceLastObservedAt"],at.toIso)
   }
 
+  Void testKnownDisplayDoesNotPromoteEstimatedStrictValues()
+  {
+    row:=Str:Obj?["categoryId":"c","unit":"kWh","value":10.92896174872294f,"valueType":"number","quality":"estimated","knownValue":null,"knownValueType":"null","knownQuality":"missing","sourceIds":["p"]]
+    report:=Str:Obj?["summary":["selectionTotals":[row]],"extra":["usageCoverage":[["complete":false,"coverage":0f]]]]
+    boundary:=Str:Obj?["id":"boundary","aggregateAllowed":true]
+    value:=EnerCubixCockpitMetrics.metric(report,"energy","c",boundary)
+    verifyNull(value["value"])
+    verifyNull(value["completeValue"])
+    verifyEq(value["valueType"],"null")
+    verifyEq(value["valueBasis"],"unavailable")
+    verifyEq(value["quality"],"missing")
+    [0f,5f].each |known|
+    {
+      row["knownValue"]=known;row["knownValueType"]="number";row["knownQuality"]="partial"
+      value=EnerCubixCockpitMetrics.metric(report,"energy","c",boundary)
+      verifyEq(value["value"],known)
+      verifyNull(value["completeValue"])
+      verifyEq(value["valueType"],"number")
+      verifyEq(value["valueBasis"],"knownSubtotal")
+    }
+    row["quality"]="ok";row["knownValue"]=null;row["knownValueType"]="null";row["knownQuality"]="missing"
+    value=EnerCubixCockpitMetrics.metric(report,"energy","c",boundary)
+    verifyNull(value["value"])
+  }
+
   private [Str:Obj?][] values(Str:Obj? r) {EnerCubixMath.maps(((Map)((Map)((Map)r["modules"])["kpis"])["data"])["values"])}
   private Str:Obj? metric(Str:Obj? r,Str id) {values(r).find |m| {m["id"] == id} ?: throw Err("missing metric $id")}
   private Str:Obj? run(Str:Obj? q,[Str:Obj?][] rs,[Str:Obj?][] hs)
