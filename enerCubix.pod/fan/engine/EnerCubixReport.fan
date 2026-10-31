@@ -112,7 +112,7 @@ internal class EnerCubixReport
       out.ticks.add(tick); cursor=next
     }
     if (request["perArea"] == true && !out.ratio) out.unit+="/m²"
-    if (activeKnown != null && activeKnown !== knownCtx) knownCtx.knownReads.setAll(activeKnown.knownReads)
+    if (activeKnown != null && activeKnown !== knownCtx) knownCtx.mergeKnown(activeKnown)
     return out
   }
 
@@ -251,8 +251,7 @@ internal class EnerCubixReport
       }
       extra["usageBasis"]="knownUsage"
       extra["usageCoverage"]=lines.findAll |l| {!l.reference && !l.ratio && !l.gauge}.map |l->[Str:Obj?]| {coverage(l)}
-      reads:=EnerCubixKnownUsage.evidence(knownCtx.knownReads.vals)
-      extra["knownUsage"]=["basis":"closedSourceIntervals","asOf":dataCutoff.toIso,"sourceUsage":reads,"detailsTruncated":reads.any |row| { row["detailsTruncated"] == true }]
+      extra["knownUsage"]=knownCtx.knownEvidence.set("asOf",dataCutoff.toIso)
     }
     recordLineAreas(lines)
     if (kind == "leak") leakTotals(lines)
@@ -325,7 +324,11 @@ internal class EnerCubixReport
     while (cursor < to)
     {
       end:=EnerCubixMath.floorHour(cursor)+1hr; if (end > to) end=to
-      values.add((known ? knownCtx : ctx).node(id,category,cursor,end,metric)); cursor=end
+      active:=known ? knownCtx : ctx
+      value:=active.node(id,category,cursor,end,metric)
+      values.add(value)
+      constant:=value.value == null ? active.constantEnd(id,category,cursor,to,metric) : null
+      cursor=constant ?: end
     }
     return known ? EnerCubixKnownUsage.combine(values) : EnerCubixValue.sum(values)
   }

@@ -31,9 +31,12 @@ internal class EnerCubixCockpitSpace
       // A native equipment folder may contain meters but is not their meter.
       // Focus on equipment requires its own enrolled primary source.
       ms:=record["nativeSourceKind"] == "equip" && !["meter","totalMeter"].contains(record["kind"]) ? [Str:Obj?][,] : ctx.scopeMeters(id,category)
-      members[id]=ms.map |m->Str| {m["id"].toStr}.unique.sort
-      sources[id]=ms.map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str p->Bool| {!p.isEmpty}.unique.sort
-      if (!ms.isEmpty && ms.all |m| {p:=m["pointId"] as Str;return p != null && plannedPoints.contains(p) && current.any |h| {h["pointId"] == p}}) available.add(id)
+      readableMembers:=ms.findAll |m| {readable(m) && byId.containsKey(m["id"].toStr)}
+      members[id]=readableMembers.map |m->Str| {m["id"].toStr}.unique.sort
+      sources[id]=readableMembers.map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str p->Bool| {!p.isEmpty}.unique.sort
+      // A readable ancestor with an inaccessible member is not a loaded partial
+      // aggregate. Keep its visible metadata without disclosing the hidden IDs.
+      if (!ms.isEmpty && readableMembers.size == ms.size && ms.all |m| {p:=m["pointId"] as Str;return p != null && plannedPoints.contains(p) && current.any |h| {h["pointId"] == p}}) available.add(id)
     }
     report:=available.isEmpty ? Str:Obj?[:] : EnerCubixHistory.report(q.dup.setAll(["nodeIds":available,"dimension":"space","kind":"profile","perArea":false]),records,current)
     Map summary:=report["summary"] as Map ?: Str:Obj?[:];Map extra:=report["extra"] as Map ?: Str:Obj?[:]

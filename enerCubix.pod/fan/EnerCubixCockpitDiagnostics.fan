@@ -2,16 +2,18 @@
 ** configuration and graphs have already completed and are never recalculated.
 internal class EnerCubixCockpitDiagnostics
 {
-  static Str:Obj? project(Str:Obj? snapshot)
+  static Str:Obj? project(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null)
   {
     if (snapshot["diagnostics"] is Map) return snapshot
     capture:=EnerCubixCockpitDiagnostics()
+    capture.deadline=deadline;deadline?.check
     out:=snapshot.dup;reports:=Str:Obj?[:]
     Map context:=snapshot["context"] as Map ?: Str:Obj?[:]
     Map time:=context["time"] as Map ?: Str:Obj?[:]
     scope:=EnerCubixMath.strings((context["reportScope"] as Map)?.get("nodeIds"))
     ((Map)snapshot["reports"]).each |raw,ref|
     {
+      capture.check
       report:=((Map)raw).dup
       range:=Str:Obj?["from":report["from"] ?: time["from"],"to":report["to"] ?: time["to"],"asOf":context["asOf"]]
       ctx:=Str:Obj?["reportRef":ref.toStr,"range":range,"objects":scope]
@@ -61,6 +63,9 @@ internal class EnerCubixCockpitDiagnostics
     return (Str:Obj?)out.toImmutable
   }
   private Int remaining := 1000
+  private EnerCubixCockpitDeadline? deadline
+  private Int visited := 0
+  private Void check() {if(++visited % 128 == 0) deadline?.check}
   private [Str:Obj?][] groups := [,]
   private Str:[Str:Obj?][] index := [:]
 
@@ -70,7 +75,9 @@ internal class EnerCubixCockpitDiagnostics
     {
       if (r["periods"] isnot List) return r
       copy:=r.dup;id:=r["nodeId"] as Str ?: r["id"] as Str
-      register(copy,"periods","coveragePeriods","hour",ctx,id == null ? Str[,] : [id],((List)r["periods"]).size,false)
+      total:=EnerCubixMath.num(r["periodRecordTotalCount"])
+      upstream:=r["periodsTruncated"] == true
+      register(copy,"periods","coveragePeriods","hour",ctx,id == null ? Str[,] : [id],total == null ? (upstream ? null : ((List)r["periods"]).size) : total.toInt,upstream)
       return copy
     }
   }
@@ -86,6 +93,7 @@ internal class EnerCubixCockpitDiagnostics
   private [Str:Obj?]? register(Map parent,Str field,Str kind,Str grain,Str:Obj? ctx,Str[] objects,Int? total,Bool upstream)
   {
     rows:=parent[field] as List;if (rows == null) return null
+    check
     if (total != null && total < rows.size) total=null
     ids:=objects.isEmpty ? EnerCubixMath.strings(ctx["objects"]) : objects
     reportRefs:=EnerCubixMath.strings(ctx["reportRefs"])
@@ -93,7 +101,10 @@ internal class EnerCubixCockpitDiagnostics
     range:=(Map)ctx["range"]
     key:=kind+"|"+ids.join("|")+"|"+range["from"].toStr+"|"+range["to"].toStr+"|"+range["asOf"].toStr+"|"+rows.size+"|"+(rows.first?.hash ?: 0)+"|"+(rows.last?.hash ?: 0)+"|"+(total?.toStr ?: "unknown")+"|"+upstream
     bucket:=index[key] ?: [Str:Obj?][,]
-    group:=bucket.find |g| {g["rows"] == rows}
+    identity:=parent[field+"CaptureId"] as Str
+    // A sampled prefix does not prove equality of omitted tails. Only an opaque
+    // server capture identity permits sharing upstream-limited evidence.
+    group:=bucket.find |g| {g["rows"] == rows && (!upstream || (identity != null && g["captureId"] == identity))}
     if (group == null)
     {
       sources:=Str:Bool[:]
@@ -101,12 +112,15 @@ internal class EnerCubixCockpitDiagnostics
       EnerCubixMath.strings(parent["sourceIds"]).each |id| {sources[id]=true}
       rows.each |v|
       {
+        check
         r:=v as Map;if(r == null) return
         p:=r["pointId"] as Str;if(p != null) sources[p]=true
         EnerCubixMath.strings(r["sourceIds"]).each |id| {sources[id]=true}
       }
       meta:=Str:Obj?["id":"diagnostic-"+groups.size,"kind":kind,"grain":grain,"totalCount":total,"returnedCount":0,"truncated":upstream,"reason":upstream ? "upstreamDiagnosticLimit" : "complete","objectIds":ids,"sourceIds":sources.keys.sort,"sourceIdsComplete":!upstream || source != null,"requestRange":range,"returnedRange":null,"reportRefs":reportRefs.dup]
-      group=["kind":kind,"rows":rows,"meta":meta,"upstream":upstream,"targets":[["parent":parent,"field":field]]]
+      if(upstream && parent[field+"TruncationReason"] is Str) meta["upstreamReason"]=parent[field+"TruncationReason"]
+      else if(upstream && field == "sourceUsage" && parent["truncationReason"] is Str) meta["upstreamReason"]=parent["truncationReason"]
+      group=["kind":kind,"rows":rows,"meta":meta,"upstream":upstream,"captureId":identity,"targets":[["parent":parent,"field":field]]]
       groups.add(group);bucket.add(group);index[key]=bucket
     }
     else
@@ -122,6 +136,7 @@ internal class EnerCubixCockpitDiagnostics
     active:=list.findAll |g| {!((List)g["rows"]).isEmpty}.size
     list.each |g|
     {
+      check
       rows:=(List)g["rows"];n:=rows.isEmpty ? 0 : rows.size.min(remaining/active)
       if(!rows.isEmpty) active--
       remaining-=n
@@ -133,7 +148,12 @@ internal class EnerCubixCockpitDiagnostics
       meta["returnedCount"]=n;meta["truncated"]=upstream || limited
       meta["reason"]=limited ? (upstream ? "upstreamAndSnapshotLimit" : "snapshotDiagnosticBudget") : (upstream ? "upstreamDiagnosticLimit" : "complete")
       meta["returnedRange"]=returnedRange(kept)
-      ((List)g["targets"]).each |target| {t:=(Map)target;((Map)t["parent"])[t["field"]]=kept}
+      ((List)g["targets"]).each |target|
+      {
+        t:=(Map)target;parent:=(Map)t["parent"];parent[t["field"]]=kept
+        if(t["field"] == "periods" && parent.containsKey("periodRecordTotalCount"))
+        {parent["periodsReturnedCount"]=n;parent["periodsTruncated"]=upstream || limited}
+      }
     }
   }
   private static [Str:Obj?]? returnedRange(List rows)

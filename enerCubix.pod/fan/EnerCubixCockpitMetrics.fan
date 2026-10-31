@@ -99,7 +99,7 @@ internal class EnerCubixCockpitMetrics
       ranges.each |r|
       {
         previous:=out.last
-        if (previous != null && previous["pointIds"] == [point] && DateTime.fromIso(r["from"].toStr) <= DateTime.fromIso(previous["to"].toStr))
+        if (previous != null && EnerCubixMath.strings(previous["pointIds"]).contains(point) && DateTime.fromIso(r["from"].toStr) <= DateTime.fromIso(previous["to"].toStr))
         {
           if (DateTime.fromIso(r["to"].toStr) > DateTime.fromIso(previous["to"].toStr)) previous["to"]=r["to"]
         }

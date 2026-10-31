@@ -14,6 +14,12 @@ class EnerCubixEngine
 
   private static Str:Obj? run(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
   {
+    budget:=histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget
+    deadline:=request["_cockpitDeadline"] as EnerCubixCockpitDeadline ?: budget?.deadline
+    baseline:=budget?.temporary?.val ?: 0
+    deadline?.check
+    try
+    {
     // One cutoff is shared by all nested reports and temporal sections. Query
     // bounds remain the user's selection, including missing and future buckets.
     cutoff:=EnerCubixKnownUsage.cutoff(request)
@@ -30,7 +36,10 @@ class EnerCubixEngine
     if (comparison != null) extra["comparisonScopes"]=comparison.snapshots
     result["extra"]=extra
     result["asOf"]=cutoff.toIso
+    deadline?.check
     return result
+    }
+    finally {if(budget != null) budget.temporary.val=baseline}
   }
 
   private static Str:Obj? calculate(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
@@ -74,6 +83,7 @@ class EnerCubixEngine
       records=dimension.records; request=dimension.normalizeRequest(request)
     }
     ctx:=EnerCubixContext(records,histories,tz,dimension)
+    ctx.deadline=request["_cockpitDeadline"] as EnerCubixCockpitDeadline ?: ctx.deadline
     ctx.comparison=request["_comparisonScope"] as EnerCubixComparisonScope
     if (kind == "energyFlow") return EnerCubixEnergyFlow(ctx,request,from,to,histories).report
     if (dimension?.nativeSpace == true) records.findAll |r| { r["nativeSourceMissing"] == true }.each |r| { label:=r["name"] ?: r["id"]; ctx.warn("$label : nativeSourceMissing") }

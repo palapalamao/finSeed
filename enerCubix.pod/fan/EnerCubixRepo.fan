@@ -411,6 +411,7 @@ class EnerCubixRepo
     mustRead
     EnerCubixCockpitGate.enter(cx.proj.name,cx.user.username)
     started:=Duration.nowTicks
+    deadline:=EnerCubixCockpitDeadline()
     try
     {
       now:=DateTime.now
@@ -424,7 +425,7 @@ class EnerCubixRepo
       {
         return EnerCubixCockpitIssues.readableEvents(EnerCubixNativeAlarms(this).list,cx.proj.name) |id->Bool|
         {source:=cx.db.readById(Ref(id),false);return source != null && cx.canRead(source)}
-      })
+      },null,deadline)
       if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
       return result
     }
@@ -436,6 +437,7 @@ class EnerCubixRepo
   {
     mustRead
     request := input.dup
+    request.remove("_cockpitDiagnosticCapture")
     now:=DateTime.now
     cutoff:=input["asOf"] == null ? now : EnerCubixKnownUsage.cutoff(input)
     request["asOf"]=(cutoff < now ? cutoff : now.toTimeZone(cutoff.tz)).toIso

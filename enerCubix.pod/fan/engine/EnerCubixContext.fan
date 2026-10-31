@@ -5,11 +5,15 @@ internal class EnerCubixContext
   {
     tz=strict.tz; dimension=strict.dimension; comparison=strict.comparison; byId=strict.byId; byPoint=strict.byPoint
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
+    preparedBudget=strict.preparedBudget;deadline=strict.deadline
+    preparedBudget?.hold(4);if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new bound(EnerCubixContext source, Str id, Str:Obj? record)
   {
     tz=source.tz; dimension=source.dimension; comparison=source.comparison; byId=source.byId.dup.set(id,record)
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
+    preparedBudget=source.preparedBudget;deadline=source.deadline
+    preparedBudget?.hold(4);if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new make([Str:Obj?][] records, [Str:Obj?][] histories, TimeZone tz, EnerCubixDimension? dimension := null)
   {
@@ -21,6 +25,9 @@ internal class EnerCubixContext
       if (id != null) byId[id] = r
     }
     histories.each |h| { parsed:=EnerCubixHistoryData(h); byPoint[parsed.id]=parsed }
+    preparedBudget=byPoint.vals.find |h| {h.preparedBudget != null}?.preparedBudget
+    deadline=preparedBudget?.deadline
+    if(preparedBudget != null) {preparedBudget.hold(1+5*byPoint.size);tariffBaseline.ordered=true}
     records.each |r|
     {
       parent := r["parentId"]?.toStr
@@ -43,12 +50,35 @@ internal class EnerCubixContext
   Str[] warnings := [,]
   private Str:EnerCubixValue cache := [:]
   private Str:EnerCubixValue tariffBaseline := [:]
+  private Str:Obj? defaultTariffs := [:]
   private Str:[Str:Obj?] dimensionPlans := [:]
   private EnerCubixContext? strictContext
   private DateTime? knownEnd
   Str:[Str:Obj?] knownReads := [:]
   Str:[Str:Obj?] usedTariffs := [:]
   private Int knownDetailCount := 0
+  EnerCubixPreparedBudget? preparedBudget
+  EnerCubixCockpitDeadline? deadline
+  private Int nodeCalls := 0
+  private Bool omittedEmptyEvidence := false
+  private Bool omittedUnpreparedEvidence := false
+
+  ** Empty prepared lookups do not become a second dense cache. They have zero
+  ** coverage and no source intervals; authoritative per-object coverage remains.
+  Str:Obj? knownEvidence(Bool includeDetails := true)
+  {
+    reads:=EnerCubixKnownUsage.evidence(knownReads.vals)
+    out:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":reads]
+    if(includeDetails || omittedEmptyEvidence || omittedUnpreparedEvidence) out["detailsTruncated"]=omittedEmptyEvidence || omittedUnpreparedEvidence || reads.any |r| {r["detailsTruncated"] == true}
+    if(omittedEmptyEvidence || omittedUnpreparedEvidence) out.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":null,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":omittedEmptyEvidence,"omittedUnprepared":omittedUnpreparedEvidence])
+    return out
+  }
+  Void mergeKnown(EnerCubixContext other)
+  {
+    omittedEmptyEvidence=omittedEmptyEvidence || other.omittedEmptyEvidence
+    omittedUnpreparedEvidence=omittedUnpreparedEvidence || other.omittedUnpreparedEvidence
+    other.knownReads.each |v,k| {if(!knownReads.containsKey(k)) preparedBudget?.hold(1);knownReads[k]=v}
+  }
 
   private EnerCubixValue sumValues(EnerCubixValue[] values)
   { strictContext == null ? EnerCubixValue.sum(values) : EnerCubixKnownUsage.combine(values) }
@@ -161,8 +191,9 @@ internal class EnerCubixContext
 
   EnerCubixValue node(Str id, Str category, DateTime from, DateTime to, Str metric := "energy", Str[] path := Str[,], Str? utility := null, Bool useMaster := true)
   {
+    if(++nodeCalls % 128 == 0) deadline?.check
     if (path.contains(id)) return EnerCubixValue(null,"cycle")
-    key := "$id|$category|${from.ticks}|${to.ticks}|$metric|$utility|$useMaster"
+    key := preparedBudget == null ? "$id|$category|${from.ticks}|${to.ticks}|$metric|$utility|$useMaster" : ""
     if (path.isEmpty && cache.containsKey(key)) return cache[key]
     r := byId[id]
     if (r == null) return EnerCubixValue(null,"unknownNode")
@@ -172,6 +203,8 @@ internal class EnerCubixContext
       warn(r["name"].toStr+"："+r["configurationError"])
       return EnerCubixValue(null,"invalidConfiguration")
     }
+    stable:=emptyKey(r,category,from,to,metric)
+    if(stable != null && cache.containsKey(stable)) {preparedBudget.contextEmptyHits.increment;return cache[stable]}
     nextPath := path.dup.add(id)
     EnerCubixValue result := EnerCubixValue()
     if (dimension?.scope(id) == true)
@@ -183,6 +216,7 @@ internal class EnerCubixContext
         members:=dimension.members(id).findAll |m| { (m["categoryId"]?.toStr ?: "") == category }
         authoritative:=(utility == null ? dimension.frontier(members) : dimension.usageFrontier(members)).findAll |m| { utility == null || (m["utilityId"]?.toStr ?: "") == utility }
         plan=["members":authoritative,"quality":dimension.quality(members)]
+        preparedBudget?.hold(1+authoritative.size)
         dimensionPlans[planKey]=plan
       }
       authoritative:=([Str:Obj?][])plan["members"]
@@ -245,8 +279,40 @@ internal class EnerCubixContext
       }
     }
     if (result.value == null) { label:=r["name"] ?: id; warn("$label : ${result.quality}") }
-    if (path.isEmpty) cache[key]=result
+    if (path.isEmpty && preparedBudget == null) cache[key]=result
+    if(stable != null && result.value == null)
+    {if(!cache.containsKey(stable)) preparedBudget.hold(2);cache[stable]=result}
     return result
+  }
+
+  private Str? emptyKey(Str:Obj? r,Str category,DateTime from,DateTime to,Str metric)
+  {
+    if(preparedBudget == null || !["meter","totalMeter"].contains(r["kind"])) return null
+    if(metric == "cost")
+    {
+      mode:=tariff(r)?.get("mode")
+      // A missing billing baseline has different precedence from the first
+      // missing hour of a cycle. Leave every tiered-price call on the old path.
+      if(mode == "monthlyBlock" || mode == "yearlyBlock") return null
+    }
+    h:=byPoint[r["pointId"] as Str ?: ""]
+    // This source was not captured in this report. Keep the original fixed
+    // not-loaded result; it is not evidence that FIN history was read and empty.
+    if(h == null) return "notLoaded|"+r["id"]+"|"+category+"|"+metric
+    if(!["ok","cleaned","estimated","derived","corrected"].contains(h.quality)) return null
+    domain:=h.emptyDomain(from,to,knownEnd)
+    if(domain == null && !h.unpreparedPair(from,to,knownEnd)) return null
+    return "constant|"+r["id"]+"|"+category+"|"+metric+"|"+(domain?.toStr ?: "notPrepared")
+  }
+
+  DateTime? constantEnd(Str id,Str category,DateTime from,DateTime to,Str metric)
+  {
+    r:=byId[id]
+    if(r == null || preparedBudget == null || !["meter","totalMeter"].contains(r["kind"])) return null
+    mode:=metric == "cost" ? tariff(r)?.get("mode") : null
+    if(mode == "monthlyBlock" || mode == "yearlyBlock") return null
+    h:=byPoint[r["pointId"] as Str ?: ""]
+    return h == null ? to : h.constantEnd(from,to,knownEnd)
   }
 
   EnerCubixValue nodeTotal(Str id, DateTime from, DateTime to, Str[] path := Str[,])
@@ -271,18 +337,28 @@ internal class EnerCubixContext
       {
         data:=his.knownUsage(from,to,knownEnd); raw=(EnerCubixValue)data["value"]
         durationFactor=(EnerCubixMath.num(data["coveredSeconds"]) ?: 0f)/3600f
-        evidence:=data.dup; evidence.remove("value")
         details:=EnerCubixMath.maps(data["intervals"])
-        remaining:=1000-knownDetailCount
-        if (details.size > remaining)
+        empty:=preparedBudget != null && data["knownValue"] == null && data["knownQuality"] == "missing" && data["coveredSeconds"] == 0f && data["intervalCount"] == 0 && data["intervalStart"] == null && data["intervalEnd"] == null && details.isEmpty
+        unprepared:=preparedBudget != null && raw.quality == "streamingReadNotPrepared" && data.size == 1
+        if(empty) omittedEmptyEvidence=true
+        else if(unprepared) omittedUnpreparedEvidence=true
+        else
         {
-          evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
-          evidence["detailsTruncated"]=true
+          evidence:=data.dup; evidence.remove("value")
+          remaining:=1000-knownDetailCount
+          if (details.size > remaining)
+          {
+            evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
+            evidence["detailsTruncated"]=true
+            evidence["intervalsCaptureId"]=Uuid().toStr
+          }
+          knownDetailCount+=EnerCubixMath.maps(evidence["intervals"]).size
+          evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":from.toIso,"to":to.toIso])
+          recordId:=r["id"].toStr
+          key:="$recordId|$point|${from.ticks}|${to.ticks}"
+          if(!knownReads.containsKey(key)) preparedBudget?.hold(2)
+          knownReads[key]=evidence
         }
-        knownDetailCount+=EnerCubixMath.maps(evidence["intervals"]).size
-        evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":from.toIso,"to":to.toIso])
-        recordId:=r["id"].toStr
-        knownReads["$recordId|$point|${from.ticks}|${to.ticks}"]=evidence
       }
     max := EnerCubixMath.num(r["maximum"])
     if (raw.value != null && max != null && raw.value > max*durationFactor) return EnerCubixValue(null,"maximum",raw.sources)
@@ -327,10 +403,10 @@ internal class EnerCubixContext
           values.add(rawNode(r,cursor,end,path)); cursor=end
         }
         baseline=values.isEmpty ? EnerCubixValue(0f,"ok") : EnerCubixValue.sum(values)
-        tariffBaseline[baselineKey]=baseline
+        saveBaseline(baselineKey,baseline)
       }
       nextKey:="$meterId|${cycle.ticks}|${to.ticks}"
-      tariffBaseline[nextKey]=EnerCubixValue.sum([baseline,raw])
+      saveBaseline(nextKey,EnerCubixValue.sum([baseline,raw]))
       if (!baseline.reliable || !raw.reliable) return EnerCubixValue(null,EnerCubixValue.worse(baseline.quality,raw.quality),raw.sources)
       if (baseline.value == null) return EnerCubixValue(null,"missingTariffBaseline",raw.sources)
       if (raw.value == null) return raw
@@ -356,6 +432,16 @@ internal class EnerCubixContext
       parts.add(rate == null ? EnerCubixValue(null,"missingTariff",raw.sources) : energy.scale(rate))
     }
     return sumValues(parts)
+  }
+
+  private Void saveBaseline(Str key,EnerCubixValue value)
+  {
+    if(preparedBudget != null && !tariffBaseline.containsKey(key))
+    {
+      if(tariffBaseline.size >= 256) tariffBaseline.remove(tariffBaseline.keys.first)
+      else preparedBudget.hold(2)
+    }
+    tariffBaseline[key]=value
   }
 
   internal DateTime[] tariffBounds(Str:Obj? t, DateTime from, DateTime to)
@@ -385,6 +471,7 @@ internal class EnerCubixContext
   ** The calendar remains a fallback for projects without a tariff.
   Str timeBand(Str id, Str category, DateTime from, DateTime to, Str? utility := null)
   {
+    if(++nodeCalls % 128 == 0) deadline?.check
     bands:=Str[,]
     scopeMeters(id,category,Str[,],utility).each |meter|
     {
@@ -472,8 +559,12 @@ internal class EnerCubixContext
   {
     id:=record["tariffId"]?.toStr
     if (id != null) return byId[id]
+    category:=record["categoryId"] as Str ?: ""
+    if(preparedBudget != null && defaultTariffs.containsKey(category)) return defaultTariffs[category] as Map
     defaults:=byId.vals.findAll |r| { r["kind"] == "tariff" && r["categoryId"] == record["categoryId"] && r["isDefault"] == true }
-    return defaults.size == 1 ? defaults.first : null
+    result:=defaults.size == 1 ? defaults.first : null
+    if(preparedBudget != null) {preparedBudget.hold(2);defaultTariffs[category]=result}
+    return result
   }
 
   Str unit(Str id, Str category, Str metric)

@@ -4,17 +4,22 @@ using util
 ** alter reports, arithmetic, source identity or the legacy /report contract.
 internal class EnerCubixCockpitPayload
 {
-  static Str:Obj? encode(Str:Obj? snapshot)
+  static Str:Obj? encode(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null)
   {
     codec:=EnerCubixCockpitPayload()
+    codec.deadline=deadline;deadline?.check
     body:=codec.value(snapshot,"")
     return (Str:Obj?)["payloadEncoding":"compact-v1","codecVersion":1,"snapshot":body,"evidence":codec.entries].toImmutable
   }
   private Str:Obj? entries := [:]
+  private EnerCubixCockpitDeadline? deadline
+  private Int visited := 0
+  private Void check() {if(++visited % 256 == 0) deadline?.check}
   private static const Str[] shared := ["periods","sourceUsage","cleaning","usageCoverage","tariffSnapshot","energyFlow"]
 
   private Obj? value(Obj? input,Str key)
   {
+    check
     Obj? out:=input
     if (input is Map)
     {
@@ -29,11 +34,11 @@ internal class EnerCubixCockpitPayload
       if (["periods","heatmap"].contains(key) && !list.isEmpty && list.all |v| {v is Map})
       {
         first:=(Map)list.first;columns:=first.keys.map |k->Str| {k.toStr}.sort
-        if (list.all |v| {((Map)v).keys.map |k->Str| {k.toStr}.sort == columns})
+        if (list.all |v| {check;return ((Map)v).keys.map |k->Str| {k.toStr}.sort == columns})
         {
           table=true
           constants:=Str:Obj?[:]
-          columns.findAll |c| {list.all |v| {((Map)v)[c] == first[c]}}.each |c| {constants[c]=value(first[c],"")}
+          columns.findAll |c| {list.all |v| {check;return ((Map)v)[c] == first[c]}}.each |c| {constants[c]=value(first[c],"")}
           variable:=columns.findAll |c| {!constants.containsKey(c)}
           data:=Str:Obj?["columns":variable,"rows":list.map |v->Obj?| {variable.map |c->Obj?| {value(((Map)v)[c],"")}}]
           if (!constants.isEmpty) data["constants"]=constants

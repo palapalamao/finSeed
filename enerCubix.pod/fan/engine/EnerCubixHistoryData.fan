@@ -25,6 +25,7 @@ internal class EnerCubixHistoryData
   new make(Str:Obj? data)
   {
     prepared = data["_preparedReads"] as Map
+    preparedBudget = data["_preparedBudget"] as EnerCubixPreparedBudget
     id = data["pointId"]?.toStr ?: ""
     unit = data["unit"]?.toStr ?: ""
     mode = data["mode"]?.toStr ?: "sampled"
@@ -37,6 +38,19 @@ internal class EnerCubixHistoryData
     samples = parse(data["samples"])
     rawSamples = data["rawSamples"] == null ? samples : parse(data["rawSamples"])
     intervals = data.containsKey("intervals") ? parseIntervals(data["intervals"]) : null
+    sparse=data["_preparedSparse"] as Map
+    if(sparse != null)
+    {
+      sparseDomains=EnerCubixMath.maps(sparse["domains"])
+      sparseContext=EnerCubixContext([Str:Obj?][,],[Str:Obj?][,],TimeZone.fromStr(sparse["tz"].toStr))
+      empty=EnerCubixHistoryData(["pointId":id,"sourceIds":sources,"unit":unit,"mode":mode,"quality":quality])
+      if(!sparseDomains.isEmpty)
+      {
+        at:=(DateTime)sparseDomains.first["from"]
+        emptyValue=empty.read(at,at+1hr)
+        emptyKnown=empty.knownUsage(at,at+1hr,at+1hr)
+      }
+    }
   }
   ** Typed bounded window for the streaming adapter. Arithmetic below is shared
   ** with whole-range reports; clipping keeps the original source cutoff rule.
@@ -63,15 +77,29 @@ internal class EnerCubixHistoryData
   EnerCubixSample[] rawSamples
   EnerCubixInterval[]? intervals
   private [Str:Obj?]? prepared
+  EnerCubixPreparedBudget? preparedBudget
+  private Map? sparse
+  private [Str:Obj?][] sparseDomains := [,]
+  private EnerCubixContext? sparseContext
+  private EnerCubixHistoryData? empty
+  private EnerCubixValue? emptyValue
+  private Str:Obj? emptyKnown := [:]
   private EnerCubixKnownUsage? knownReader
 
   Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd)
   {
     if (prepared != null)
     {
-      row:=(Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      preparedBudget?.lookup
+      row:=prepared.isEmpty ? null : (Map?)prepared[EnerCubixCockpitStream.key(start,end)]
       data:=((Map?)row?.get("known"))?.get(queryEnd.ticks.toStr) as Map
-      if (data == null) return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
+      if (data == null)
+      {
+        if(sparsePair(start,end) && ((DateTime[])sparse["queryEnds"]).contains(queryEnd))
+        {preparedBudget?.sparseHits?.increment;return emptyKnown.dup}
+        preparedBudget?.unprepared?.increment
+        return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
+      }
       out:=data.dup; out["value"]=EnerCubixValue(EnerCubixMath.num(data["knownValue"]),data["knownQuality"].toStr,sources)
       return out
     }
@@ -83,8 +111,11 @@ internal class EnerCubixHistoryData
   {
     if (prepared != null)
     {
-      row:=(Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      preparedBudget?.lookup
+      row:=prepared.isEmpty ? null : (Map?)prepared[EnerCubixCockpitStream.key(start,end)]
       v:=row?.get(raw ? "raw" : "strict") as Map
+      if(v == null && !raw && sparsePair(start,end)) {preparedBudget?.sparseHits?.increment;return emptyValue}
+      if(v == null) preparedBudget?.unprepared?.increment
       return v == null ? EnerCubixValue(null,"streamingReadNotPrepared",sources) : EnerCubixValue(EnerCubixMath.num(v["value"]),v["quality"].toStr,sources)
     }
     src := sources
@@ -135,6 +166,49 @@ internal class EnerCubixHistoryData
     if (total < 0f) return EnerCubixValue(null,"negative",src)
     fraction := (end-start).ticks.toFloat / 1hr.ticks.toFloat
     return EnerCubixValue(total*fraction,EnerCubixValue.worse(quality,fraction == 1f ? "ok" : "estimated"),src)
+  }
+
+  ** Only the already-read domain and exact original prepared pair rules qualify.
+  private Bool sparsePair(DateTime start, DateTime end)
+  {
+    if(sparse == null || sparse["version"] != 1 || end <= start) return false
+    hour:=EnerCubixMath.floorHour(start)
+    if(!sparseDomains.any |r| {hour >= (DateTime)r["from"] && hour+1hr <= (DateTime)r["to"]}) return false
+    if(start == hour && end == hour+1hr) return true
+    return EnerCubixCockpitStream.pairs(hour,EnerCubixMath.maps(sparse["queries"]),( [Str:Obj?]?[])sparse["tariffs"],sparseContext).any |p| {p["from"] == start && p["to"] == end}
+  }
+
+  ** A whole range is empty only inside one proven domain, with prepared first/
+  ** last subpairs and the exact known queryEnd. This never infers an unread gap.
+  Int? emptyDomain(DateTime start,DateTime end,DateTime? queryEnd := null)
+  {
+    if(sparse == null || sparse["version"] != 1 || end <= start || (queryEnd != null && !((DateTime[])sparse["queryEnds"]).contains(queryEnd))) return null
+    index:=sparseDomains.findIndex |r| {start >= (DateTime)r["from"] && end <= (DateTime)r["to"]}
+    if(index == null) return null
+    if(start.min == 0 && start.sec == 0 && start.nanoSec == 0 && end-start == 1hr) return index
+    firstEnd:=EnerCubixMath.floorHour(start)+1hr;if(firstEnd > end) firstEnd=end
+    lastStart:=EnerCubixMath.floorHour(end-1ns);if(lastStart < start) lastStart=start
+    return sparsePair(start,firstEnd) && sparsePair(lastStart,end) ? index : null
+  }
+
+  Bool unpreparedPair(DateTime start,DateTime end,DateTime? queryEnd)
+  {
+    if(prepared == null) return false
+    row:=prepared.isEmpty ? null : prepared[EnerCubixCockpitStream.key(start,end)] as Map
+    if(row != null && (queryEnd == null || (row["known"] as Map)?.containsKey(queryEnd.ticks.toStr) == true)) return false
+    return emptyDomain(start,end,queryEnd) == null
+  }
+  DateTime? constantEnd(DateTime start,DateTime end,DateTime? queryEnd)
+  {
+    if(sparse == null || sparse["version"] != 1) return null
+    // Outside the frozen prepared window is an error domain, never missing.
+    a:=(DateTime)sparse["from"];b:=(DateTime)sparse["to"]
+    if(start >= b) return end
+    if(start < a) return end < a ? end : a
+    domain:=sparseDomains.find |r| {start >= (DateTime)r["from"] && start < (DateTime)r["to"]}
+    if(domain == null) return null
+    until:=(DateTime)domain["to"];if(until > end) until=end
+    return emptyDomain(start,until,queryEnd) == null ? null : until
   }
 
   ** Interval values are authoritative for their exact covered time span. Never

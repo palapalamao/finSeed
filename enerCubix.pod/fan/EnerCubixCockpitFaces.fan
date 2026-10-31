@@ -29,6 +29,8 @@ internal class EnerCubixCockpitFaces
 
   private static Str:Obj? time(Str:Obj? base, Str:Obj? scopeQuery, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, EnerCubixContext ctx)
   {
+    deadline:=base["_cockpitDeadline"] as EnerCubixCockpitDeadline
+    visited:=0
     q:=base.dup.set("period","hour")
     daily:=EnerCubixHistory.report(q.dup.set("kind","daily"),records,EnerCubixCockpitMetrics.histories(q,histories))
     reports["face-daily"]=daily
@@ -58,6 +60,7 @@ internal class EnerCubixCockpitFaces
       byDay:=Date:[Str:Obj?][][:]
       points.each |p|
       {
+        if(++visited % 128 == 0) deadline?.check
         date:=DateTime.fromIso(p["ts"].toStr).toTimeZone(tz).date
         if (!byDay.containsKey(date)) byDay[date]=[Str:Obj?][,]
         byDay[date].add(p)

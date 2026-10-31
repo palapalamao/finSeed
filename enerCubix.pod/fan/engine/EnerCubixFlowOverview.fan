@@ -68,8 +68,12 @@ internal const class EnerCubixFlowOverview
     strict.comparison=EnerCubixComparisonScope.of(request,shared)
     known:=EnerCubixContext.known(strict,limit)
     duration:=(to-from).ticks.toFloat/1sec.ticks.toFloat
-    [Str:Obj?][] result:=candidates.keys.sort.map |id->[Str:Obj?]|
+    idsByOrder:=candidates.keys.sort
+    capture:=request["_cockpitDiagnosticCapture"] == true && request["_cockpitCategoryId"] != null
+    [Str:Obj?][] result:=idsByOrder.map |id,position->[Str:Obj?]|
     {
+      quota:=capture ? periodQuota(idsByOrder.size,position) : 0
+      periodCount:=0
       meter:=candidates[id]
       if (strict.comparison != null && meter["_comparisonPointReadable"] == false)
         return ["id":id,"nodeId":id,"name":meter["name"],"categoryId":meter["categoryId"],"unit":meter["unit"] ?: "","value":null,"valueType":"null","quality":"forbidden","completeValue":null,"completeQuality":"forbidden","sourceIds":Str[,],"activeSeconds":duration,"coveredSeconds":0f,"coverage":0f,"complete":false,"periods":[Str:Obj?][,],"meterIds":[id]]
@@ -119,7 +123,12 @@ internal const class EnerCubixFlowOverview
           v:=observed.node(id,category,cursor,end,metric)
           values.add(v); completeValues.add(own.node(id,category,cursor,end,metric))
           last:=periods.last
-          if (ownIds == null && last != null && last["quality"] == v.quality && last["to"] == cursor.toIso && last["pointId"] == source)
+          if(capture)
+          {
+            periodCount++
+            if(periods.size < quota) periods.add(["from":cursor.toIso,"to":end.toIso,"value":v.value,"quality":v.quality,"pointId":source])
+          }
+          else if (ownIds == null && last != null && last["quality"] == v.quality && last["to"] == cursor.toIso && last["pointId"] == source)
           {
             last["to"]=end.toIso
             if (v.value != null) last["value"]=(EnerCubixMath.num(last["value"]) ?: 0f)+v.value
@@ -128,12 +137,14 @@ internal const class EnerCubixFlowOverview
           cursor=end
         }
         observed.knownReads.vals.findAll |read| {read["pointId"] == source}.each |read| {covered+=EnerCubixMath.num(read["coveredSeconds"]) ?: 0f}
-        known.knownReads.setAll(observed.knownReads)
+        known.mergeKnown(observed)
       }
       value:=EnerCubixKnownUsage.combine(values)
       completeValue:=EnerCubixValue.sum(completeValues)
       complete:=value.value != null && completeValue.value != null && completeValue.reliable && covered >= lifetime
-      return ["id":id,"nodeId":id,"name":meter["name"],"categoryId":category,"unit":unit,"value":value.value,"valueType":value.valueType,"quality":value.quality,"completeValue":completeValue.value,"completeQuality":completeValue.quality,"sourceIds":value.sources,"activeSeconds":lifetime,"topologyActiveSeconds":active[id] ?: 0f,"coveredSeconds":covered,"coverage":lifetime > 0f ? (covered/lifetime).min(1f) : 0f,"complete":complete,"periods":periods,"substituted":value.quality == "substituted","removed":latest == null,"pointId":point,"meterIds":[id]]
+      row:=Str:Obj?["id":id,"nodeId":id,"name":meter["name"],"categoryId":category,"unit":unit,"value":value.value,"valueType":value.valueType,"quality":value.quality,"completeValue":completeValue.value,"completeQuality":completeValue.quality,"sourceIds":value.sources,"activeSeconds":lifetime,"topologyActiveSeconds":active[id] ?: 0f,"coveredSeconds":covered,"coverage":lifetime > 0f ? (covered/lifetime).min(1f) : 0f,"complete":complete,"periods":periods,"substituted":value.quality == "substituted","removed":latest == null,"pointId":point,"meterIds":[id]]
+      if(capture) row.setAll(["periodsCaptureId":Uuid().toStr,"periodRecordTotalCount":periodCount,"periodsReturnedCount":periods.size,"periodsTruncated":periodCount > periods.size,"periodsTruncationReason":periodCount > periods.size ? "cockpitPeriodCaptureLimit" : null])
+      return row
     }
     ids:=EnerCubixMath.strings(request["nodeIds"])
     totals:=[Str:Obj?][,]
@@ -147,6 +158,8 @@ internal const class EnerCubixFlowOverview
     unit:=result.first?.get("unit") as Str ?: ""
     row:=Str:Obj?["id":request["categoryId"].toStr+"|"+unit,"categoryId":request["categoryId"],"unit":unit,"value":strictValue.value,"quality":strictValue.quality,"meterIds":roots.map |root->Str| {root["id"].toStr},"sourceIds":knownValue.sources]
     row.setAll(EnerCubixKnownUsage.fields(knownValue)); totals.add(row)
-    return ["from":from.toIso,"to":to.toIso,"asOf":cutoff.toIso,"unknownTopologySeconds":unknownSeconds,"rows":result,"basis":"closedSourceIntervals","selectionTotals":totals,"knownUsage":["basis":"closedSourceIntervals","asOf":cutoff.toIso,"sourceUsage":EnerCubixKnownUsage.evidence(known.knownReads.vals)]]
+    return ["from":from.toIso,"to":to.toIso,"asOf":cutoff.toIso,"unknownTopologySeconds":unknownSeconds,"rows":result,"basis":"closedSourceIntervals","selectionTotals":totals,"knownUsage":known.knownEvidence(false).set("asOf",cutoff.toIso)]
   }
+  internal static Int periodQuota(Int objects,Int position)
+  {1000/objects+(position < 1000%objects ? 1 : 0)}
 }

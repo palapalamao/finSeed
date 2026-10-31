@@ -18,7 +18,8 @@ class EnerCubixHistory
         rows:=EnerCubixMath.maps(known["sourceUsage"])
         if (rows.size > 1000)
         {
-          known["sourceUsageRowCount"]=rows.size
+          if(known["sourceUsageTruncated"] != true) known["sourceUsageRowCount"]=rows.size
+          if(known["sourceUsageCaptureId"] == null) known["sourceUsageCaptureId"]=Uuid().toStr
           known["sourceUsageTruncated"]=true
           known["sourceUsage"]=rows[0..<1000]
           known["detailsTruncated"]=true

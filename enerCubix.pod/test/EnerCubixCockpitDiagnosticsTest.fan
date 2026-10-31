@@ -2,6 +2,37 @@ using util
 
 class EnerCubixCockpitDiagnosticsTest : Test
 {
+  Void testTruncatedMatchingPrefixNeedsProvenCaptureIdentity()
+  {
+    [null,"different","same"].each |mode|
+    {
+      input:=snapshot(1,1);first:=(Map)((Map)input["reports"])["flow"]
+      row:=EnerCubixMath.maps(first["rows"]).first
+      row.setAll(["periodRecordTotalCount":1001,"periodsTruncated":true])
+      if(mode != null) row["periodsCaptureId"]="capture-left"
+      other:=row.dup
+      second:=first.dup.set("rows",[other]).set("extra",["energyFlowOverview":["rows":[other]]])
+      if(mode == "different")
+      {
+        other["periodsCaptureId"]="capture-right"
+        EnerCubixMath.maps(((Map)((Map)second["extra"])["energyFlowOverview"])["rows"]).first["periodsCaptureId"]="capture-right"
+      }
+      // Same captured prefix/count can describe two different unreturned tails.
+      ((Map)input["reports"])["other"]=second
+      p:=project(input)
+      entries:=EnerCubixMath.maps(((Map)p["diagnostics"])["entries"]).findAll |m| {m["kind"] == "coveragePeriods"}
+      // Each report has a row and overview copy: only an explicit shared server
+      // capture ID permits their sampled evidence to share a packet allocation.
+      verifyEq(entries.size,mode == "same" ? 1 : (mode == "different" ? 2 : 4))
+    }
+    input:=snapshot(0,0);one:=(Map)((Map)input["reports"])["flow"]
+    ((Map)one["extra"])["knownUsage"]=["sourceUsageTruncated":true,"sourceUsage":Obj?[,]]
+    ((Map)one["extra"])["cleaning"]=[["detailsTruncated":true,"details":Obj?[,]]]
+    ((Map)input["reports"])["other"]=JsonInStream(JsonOutStream.writeJsonToStr(one).in).readJson
+    entries:=EnerCubixMath.maps(((Map)project(input)["diagnostics"])["entries"])
+    verifyEq(entries.findAll |e| {e["kind"] == "sourceUsage"}.size,2)
+    verifyEq(entries.findAll |e| {e["kind"] == "cleaningEvents"}.size,2)
+  }
   Void testPacketBudgetSharesDuplicateEvidenceAndKeepsBusinessResults()
   {
     input:=snapshot(3,600);before:=JsonOutStream.writeJsonToStr(input)
@@ -35,8 +66,8 @@ class EnerCubixCockpitDiagnosticsTest : Test
   }
   Void test116MissingResponseShapeCapturesOnlyPacketBudget()
   {
-    // Response-layer pressure fixture, not a bypass of the production prepared
-    // gate. The Stream adapter rejects this annual plan before arithmetic today.
+    // Response-layer pressure fixture, separate from production Stream execution.
+    // Sparse preparation is exercised with the captured 82-point plan elsewhere.
     input:=snapshot(116,8760,true)
     p:=project(input);diag:=(Map)p["diagnostics"]
     verifyEq(diag["returnedCount"],1000);verifyEq(((List)diag["entries"]).size,116)

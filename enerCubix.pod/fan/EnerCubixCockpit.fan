@@ -4,11 +4,13 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null)
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null)
   {
     input=(Str:Obj?)input.toImmutable
     readClock:=clock ?: |->DateTime| {DateTime.now}
     request:=query(input,project,tz,now)
+    deadline?.check
+    if(deadline != null) request["_cockpitDeadline"]=deadline
     frozen:=([Str:Obj?][])records.toImmutable
     scope:=object(input,"reportScope")
     ids:=(Str[])request["nodeIds"]; category:=((Str[])request["categoryIds"]).first
@@ -18,6 +20,7 @@ class EnerCubixCockpit
     kpis:=enabled.contains("kpis")
     request["categoryIds"]=[category]
     request["_cockpitCategoryId"]=category
+    if(input["payloadEncoding"] == "compact-v1") request["_cockpitDiagnosticCapture"]=true
     request["_cockpitExplicitObjects"]=scope["selectionIntent"] == "explicitObjects"
     dim:=EnerCubixDimension(request["dimension"].toStr,frozen,request["spaceSource"] == "fin")
     ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],tz,dim)
@@ -87,9 +90,17 @@ class EnerCubixCockpit
     historyRequest["_cockpitPointIds"]=pointIds.unique.sort
     historyRequest["_cockpitConfigIds"]=EnerCubixMath.maps(flow["configuration"]).dup.addAll(EnerCubixMath.maps(efficiency["configuration"])).map |r->Str| {r["id"].toStr}.unique.sort
     observedFrom:=readClock()
+    deadline?.check
     histories:=plan.isEmpty ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
+    if(input["payloadEncoding"] == "compact-v1") histories=histories.map |h->[Str:Obj?]|
+    {
+      meta:=h["cleaning"] as Map
+      if(meta == null || meta["detailsTruncated"] != true || meta["detailsCaptureId"] != null) return h
+      return h.dup.set("cleaning",meta.dup.set("detailsCaptureId",Uuid().toStr))
+    }
     histories=([Str:Obj?][])histories.toImmutable
     observedTo:=readClock()
+    deadline?.check
     report:=EnerCubixHistory.report(request,frozen,EnerCubixCockpitMetrics.histories(request,histories))
     row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).find |r| {r["categoryId"] == category}
     boundaryQuality:=row?.get("scopeQuality") as Str
@@ -133,6 +144,7 @@ class EnerCubixCockpit
     if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request)]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
     EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
+    deadline?.check
     if (enabled.contains("space"))
     {
       try {modules["space"]=EnerCubixCockpitSpace.project(request,frozen,histories,pointIds.unique,boundary)}
@@ -179,6 +191,8 @@ class EnerCubixCockpit
     }
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
     provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":histories.map |h->Obj?| {h["streaming"]}.unique,"historyLimitations":histories.findAll |h| {h["limitation"] != null}.map |h->[Str:Obj?]| {["pointId":h["pointId"],"reason":h["limitation"]]},"historyConfigObservedFrom":configStarts.isEmpty ? null : ((DateTime)configStarts.min).toIso,"historyConfigObservedTo":configEnds.isEmpty ? null : ((DateTime)configEnds.max).toIso]
+    budget:=histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget
+    if(budget != null) provenance["preparedRuntime"]=budget.evidence
     limitations:=Str[,]
     if (complete == null) limitations.add(known == null ? "ENERGY_UNAVAILABLE" : "PARTIAL_USAGE")
     if (scope["selectionIntent"] == "explicitObjects" && !overlaps.isEmpty) limitations.add("OVERLAPPING_EXPLICIT_OBJECTS")
@@ -189,7 +203,10 @@ class EnerCubixCockpit
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
     if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
     snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
-    return input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot)) : snapshot
+    deadline?.check
+    result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
+    deadline?.check
+    return result
   }
 
   ** Hidden scope members cannot silently disappear from a supposedly complete total.

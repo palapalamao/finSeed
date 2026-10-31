@@ -2,6 +2,16 @@ using util
 
 class EnerCubixCockpitSpaceTest : Test
 {
+  Void testReadableAncestorNeverExposesUnreadableSiblingIdentifiers()
+  {
+    rs:=records;rs.find |r| {r["id"] == "b"}["_comparisonReadable"]=false
+    q:=request;q["reportScope"]=["dimension":"metering","nodeIds":["a"],"selectionIntent":"range"]
+    result:=EnerCubixCockpit.execute(q,rs,|rq,saved->[Str:Obj?][]| {[histories.first]},"test",TimeZone.utc,end)
+    f:=nodes(result).find |n| {n["id"] == "f"}
+    verify(!((List)f["meterIds"]).contains("b"));verify(!((List)f["sourceIds"]).contains("pb"))
+    verifyNull(f["value"]);verifyEq(f["reasonCodes"],["FOCUS_NOT_LOADED"])
+    verifyEq(nodes(result).find |n| {n["id"] == "a"}["value"],10f)
+  }
   Void testFocusUsesSamePreparedOwnHistoryAndRealHierarchyWithoutChangingKpis()
   {
     calls:=0

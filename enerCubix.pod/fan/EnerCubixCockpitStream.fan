@@ -9,7 +9,7 @@ internal class EnerCubixCockpitStream
 
   static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs)
   {
-    budget:=EnerCubixStreamBudget()
+    budget:=EnerCubixStreamBudget(50000,200000,20000000,30sec,request["_cockpitDeadline"] as EnerCubixCockpitDeadline)
     return prepare(request,records,points,configs,|Dict p,Span span,|HisItem| sink|
     {
       cx.rt.his.read(p,span,Etc.makeDict(["raw":Marker.val]),sink)
@@ -23,6 +23,9 @@ internal class EnerCubixCockpitStream
     out:=[Str:Obj?][,]
     ranges:=EnerCubixMath.maps(request["_cockpitRanges"])
     if (ranges.isEmpty) ranges=[request.dup.set("pointIds",points.keys)]
+    budget.originalWindows=ranges.reduce(0) |Int n, r->Int| {n+EnerCubixMath.strings(r["pointIds"]).size}
+    ranges=normalizeRanges(ranges)
+    budget.normalizedWindows=ranges.reduce(0) |Int n, r->Int| {n+EnerCubixMath.strings(r["pointIds"]).size}
     ranges.each |range|
     {
       a:=DateTime.fromIso(range["from"].toStr); b:=DateTime.fromIso(range["to"].toStr)
@@ -37,6 +40,7 @@ internal class EnerCubixCockpitStream
         try
         {
           stream:=EnerCubixCockpitStream(point,configs[id],a,b,request,records,budget)
+          budget.logicalHours+=(stream.to-stream.from).ticks/1hr.ticks
           pointTz:=TimeZone.fromStr(point["tz"]?.toStr ?: a.tz.name)
           cursor:=(stream.from-1day).toTimeZone(pointTz); end:=(stream.to+1day).toTimeZone(pointTz)
           while (cursor < end)
@@ -54,7 +58,35 @@ internal class EnerCubixCockpitStream
       }
     }
     stats:=budget.evidence
-    out.each |h| {h["streaming"]=stats}
+    out.each |h| {h["streaming"]=stats;h["_preparedBudget"]=budget.state}
+    return out
+  }
+
+  ** Union only intersecting/adjacent windows of the same source, before scanning.
+  internal static [Str:Obj?][] normalizeRanges([Str:Obj?][] ranges)
+  {
+    byPoint:=Str:[Str:Obj?][][:]
+    ranges.each |r| {EnerCubixMath.strings(r["pointIds"]).each |p| {if(!byPoint.containsKey(p)) byPoint[p]=[,];byPoint[p].add(r)}}
+    windows:=[Str:Obj?][,]
+    byPoint.keys.sort.each |p|
+    {
+      own:=[Str:Obj?][,]
+      byPoint[p].sort |a,b| {DateTime.fromIso(a["from"].toStr) <=> DateTime.fromIso(b["from"].toStr)}.each |r|
+      {
+        last:=own.last
+        if(last != null && DateTime.fromIso(r["from"].toStr) <= DateTime.fromIso(last["to"].toStr))
+        {if(DateTime.fromIso(r["to"].toStr) > DateTime.fromIso(last["to"].toStr)) last["to"]=r["to"]}
+        else own.add(["from":r["from"],"to":r["to"],"pointIds":[p]])
+      }
+      windows.addAll(own)
+    }
+    out:=[Str:Obj?][,]
+    windows.each |r|
+    {
+      same:=out.find |x| {DateTime.fromIso(x["from"].toStr) == DateTime.fromIso(r["from"].toStr) && DateTime.fromIso(x["to"].toStr) == DateTime.fromIso(r["to"].toStr)}
+      if(same == null) out.add(r)
+      else same["pointIds"]=EnerCubixMath.strings(same["pointIds"]).addAll(EnerCubixMath.strings(r["pointIds"]))
+    }
     return out
   }
 
@@ -69,6 +101,7 @@ internal class EnerCubixCockpitStream
     cutoff=DateTime.fromIso(request["asOf"]?.toStr ?: to.toIso).toTimeZone(from.tz)
     queries=EnerCubixMath.maps(request["_cockpitReadRanges"])
     if (queries.isEmpty) queries=[request]
+    queries=queries.map |q->[Str:Obj?]| {["from":q["from"],"to":q["to"]]}
     queryEnds=queries.map |q->DateTime| {end:=DateTime.fromIso(q["to"].toStr);return end < cutoff ? end : cutoff}.unique
     cleaned=point["hisFunc"] == "enerCubixCleanHis" && request["raw"] != true
     if (cleaned && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
@@ -108,6 +141,7 @@ internal class EnerCubixCockpitStream
   private EnerCubixInterval[] intervals := [,]
   private [Str:Obj?][] diagnostics := [,]
   private Str:Obj? reads := [:]
+  private [Str:Obj?][] emptyDomains := [,]
   private Str:Obj? meta
   private Int eventCount := 0
   private Int filtered := 0
@@ -180,6 +214,10 @@ internal class EnerCubixCockpitStream
       budget.hold(items.size+raw.size)
       // Removed NA does not close an interval: wait for the next accepted reading.
       if (d != null && d["reason"] == "removedNA") return
+      // No left source exists before the first accepted sample. Reuse the empty
+      // reader there; the first sample's containing hour remains explicit.
+      firstHour:=EnerCubixMath.floorHour(item.ts)
+      if(raw.size == 1 && intervals.isEmpty && hour < firstHour) emptyUntil(firstHour < to ? firstHour : to)
       while (hour < to && item.ts >= hour+1hr) closeHour
     }
   }
@@ -234,6 +272,37 @@ internal class EnerCubixCockpitStream
       if (inferredInterval) normalized["quality"]="estimated"
       history=EnerCubixHistoryData(EnerCubixKnownUsage.clip([normalized],cutoff).first)
     }
+    pairs:=pairs(hour,queries,tariffs,ctx)
+    values:=Str:Obj?[:]
+    pairs.each |pair|
+    {
+      a:=(DateTime)pair["from"]; b:=(DateTime)pair["to"]
+      name:=key(a,b);if (reads.containsKey(name)) return
+      strict:=history.read(a,b)
+      known:=Str:Obj?[:]
+      queryEnds.each |qEnd|
+      {
+        row:=history.knownUsage(a,b,qEnd).dup;row.remove("value")
+        events:=EnerCubixMath.maps(row["intervals"])
+        keep:=events.size.min((1000-budget.detailCount).max(0))
+        row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
+        row["detailsTruncated"]=(EnerCubixMath.num(row["intervalCount"]) ?: 0f) > keep.toFloat
+        if(row["detailsTruncated"] == true) row["intervalsCaptureId"]=Uuid().toStr
+        budget.detailCount+=keep
+        known[qEnd.ticks.toStr]=row
+      }
+      values[name]=["strict":["value":strict.value,"quality":strict.quality],"known":known]
+    }
+    if(values.vals.all |v| {emptyPair((Map)v)}) emptyUntil(end)
+    else values.each |v,k| {budget.cell(2+queryEnds.size);budget.materializedPairs++;reads[k]=v}
+    hour=end
+    raw=raw.size > 2 ? raw[-2..-1] : raw
+    intervals=intervals.findAll |row| {row.end > end}
+  }
+
+  internal static [Str:Obj?][] pairs(DateTime hour, [Str:Obj?][] queries, [Str:Obj?]?[] tariffs, EnerCubixContext ctx)
+  {
+    end:=hour+1hr
     pairs:=[Str:Obj?][["from":hour,"to":end]]
     queries.each |q|
     {
@@ -250,35 +319,40 @@ internal class EnerCubixCockpitStream
         for (i:=0;i<bounds.size-1;i++) pairs.add(["from":bounds[i],"to":bounds[i+1]])
       }
     }
-    pairs.unique.each |pair|
+    return pairs.unique
+  }
+
+  private static Bool emptyPair(Map pair)
+  {
+    strict:=(Map)pair["strict"]
+    return strict["value"] == null && strict["quality"] == "missing" && ((Map)pair["known"]).vals.all |v|
     {
-      a:=(DateTime)pair["from"]; b:=(DateTime)pair["to"]
-      name:=key(a,b);if (reads.containsKey(name)) return
-      budget.cell
-      strict:=history.read(a,b)
-      known:=Str:Obj?[:]
-      queryEnds.each |qEnd|
-      {
-        row:=history.knownUsage(a,b,qEnd).dup;row.remove("value")
-        // Diagnostics have a per-request limit, independent of arithmetic.
-        events:=EnerCubixMath.maps(row["intervals"])
-        keep:=events.size.min((1000-budget.detailCount).max(0))
-        row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
-        row["detailsTruncated"]=(EnerCubixMath.num(row["intervalCount"]) ?: 0f) > keep.toFloat
-        budget.detailCount+=keep
-        known[qEnd.ticks.toStr]=row
-      }
-      reads[name]=["strict":["value":strict.value,"quality":strict.quality],"known":known]
+      r:=(Map)v
+      return r["knownValue"] == null && r["knownValueType"] == "null" && r["knownQuality"] == "missing" && r["coveredSeconds"] == 0f && r["intervalCount"] == 0 && r["intervalStart"] == null && r["intervalEnd"] == null && EnerCubixMath.maps(r["intervals"]).isEmpty && r["detailsTruncated"] == false
     }
+  }
+
+  private Void emptyUntil(DateTime end)
+  {
+    if(end <= hour) return
+    last:=emptyDomains.last
+    if(last != null && last["to"] == hour) last["to"]=end
+    else {budget.cell(2);budget.sparseDomains++;emptyDomains.add(["from":hour,"to":end])}
     hour=end
-    raw=raw.size > 2 ? raw[-2..-1] : raw
-    intervals=intervals.findAll |row| {row.end > end}
   }
 
   private Str:Obj? finish()
   {
-    while (hour < to) closeHour
-    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"sourceLastObservedAt":lastObserved?.toIso]
+    while (hour < to)
+    {
+      budget.check
+      // All planned native blocks have completed. No later source/closed interval
+      // can close a pair in this tail; single-ended counters are not extrapolated.
+      if((raw.isEmpty || raw.last.ts <= hour) && intervals.all |r| {r.end <= hour}) emptyUntil(to)
+      else closeHour
+    }
+    budget.cell(4+queries.size+queryEnds.size+tariffs.size)
+    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":lastObserved?.toIso]
     if (cleaned)
     {
       meta["details"]=diagnostics;meta["detailsTruncated"]=eventCount > diagnostics.size
@@ -294,8 +368,9 @@ internal const class EnerCubixStreamBlockErr : Err { new make() : super("block s
 ** Shared across all points/ranges in a request. Exact limits accept equality.
 internal class EnerCubixStreamBudget
 {
-  new make(Int blockLimit := 50000, Int heldLimit := 200000, Int scanLimit := 20000000, Duration timeout := 30sec)
-  {this.blockLimit=blockLimit;this.heldLimit=heldLimit;this.scanLimit=scanLimit;this.timeout=timeout}
+  new make(Int blockLimit := 50000, Int heldLimit := 200000, Int scanLimit := 20000000, Duration timeout := 30sec, EnerCubixCockpitDeadline? deadline := null)
+  {this.blockLimit=blockLimit;this.heldLimit=heldLimit;this.scanLimit=scanLimit;this.timeout=timeout;state=EnerCubixPreparedBudget(deadline ?: EnerCubixCockpitDeadline(timeout))}
+  EnerCubixPreparedBudget state
   Int blockLimit
   Int heldLimit
   Int scanLimit
@@ -304,12 +379,17 @@ internal class EnerCubixStreamBudget
   Int nativeReads := 0
   Int peakHeld := 0
   Int peakBlock := 0
-  Int cells := 0
+  Int cells {get {state.prepared.val} set {state.prepared.val=it}}
+  Int materializedPairs := 0
+  Int sparseDomains := 0
+  Int logicalHours := 0
+  Int originalWindows := 0
+  Int normalizedWindows := 0
   Int detailCount := 0
   private Int started := Duration.nowTicks
-  Void check() {if (Duration.nowTicks-started > timeout.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")}
+  Void check() {state.deadline.check}
   Void scan() {if (++scanned > scanLimit) throw EnerCubixHttpErr(422,"HISTORY_SCAN_LIMIT","cockpitHistoryScanLimit");if (scanned % 1024 == 0) check}
   Void hold(Int n) {peakHeld=peakHeld.max(n);if (n > heldLimit) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")}
-  Void cell() {if (++cells > 200000) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")}
-  Str:Obj? evidence() {["nativeReadCount":nativeReads,"scannedSamples":scanned,"peakHeldRawSamples":peakHeld,"peakBlockSamples":peakBlock,"preparedReadCount":cells,"blockSampleLimit":blockLimit,"heldSampleLimit":heldLimit,"scanSampleLimit":scanLimit,"hardTimeoutSeconds":timeout.toSec,"elapsedMs":(Duration.nowTicks-started)/1ms.ticks,"softBudgetExceeded":Duration.nowTicks-started > 20sec.ticks]}
+  Void cell(Int n := 1) {state.reserve(n)}
+  Str:Obj? evidence() {["representationVersion":2,"originalPointWindows":originalWindows,"normalizedPointWindows":normalizedWindows,"logicalHourPairCount":logicalHours,"materializedPairCount":materializedPairs,"sparseDomainCount":sparseDomains,"nativeReadCount":nativeReads,"scannedSamples":scanned,"peakHeldRawSamples":peakHeld,"peakBlockSamples":peakBlock,"preparedReadCount":cells,"peakPreparedEntries":state.peak.val,"blockSampleLimit":blockLimit,"heldSampleLimit":heldLimit,"scanSampleLimit":scanLimit,"hardTimeoutSeconds":timeout.toSec,"elapsedMs":(Duration.nowTicks-started)/1ms.ticks,"softBudgetExceeded":Duration.nowTicks-started > 20sec.ticks]}
 }
