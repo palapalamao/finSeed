@@ -18,6 +18,16 @@ const class EnerCubixSpaceArea
     catch (Err e) { return null }
   }
 
+  ** Freeze only the original native area tag, identity and revision for audit.
+  internal static Str:Obj? provenance(Dict original)
+  {
+    number:=original["area"] as Number
+    value:=number?.toFloat
+    if (value != null && (value.isNaN || value.abs == Float.posInf)) value=null
+    return ["nativeRef":original.id.id,"mod":EnerCubixRepo.iso(original["mod"]),
+      "tag":"area","value":value,"unit":number?.unit?.symbol,"areaM2":squareMetres(number)]
+  }
+
   static Dict tags([Str:Obj?] input, Dict nativeRec)
   {
     if (!(nativeRec.has("site") || nativeRec.has("floor")) || input["areaOnly"] != true) throw ArgErr("spaceAreaOnly")

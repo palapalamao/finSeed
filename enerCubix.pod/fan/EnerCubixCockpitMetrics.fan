@@ -209,7 +209,15 @@ internal class EnerCubixCockpitMetrics
       report:=EnerCubixHistory.report(q.dup.set("perArea",true),records,selected)
       reports[prefix+"profile-area"]=report
       third=metric(report,"areaIntensity",category,boundary)
-      third["details"]=["areaBasis":((Map)report["extra"])["areaBasis"]]
+      extra:=(Map)report["extra"]
+      selection:=EnerCubixMath.maps(extra["areaBasis"]).find |r| {r["nodeId"] == "__selection__" && r["categoryId"] == category}
+      area:=EnerCubixAreaResolution(selection?.get("area") as Map ?: Str:Obj?[:],boundary["id"].toStr).toMap
+      // Preserve raw energy even when no reliable denominator exists. The
+      // formula is a frozen audit description of the engine's result.
+      numerator:=Str:Obj?["value":energy["value"],"completeValue":energy["completeValue"],"knownValue":energy["knownValue"],"valueBasis":energy["valueBasis"],"unit":energy["unit"],"sourceIds":energy["sourceIds"]]
+      formula:=Str:Obj?["version":1,"expression":"energy / areaM2","energyBoundaryId":boundary["id"],"numerator":numerator,
+        "denominator":["value":area["areaM2"],"unit":"m²","sourceRevisions":area["sourceRevisions"]],"value":third["value"],"unit":third["unit"]]
+      third["details"]=["areaBasis":extra["areaBasis"],"areaResolution":area,"formula":formula]
     }
     values.insert(2,third)
     return values

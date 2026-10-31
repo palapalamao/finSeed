@@ -26,11 +26,22 @@ internal class EnerCubixArea
     return result([source(r,"custom")])
   }
 
-  Str:Obj? selection(Str[] selected, EnerCubixDimension? dimension := null)
+  Str:Obj? selection(Str[] selected, EnerCubixDimension? dimension := null, Str[]? participating := null)
   {
     ids:=selected.map |id->Str| {dimension?.canonical(id) ?: id}.unique
+    // An organization owns no physical area. Resolve only its participating
+    // energy meters' explicit service boundaries, never their installation.
+    if (dimension?.dimension == "organization")
+      ids=ids.map |id->Str[]| {dimension.scope(id) ? (participating ?: dimension.members(id).map |r->Str| {r["id"].toStr}) : [id]}.flatten.unique
+    excluded:=[Str:Obj?][,]
     scopes:=ids.findAll |id->Bool| {dimension == null ? find(id)?.get("kind") == "group" : dimension.scope(id)}
-    scopes=scopes.findAll |id| {!scopes.any |other| {id != other && inside(id,other)}}
+    scopes=scopes.findAll |id|
+    {
+      parent:=scopes.find |other| {id != other && inside(id,other)}
+      if (parent == null) return true
+      excluded.add(["id":find(id)?.get("nativeSourceId") ?: id,"coveredBy":find(parent)?.get("nativeSourceId") ?: parent,"reasonCode":"containedSpace"])
+      return false
+    }
     covered:=Str[,]
     scopes.each |id|
     {
@@ -47,16 +58,23 @@ internal class EnerCubixArea
       sources.addAll(EnerCubixMath.maps(area["sources"]))
     }
     unique:=Str:[Str:Obj?][:]
-    sources.each |s| {unique[s["source"].toStr+"|"+s["id"].toStr]=s}
+    sources.each |s|
+    {
+      key:=s["source"].toStr+"|"+s["id"].toStr
+      if (unique.containsKey(key)) excluded.add(["id":s["id"],"coveredBy":s["id"],"reasonCode":"duplicateServiceSpace"])
+      unique[key]=s
+    }
     sources=unique.vals
     sources=sources.findAll |s|
     {
-      return s["source"] != "space" || !sources.any |other|
-      {other["source"] == "space" && s["id"] != other["id"] && inside(s["id"].toStr,other["id"].toStr)}
+      parent:=sources.find |other| {s["source"] == "space" && other["source"] == "space" && s["id"] != other["id"] && inside(s["id"].toStr,other["id"].toStr)}
+      if (parent == null) return true
+      excluded.add(["id":s["id"],"coveredBy":parent["id"],"reasonCode":"containedSpace"])
+      return false
     }
-    if (sources.size > 1 && sources.any |s| {s["source"] == "custom"}) return result(sources,"ambiguousArea")
-    if (missing || sources.isEmpty) return result(sources,"missingArea")
-    return result(sources)
+    if (sources.size > 1 && sources.any |s| {s["source"] == "custom"}) return result(sources,"ambiguousArea",excluded)
+    if (missing || sources.isEmpty) return result(sources,"missingArea",excluded)
+    return result(sources,null,excluded)
   }
 
   static EnerCubixValue scale(EnerCubixValue value, Str:Obj? area)
@@ -77,16 +95,19 @@ internal class EnerCubixArea
   private Str:Obj? source(Str:Obj? r, Str kind)
   {
     id:=kind == "space" ? (r["nativeSourceId"] ?: r["id"]) : r["id"]
-    return ["id":id,"name":r["name"] ?: id,"area":EnerCubixMath.num(r["area"]),"source":kind]
+    n:=EnerCubixMath.num(r["area"])
+    if (n != null && (n.isNaN || n.abs == Float.posInf)) n=null
+    return ["id":id,"name":r["name"] ?: id,"area":n,"source":kind,
+      "nativeRef":r["nativeSourceId"] ?: (r["nativeEquip"] == true ? r["id"] : null),"mod":r["mod"],"nativeArea":r["nativeArea"]]
   }
 
-  private Str:Obj? result([Str:Obj?][] sources, Str? quality := null)
+  private Str:Obj? result([Str:Obj?][] sources, Str? quality := null, [Str:Obj?][] excluded := [,])
   {
     sorted:=sources.dup.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
     invalid:=sorted.any |s| {n:=EnerCubixMath.num(s["area"]);return n == null || n <= 0f || n.isNaN || n.abs == Float.posInf}
     if (quality == null) quality=sorted.isEmpty || invalid ? "missingArea" : "ok"
     total:=quality == "ok" ? sorted.reduce(0f) |Float sum,s->Float| {sum+(Float)s["area"]} : null
-    return ["value":total,"quality":quality,"unit":"m²","sources":sorted]
+    return ["value":total,"quality":quality,"unit":"m²","sources":sorted,"excludedOverlaps":excluded.unique]
   }
 
   private Bool inside(Str child, Str ancestor, Str relation := "parentId")

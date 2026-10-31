@@ -35,8 +35,17 @@ class EnerCubixNativeSpace
       seen[id]=true
       sourceKind:=rec.has("point") ? "point" : (navPath.segForRec(rec)?.tag ?: "equip")
       node:=Str:Obj?["id":id,"name":rec["navName"] as Str ?: rec.dis,"parentId":parent,"sourceKind":sourceKind,"nativeDis":rec.dis,"mod":EnerCubixRepo.iso(rec["mod"])]
-      area:=EnerCubixSpaceArea.squareMetres(rec["area"])
+      // Navigation records may omit native tags. Freeze the actual readable
+      // Site/Floor record's area and revision together, never an overlay value.
+      original:=["site","floor"].contains(sourceKind) ? cx.db.readById(rec.id,false) : rec
+      if (original != null && !cx.canRead(original)) original=null
+      area:=EnerCubixSpaceArea.squareMetres(original?.get("area"))
       if (area != null) node["area"]=area
+      if (["site","floor"].contains(sourceKind))
+      {
+        node["mod"]=EnerCubixRepo.iso(original?.get("mod"))
+        if (original != null) node["nativeArea"]=EnerCubixSpaceArea.provenance(original)
+      }
       if (sourceKind == "point")
       {
         node["unit"]=rec["unit"]?.toStr
@@ -98,6 +107,7 @@ class EnerCubixNativeSpace
       {
         r.remove("area")
         if (n["area"] != null) r["area"]=n["area"]
+        r["nativeArea"]=n["nativeArea"]
       }
       if (isPoint)
       {

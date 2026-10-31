@@ -33,6 +33,8 @@ internal class EnerCubixReport
     out:=EnerCubixLine("$id|$category"+(utility == null ? "" : "|$utility"),id,name,category,ctx.unit(id,category,metric))
     out.utility=utility
     out.normalizationArea=areas.node(id)
+    if (ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id))
+      out.normalizationArea=areas.selection([id],ctx.dimension,ctx.selectionMeters(ctx.scopeMeters(id,category)).map |m->Str| {m["id"].toStr})
     activeKnown:=knownCtx
     if (knownCtx != null && end != to) activeKnown=EnerCubixContext.known(ctx,end < dataCutoff ? end : dataCutoff)
     out.gauge=r?.get("kind") == "sensor"
@@ -355,7 +357,7 @@ internal class EnerCubixReport
       unit:=selected.first?.unit ?: ""
       if (request["perArea"] == true)
       {
-        area:=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension)
+        area:=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension,meters.map |m->Str| {m["id"].toStr})
         if (lines.findAll |l| {!l.reference}.map |l->Str| {l.category}.unique.size == 1) extra["normalizationArea"]=area
         if (area["value"] == null) ctx.warn(area["quality"].toStr)
         base:=known ?: strict
