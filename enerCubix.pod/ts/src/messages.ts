@@ -1951,3 +1951,5 @@ Object.assign(englishMessages,{'构成基于已有用量，不代表完整区间
 Object.assign(englishMessages,{"查看分项表计明细":"View end-use meter details"});
 
 Object.assign(englishMessages,{"部分来源数据不完整，已有用量与完整区间分别保留。":"Some sources are incomplete. Available usage and complete-interval usage remain separate."});
+
+Object.assign(englishMessages,{"计量平衡":"Metering balance","能源去向":"Energy destinations","各对象独立展示，切换图和下钻仅使用当前快照；计量差额不等同于损耗。":"Objects remain independent. Switching graphs and drilling use this snapshot only; a metering difference is not a verified loss.","选择能流对象":"Energy flow object","收起额外分支":"Collapse additional branches","展开其余 {0} 个直属分支":"Expand {0} more direct branches","精简视图只折叠分支，不合成其他用量；完整数值和共享关系仍保留。":"The compact view folds branches without inventing an other subtotal. Full values and shared relationships are retained.","当前范围没有可用能流，请检查主点、上级表或表达式配置。":"No energy flow is available for this scope. Check primary points, parent meters, or expressions.","部分能流来源或计量边界不完整，各对象已有量分别保留。":"Some energy flow sources or metering boundaries are incomplete. Each object retains its available usage."});
