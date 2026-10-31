@@ -62,15 +62,14 @@ internal class EnerCubixCleaning
     return out
   }
 
-  internal static EnerCubixCleanResult clean(Dict point, HisItem[] raw, Dict config)
+  internal static EnerCubixCleanResult clean(Dict point, HisItem[] raw, Dict config, HisItem? previous := null, Bool retainRaw := true, Bool sortedInput := false)
   {
     result:=EnerCubixCleanResult()
-    result.rawItems=raw.dup
+    if (retainRaw) result.rawItems=raw.dup
     unit:=point["unit"]?.toStr ?: ""
     // Revalidation also protects callers that supply a native Dict directly.
     cfg:=EnerCubixCleaning.config(nativeParams(config),unit)
-    sorted:=raw.dup.sort |a,b| { a.ts <=> b.ts }
-    HisItem? previous:=null
+    sorted:=sortedInput ? raw : raw.dup.sort |a,b| { a.ts <=> b.ts }
     removed:=0; substituted:=0; rejected:=0; rollovers:=0
     sorted.each |item|
     {
@@ -131,6 +130,7 @@ internal class EnerCubixCleaning
       result.items.add(HisItem(item.ts,value))
       previous=item
     }
+    result.previous=previous
     result.summary=["inputCount":raw.size,"outputCount":result.items.size,
       "validCount":result.items.findAll |i| { i.val is Number }.size,
       "nullCount":result.items.findAll |i| { i.val == null }.size,
@@ -238,6 +238,7 @@ internal class EnerCubixCleanResult
 {
   new make(HisItem[] items := HisItem[,], [Str:Obj?][] details := [Str:Obj?][,], Str:Obj? summary := [:])
   { this.items=items; this.details=details; this.summary=summary }
+  HisItem? previous
   HisItem[] rawItems := HisItem[,]
   // Internal end stamps identify the source-reading pair; nativeItems adapts FIN output.
   HisItem[] items

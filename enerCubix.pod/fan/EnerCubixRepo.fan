@@ -409,13 +409,21 @@ class EnerCubixRepo
   [Str:Obj?] cockpit([Str:Obj?] input)
   {
     mustRead
-    now:=DateTime.now
-    tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
-    prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
-    all:=([Str:Obj?][])prepared["records"]
-    normalized:=input.dup
-    normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
-    return EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]| {EnerCubixNativeAlarms(this).list})
+    EnerCubixCockpitGate.enter(cx.proj.name,cx.user.username)
+    started:=Duration.nowTicks
+    try
+    {
+      now:=DateTime.now
+      tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
+      prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
+      all:=([Str:Obj?][])prepared["records"]
+      normalized:=input.dup
+      normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
+      result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]| {EnerCubixNativeAlarms(this).list})
+      if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
+      return result
+    }
+    finally {EnerCubixCockpitGate.leave(cx.proj.name,cx.user.username)}
   }
 
   ** Existing report and cockpit share native mapping and configuration preparation.

@@ -6,7 +6,27 @@ class EnerCubixHistory
 {
   internal static Str:Obj? report(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
   {
-    return evidence(EnerCubixEngine.report(request,records,histories),histories)
+    result:=evidence(EnerCubixEngine.report(request,records,histories),histories)
+    if (request["_cockpitCategoryId"] != null)
+    {
+      // Report arithmetic and coverage already used every source interval.
+      // Cockpit ships bounded diagnostic evidence, never a truncated total.
+      extra:=(Map)result["extra"]
+      known:=extra["knownUsage"] as Map
+      if (known != null)
+      {
+        rows:=EnerCubixMath.maps(known["sourceUsage"])
+        if (rows.size > 1000)
+        {
+          known["sourceUsageRowCount"]=rows.size
+          known["sourceUsageTruncated"]=true
+          known["sourceUsage"]=rows[0..<1000]
+          known["detailsTruncated"]=true
+          known["truncationReason"]="cockpitEvidenceRowLimit"
+        }
+      }
+    }
+    return result
   }
 
   private static Str:Obj? evidence(Str:Obj? report, [Str:Obj?][] histories)
@@ -22,17 +42,7 @@ class EnerCubixHistory
   {
     prepared:=prepareConfiguration(request,records,|Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},|Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)})
     points:=(Str:Dict?)prepared["points"]; configs:=(Str:Dict)prepared["configs"]
-    out:=[Str:Obj?][,]
-    ranges:=EnerCubixMath.maps(request["_cockpitRanges"])
-    if (ranges.isEmpty) out=load(cx,request,records,points,configs)
-    else ranges.each |range|
-    {
-      selected:=points.findAll |point,id| {EnerCubixMath.strings(range["pointIds"]).contains(id)}
-      q:=request.dup.setAll(["from":range["from"],"to":range["to"],"metric":"energy"])
-      part:=load(cx,q,records,selected,configs)
-      part.each |h| {h["_cockpitFrom"]=range["from"]; h["_cockpitTo"]=range["to"]}
-      out.addAll(part)
-    }
+    out:=EnerCubixCockpitStream.load(cx,request,records,points,configs)
     refs:=(Str:[Str:Obj?][])prepared["configRefs"]
     out.each |h|
     {
@@ -572,7 +582,7 @@ class EnerCubixHistory
     return result
   }
 
-  private static Str detailQuality(Str:Obj? d)
+  internal static Str detailQuality(Str:Obj? d)
   {
     if (d["valueType"] == "na") return "na"
     if (d["quality"] is Str) return d["quality"]
@@ -656,7 +666,7 @@ class EnerCubixHistory
     return EnerCubixMath.num(value)
   }
 
-  private static Duration? cadence(Dict point, HisItem[] items)
+  internal static Duration? cadence(Dict point, HisItem[] items)
   {
     for (i:=0;i<2;i++)
     {

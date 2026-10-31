@@ -48,9 +48,15 @@ const class EnerCubixRest : WebMod
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw EnerCubixHttpErr(404,"NOT_FOUND","接口不存在")
       }
+      if (route == "cockpit" && JsonOutStream.writeJsonToStr(data).toBuf.size > 8388608) throw EnerCubixHttpErr(413,"RESPONSE_LIMIT","cockpitResponseLimit")
       send(200,["ok":true,"data":data])
     }
-    catch (EnerCubixHttpErr e) { send(e.status,["ok":false,"error":["code":e.code,"msg":e.msg]]) }
+    catch (EnerCubixHttpErr e)
+    {
+      error:=Str:Obj?["code":e.code,"msg":e.msg]
+      if (e.status == 429) {error["retryAfterSeconds"]=2;res.headers["Retry-After"]="2"}
+      send(e.status,["ok":false,"error":error])
+    }
     catch (ArgErr e) { send(400,["ok":false,"error":["code":"INVALID","msg":e.msg]]) }
     catch (ParseErr e) { send(400,["ok":false,"error":["code":"INVALID","msg":"请求格式无效"]]) }
     catch (Err e)

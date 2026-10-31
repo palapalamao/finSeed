@@ -358,7 +358,7 @@ internal class EnerCubixContext
     return sumValues(parts)
   }
 
-  private DateTime[] tariffBounds(Str:Obj? t, DateTime from, DateTime to)
+  internal DateTime[] tariffBounds(Str:Obj? t, DateTime from, DateTime to)
   {
     bounds := [from,to]
     rules := EnerCubixMath.maps(t["rules"]).addAll(EnerCubixMath.maps(t["exceptions"]))

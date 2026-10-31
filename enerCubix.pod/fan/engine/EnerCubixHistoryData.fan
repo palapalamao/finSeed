@@ -1,3 +1,5 @@
+using haystack
+
 internal class EnerCubixSample
 {
   new make(DateTime ts, Float? value, Str quality := "ok", Str valueType := "number") { this.ts=ts; this.value=value; this.quality=quality; this.valueType=valueType }
@@ -22,6 +24,7 @@ internal class EnerCubixHistoryData
 {
   new make(Str:Obj? data)
   {
+    prepared = data["_preparedReads"] as Map
     id = data["pointId"]?.toStr ?: ""
     unit = data["unit"]?.toStr ?: ""
     mode = data["mode"]?.toStr ?: "sampled"
@@ -35,6 +38,19 @@ internal class EnerCubixHistoryData
     rawSamples = data["rawSamples"] == null ? samples : parse(data["rawSamples"])
     intervals = data.containsKey("intervals") ? parseIntervals(data["intervals"]) : null
   }
+  ** Typed bounded window for the streaming adapter. Arithmetic below is shared
+  ** with whole-range reports; clipping keeps the original source cutoff rule.
+  new window(Dict point, Str mode, HisItem[] raw, EnerCubixInterval[]? closed, DateTime cutoff)
+    : this.make(["pointId":point.id.id,"unit":point["unit"] ?: "","mode":mode,"quality":closed == null ? "ok" : "cleaned"])
+  {
+    samples=raw.findAll |item| {item.ts <= cutoff}.map |item->EnerCubixSample|
+    {
+      v:=item.val is Number ? EnerCubixMath.num(((Number)item.val).toFloat) : (item.val is Bool ? (item.val == true ? 1f : 0f) : EnerCubixMath.num(item.val))
+      return EnerCubixSample(item.ts.toTimeZone(cutoff.tz),v,"ok",EnerCubixHistory.valueType(item.val))
+    }
+    rawSamples=samples
+    if (closed != null) intervals=closed.findAll |row| {row.end <= cutoff}
+  }
   Str id
   Str unit
   Str mode
@@ -46,16 +62,31 @@ internal class EnerCubixHistoryData
   EnerCubixSample[] samples
   EnerCubixSample[] rawSamples
   EnerCubixInterval[]? intervals
+  private [Str:Obj?]? prepared
   private EnerCubixKnownUsage? knownReader
 
   Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd)
   {
+    if (prepared != null)
+    {
+      row:=(Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      data:=((Map?)row?.get("known"))?.get(queryEnd.ticks.toStr) as Map
+      if (data == null) return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
+      out:=data.dup; out["value"]=EnerCubixValue(EnerCubixMath.num(data["knownValue"]),data["knownQuality"].toStr,sources)
+      return out
+    }
     if (knownReader == null) knownReader=EnerCubixKnownUsage(this)
     return knownReader.read(start,end,queryEnd)
   }
 
   EnerCubixValue read(DateTime start, DateTime end, Bool raw := false)
   {
+    if (prepared != null)
+    {
+      row:=(Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      v:=row?.get(raw ? "raw" : "strict") as Map
+      return v == null ? EnerCubixValue(null,"streamingReadNotPrepared",sources) : EnerCubixValue(EnerCubixMath.num(v["value"]),v["quality"].toStr,sources)
+    }
     src := sources
     effective:=raw ? rawQuality : quality
     if (!["ok","estimated","derived","cleaned","corrected","filtered","substituted","na"].contains(effective)) return EnerCubixValue(null,effective,src)

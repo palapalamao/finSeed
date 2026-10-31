@@ -61,6 +61,8 @@ class EnerCubixCockpit
     if (DateTime.fromIso(request["to"].toStr) < effectiveEnd) effectiveEnd=DateTime.fromIso(request["to"].toStr)
     historyRequest["to"]=effectiveEnd.toIso
     plan:=EnerCubixCockpitMetrics.plan(request,kpis ? comparison : Str:Obj?["mode":"none"],ctx,kpis ? auxiliary : null,scope["selectionIntent"] == "explicitObjects",kpis)
+    historyRequest["_cockpitReadRanges"]=[request]
+    if (kpis && comparison["mode"] != "none") historyRequest["_cockpitReadRanges"]=[request,request.dup.setAll((Map)comparison["referenceRange"])]
     historyRequest["_cockpitRanges"]=plan
     historyRequest["_cockpitPointIds"]=plan.map |r->Str[]| {EnerCubixMath.strings(r["pointIds"])}.flatten.unique.sort
     observedFrom:=readClock()
@@ -134,17 +136,20 @@ class EnerCubixCockpit
     histories.each |h|
     {
       if (!EnerCubixMath.strings(historyRequest["_cockpitPointIds"]).contains(h["pointId"])) return
+      latest:=DateTime.fromIso(h["sourceLastObservedAt"] as Str ?: "",false)
+      if (latest != null && latest <= effectiveEnd) observed.add(latest)
       rows:=EnerCubixMath.maps(h["rawSamples"] ?: h["samples"])
       rows.each |s| {t:=DateTime.fromIso(s["ts"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
       if (rows.isEmpty) EnerCubixMath.maps(h["intervals"]).each |s| {t:=DateTime.fromIso(s["to"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
     }
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
-    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"historyConfigObservedFrom":configStarts.isEmpty ? null : ((DateTime)configStarts.min).toIso,"historyConfigObservedTo":configEnds.isEmpty ? null : ((DateTime)configEnds.max).toIso]
+    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":histories.map |h->Obj?| {h["streaming"]}.unique,"historyLimitations":histories.findAll |h| {h["limitation"] != null}.map |h->[Str:Obj?]| {["pointId":h["pointId"],"reason":h["limitation"]]},"historyConfigObservedFrom":configStarts.isEmpty ? null : ((DateTime)configStarts.min).toIso,"historyConfigObservedTo":configEnds.isEmpty ? null : ((DateTime)configEnds.max).toIso]
     limitations:=Str[,]
     if (complete == null) limitations.add(known == null ? "ENERGY_UNAVAILABLE" : "PARTIAL_USAGE")
     if (scope["selectionIntent"] == "explicitObjects" && !overlaps.isEmpty) limitations.add("OVERLAPPING_EXPLICIT_OBJECTS")
     if (DateTime.fromIso(request["to"].toStr) > cutoff) limitations.add("REQUEST_END_AFTER_AS_OF")
     if (histories.any |h| {h["quality"] == "historySampleLimit"}) limitations.add("HISTORY_SAMPLE_LIMIT")
+    if (histories.any |h| {h["quality"] == "streamingUnsupportedConfiguration"}) limitations.add("STREAMING_UNSUPPORTED_CONFIGURATION")
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
     faces:=enabled.findAll |m| {["time","endUse","organization"].contains(m)}
     if (!faces.isEmpty) faces.insert(0,"space")
