@@ -1,4 +1,4 @@
-import {useMemo,useState} from 'react';
+import {useMemo,useState,type ReactNode} from 'react';
 import {Alert,Button,Empty,Select} from 'antd';
 import type {CockpitFace,CockpitHeatmapCell,CockpitSnapshot} from './cockpitTypes';
 import type {ReportSnapshot} from './types';
@@ -7,6 +7,7 @@ import {cockpitOrganizationReport,cockpitReferencedReport} from './cockpitReport
 import {ReportChart} from './ReportView';
 import {CockpitFlow} from './CockpitFlow';
 import {CockpitEfficiency} from './CockpitEfficiency';
+import {CockpitQuality} from './CockpitQuality';
 import {reportCellText,reportLabel} from './reportDisplay';
 import {cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
 import {locale,t} from './i18n';
@@ -31,7 +32,7 @@ function Heatmap({cells,excluded,name}:{cells:CockpitHeatmapCell[];excluded:numb
   </>}
  </section>;
 }
-export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,onFlow,onCop}:{onCop:(id:string)=>void;focusObjectId?:string;onFlow:()=>void;snapshot:CockpitSnapshot;face:CockpitFace;onFace:(face:CockpitFace)=>void;onReport:(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>void;name:(id:string)=>string}){
+export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,onFlow,onCop,space,reference,issues}:{space:ReactNode;reference:ReactNode;issues:ReactNode;onCop:(id:string)=>void;focusObjectId?:string;onFlow:()=>void;snapshot:CockpitSnapshot;face:CockpitFace;onFace:(face:CockpitFace)=>void;onReport:(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>void;name:(id:string)=>string}){
  const faces:CockpitFace[]=['space',...(['time','endUse','organization','efficiency','balance'] as const).filter(id=>snapshot.capabilities.availableFaces.includes(id))];
  const daily=useMemo(()=>snapshot.modules.time?.data?cockpitReferencedReport(snapshot,snapshot.modules.time.data.dailyReportRef):undefined,[snapshot,locale]);
  const utility=useMemo(()=>snapshot.modules.endUse?.data?cockpitReferencedReport(snapshot,snapshot.modules.endUse.data.reportRef):undefined,[snapshot,locale]);
@@ -41,7 +42,7 @@ export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,on
  const working=[snapshot.modules.time?.data?.workingReportRef,snapshot.modules.time?.data?.workingDaysReportRef].flatMap(ref=>ref?[cockpitReferencedReport(snapshot,ref)].filter((report):report is ReportSnapshot=>!!report):[]);
  return <section className="cockpit-main" aria-label={t('驾驶舱分析视角')}>
   <div className="cockpit-face-heading"><h3>{t('分析视角')}</h3><div className="cockpit-face-tabs" role="tablist" aria-label={t('驾驶舱分析视角')}>{faces.map((value,index)=><button type="button" role="tab" key={value} id={'cockpit-tab-'+value} aria-selected={face===value} aria-controls={'cockpit-panel-'+value} tabIndex={face===value?0:-1} onClick={()=>onFace(value)} onKeyDown={event=>{let next=index;if(event.key==='ArrowRight')next=(index+1)%faces.length;else if(event.key==='ArrowLeft')next=(index+faces.length-1)%faces.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=faces.length-1;else return;event.preventDefault();document.getElementById('cockpit-tab-'+faces[next])?.focus();}}>{faceLabel(value)}</button>)}</div></div>
-  <p>{t('切换视角只展示当前快照，不改变统计范围或重新读取历史。')}</p>
+  <div className="cockpit-workbench">{reference}<div className="cockpit-visual"><CockpitQuality snapshot={snapshot}/>{face==='space'&&<div role="tabpanel" id="cockpit-panel-space" aria-labelledby="cockpit-tab-space">{space}</div>}
   {face!=='space'&&<div className="cockpit-face-panel" data-face={face} role="tabpanel" id={'cockpit-panel-'+face} aria-labelledby={'cockpit-tab-'+face}>
    {!!module?.reasonCodes?.length&&<Alert showIcon type="info" message={[...new Set(module.reasonCodes.map(cockpitReasonText))].join(t('；'))}/>}
    {!module?.data?<Empty description={module?.status==='error'?t('该视角暂时不可用，请刷新后重试。'):t('当前快照未提供此视角，请刷新查询。')}/>:<>
@@ -53,5 +54,6 @@ export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,on
     <p>{t('专业页对应当前区间；同期比较在驾驶舱卡片查看。')}</p>
    </>}
   </div>}
+ </div><aside className="cockpit-checks">{issues}</aside></div>
  </section>;
 }

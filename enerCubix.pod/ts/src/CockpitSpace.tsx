@@ -1,0 +1,20 @@
+import {useState} from 'react';
+import {Button,Tag} from 'antd';
+import type {Catalog} from './types';
+import type {CockpitSnapshot} from './cockpitTypes';
+import {cockpitSpaceObjects,cockpitSpaceSites,cockpitSpaceIssues} from './cockpitSpaceProjection';
+import {dimensionPath} from './dimensionTree';
+import {cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
+import {t} from './i18n';
+
+export function CockpitSpace({snapshot,catalog,focusObjectId,onFocus,onPromote,onProfile,onFlow}:{snapshot:CockpitSnapshot;catalog:Catalog;focusObjectId?:string;onFocus:(id:string|undefined)=>void;onPromote:()=>void;onProfile:()=>void;onFlow:()=>void}){
+ const nodes=cockpitSpaceObjects(snapshot,catalog),sites=cockpitSpaceSites(nodes),[view,setView]=useState<'schematic'|'list'>('schematic'),focused=nodes.find(node=>node.id===focusObjectId),issues=focused?cockpitSpaceIssues(snapshot,focused):[];
+ const name=(id:string)=>catalog.records.find(row=>row.id===id||row.nativeSourceId===id)?.name||id;
+ const path=(id:string)=>dimensionPath(catalog.records,id,'space',catalog.spaceSource==='fin').map(row=>row.name).join(' / ')||nodes.find(node=>node.id===id)?.name||id;
+ const value=(node:typeof nodes[number])=><span className="cockpit-space-value">{cockpitMetricValue(node)} <small>{node.unit}</small></span>;
+ return <section className="cockpit-space" aria-label={t('真实空间与对象')}>
+  <div className="cockpit-space-heading"><h3>{t('空间全景')}</h3>{sites.length>0&&<Button onClick={()=>setView(view==='schematic'?'list':'schematic')}>{view==='schematic'?t('对象列表'):t('空间示意')}</Button>}</div>
+  {sites.length>0&&view==='schematic'?<><div className="cockpit-space-schematic" aria-label={t('真实站点与楼层示意')}>{sites.map(({site,floors})=><section className="cockpit-site" key={site.id}><button type="button" aria-label={path(site.id)} data-space-object={site.id} aria-pressed={focusObjectId===site.id} onClick={()=>onFocus(site.id)}><strong>{site.name}</strong>{value(site)}</button><div className="cockpit-floor-stack">{floors.map(floor=><button type="button" key={floor.id} aria-label={path(floor.id)} data-space-object={floor.id} aria-pressed={focusObjectId===floor.id} onClick={()=>onFocus(floor.id)}><span>{floor.name}</span>{value(floor)}</button>)}</div></section>)}</div><p className="cockpit-space-note">{t('按 FIN 真实站点与楼层示意，无实际比例；图与列表使用同一对象。')}</p></>:<><p className="cockpit-space-note">{sites.length?t('选择只改变焦点；统计范围保持不变。'):t('当前范围无可用站点与楼层结构，显示真实对象列表，不生成虚构楼栋。')}</p><ul className="cockpit-object-list">{nodes.map(node=><li key={node.id}><button type="button" aria-label={path(node.id)} data-space-object={node.id} aria-pressed={focused?.id===node.id} onClick={()=>onFocus(node.id)}><span>{node.name||node.id}</span>{value(node)}</button></li>)}</ul></>}
+  <section className="cockpit-focus-panel" aria-label={t('焦点详情')}><h4>{t('焦点详情')}</h4>{focused?<><div className="cockpit-focus-title"><strong>{focused.name}</strong>{value(focused)}</div><p className="cockpit-focus-path">{path(focused.id)}</p><Tag>{focused.basis==='ownPrimary'?t('自身主能耗点'):t('对象范围去重汇总')}</Tag><p>{cockpitReasonText(focused.quality||focused.reasonCodes[0]||'notLoaded')}</p>{focused.reasonCodes.length>0&&<p>{[...new Set(focused.reasonCodes.map(cockpitReasonText))].join(t('；'))}</p>}<dl><dt>{t('完整区间用量')}</dt><dd>{cockpitMetricValue({value:focused.completeValue,valueType:focused.valueType==='na'?'na':focused.completeValue==null?'null':'number'})} {focused.unit}</dd><dt>{t('源点')}</dt><dd>{focused.sourceIds.map(name).join(' / ')||t('本次快照未加载此对象的主点用量，不以子表合计代替。')}</dd><dt>{t('对象引用')}</dt><dd>{focused.nativeId}</dd><dt>{t('关联事项')}</dt><dd>{issues.length?issues.map(item=>item.name||name(item.objectId)).join(' / '):t('当前快照没有关联事项')}</dd></dl><div className="cockpit-drill-actions"><Button onClick={onPromote}>{t('设为统计范围')}</Button><Button onClick={()=>onFocus(undefined)}>{t('清除焦点')}</Button></div></>:<p>{t('请选择范围内的对象')}</p>}<div className="cockpit-drill-actions"><Button onClick={onProfile}>{t('打开专业趋势')}</Button><Button onClick={onFlow}>{t('打开完整能流')}</Button></div></section>
+ </section>;
+}

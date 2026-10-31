@@ -1,7 +1,7 @@
 import type {ReportResult} from './types';
 
 export type CockpitFace='space'|'time'|'endUse'|'organization'|'balance'|'efficiency';
-export const cockpitModules=['kpis','trend','time','endUse','organization','balance','efficiency','issues'] as const;
+export const cockpitModules=['kpis','space','trend','time','endUse','organization','balance','efficiency','issues'] as const;
 export interface CockpitScope {dimension:'space'|'metering'|'organization';nodeIds:string[];selectionIntent:'range'|'explicitObjects'}
 export interface CockpitAreaSource {id:string;name:string;area:number|null;source:'space'|'custom';nativeRef:string|null;mod:string|null;nativeArea:null|{nativeRef:string;mod:string|null;tag:'area';value:number|null;unit:string|null;areaM2:number|null}}
 export interface CockpitAreaResolution {status:'ok'|'missingArea'|'ambiguousArea';areaM2:number|null;basis:'nativeSpace'|'custom'|'mixed'|'unknown';spaceRefs:string[];customBoundaryIds:string[];excludedOverlaps:{id:string;coveredBy:string;reasonCode:'containedSpace'|'duplicateServiceSpace'}[];energyBoundaryId:string;sourceRevisions:CockpitAreaSource[];reasonCodes:string[]}
@@ -20,6 +20,8 @@ export interface CockpitMetric {
 }
 export interface CockpitConclusion {id:string;ruleId:string;ruleVersion:number;messageKey:string;args:Record<string,unknown>;evidenceRefs:string[];priority:number}
 export interface CockpitHeatmapCell {seriesId:string;nodeId:string;date:string;hour:number;ts:string;value:number;unit:string;quality:string;sourceIds:string[]}
+export interface CockpitSpaceNode {id:string;nativeId:string;name?:string;path?:string;parentId?:string|null;nodeKind:'site'|'floor'|'equip'|'point';basis:'ownPrimary'|'scopeAggregate';meterIds:string[];sourceIds:string[];value:number|null;knownValue:number|null;completeValue:number|null;valueType:CockpitMetric['valueType'];valueBasis:CockpitMetric['valueBasis'];unit:string;quality?:string;coverage?:Record<string,unknown>[];reasonCodes:string[]}
+export interface CockpitSpaceData {nodes:CockpitSpaceNode[];rootIds:string[]}
 export interface CockpitTimeData {dailyReportRef:string;workingReportRef?:string;workingDaysReportRef?:string;heatmap:CockpitHeatmapCell[];excludedDays:{seriesId:string;date:string;reasonCode:string}[]}
 export interface CockpitEndUseData {reportRef:string;additive:boolean;meterIds:string[]}
 export interface CockpitDistributionNode {id:string;name:string;parentId:string|null;nodeKind:'organization'|'unassigned';meterIds:string[];unit:string;value:number|null;valueType:'number'|'null'|'na';completeValue:number|null;knownValue:number|null;valueBasis:CockpitMetric['valueBasis'];quality:string;sourceIds:string[]}
@@ -33,7 +35,7 @@ export interface CockpitSnapshot {
  context:{project:string;projectTimeZone:string;reportScope:CockpitScope;focusCategoryId:string;auxiliaryCategoryId?:string|null;time:CockpitRequest['time']&{from:string;to:string};asOf:string;comparison?:CockpitRequest['comparison']};
  provenance:{configFingerprint:string;relationshipBasis:'currentConfiguration';historyBasis:'ownPrimaryPointRaw';historyObservedFrom:string;historyObservedTo:string;sourceLastObservedAt:string|null;configRefs:{id:string;mod?:string}[];historyPlan?:{from:string;to:string;pointIds:string[]}[];appliedCleaning?:{pointId:string;profileId:string;profileVersion:number;parameters:Record<string,unknown>}[];historyConfigObservedFrom?:string|null;historyConfigObservedTo?:string|null};
  boundary:{id:string;meterIds:string[];sourcePointIds:string[];aggregateAllowed:boolean;overlaps:unknown[];excluded:unknown[]};
- modules:{kpis?:CockpitModule<{values:CockpitMetric[];conclusions:CockpitConclusion[]}>;trend?:CockpitModule<{reportRef:string}>;time?:CockpitModule<CockpitTimeData>;endUse?:CockpitModule<CockpitEndUseData>;organization?:CockpitModule<CockpitOrganizationData>;balance?:CockpitModule<{reportRef:string;graphIds:string[]}>;efficiency?:CockpitModule<{items:CockpitCopItem[]}>;issues?:CockpitModule<CockpitIssuesData>};
+ modules:{space?:CockpitModule<CockpitSpaceData>;kpis?:CockpitModule<{values:CockpitMetric[];conclusions:CockpitConclusion[]}>;trend?:CockpitModule<{reportRef:string}>;time?:CockpitModule<CockpitTimeData>;endUse?:CockpitModule<CockpitEndUseData>;organization?:CockpitModule<CockpitOrganizationData>;balance?:CockpitModule<{reportRef:string;graphIds:string[]}>;efficiency?:CockpitModule<{items:CockpitCopItem[]}>;issues?:CockpitModule<CockpitIssuesData>};
  reports:Record<string,ReportResult>;quality:Record<string,unknown>[];
  capabilities:{canRead:boolean;canManage:boolean;availableFaces:string[]};limitations:string[];
 }

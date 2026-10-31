@@ -56,7 +56,7 @@ for(const language of ['zh-CN','en-US']){
 }
 test('draft range changes do not relabel prior data or query until applied',async({page})=>{
  const {requests}=await setup(page,{userLocale:'en-US'});await page.goto('/#/cockpit?project=testproject');await expect(page.locator('.cockpit-number')).toHaveText('40 kWh');
- const count=requests.length;await page.locator('.cockpit-controls').getByText('This month',{exact:true}).click();await page.getByText('Today',{exact:true}).last().click();
+ const count=requests.length;await page.locator('.cockpit-conditions-trigger').click();await page.locator('.cockpit-controls').getByText('This month',{exact:true}).click();await page.getByText('Today',{exact:true}).last().click();
  await expect(page.getByText('Conditions not applied',{exact:true})).toBeVisible();expect(requests).toHaveLength(count);
  await expect(page.locator('.cockpit-context')).toContainText('2026-10-01');
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();await expect.poll(()=>requests.length).toBe(count+1);

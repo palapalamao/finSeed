@@ -4,11 +4,11 @@ import type {CockpitIssue,CockpitSnapshot} from './cockpitTypes';
 import {cockpitMessageLink} from './cockpitIssueProjection';
 import {cockpitMetricTitle,cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
 import {t} from './i18n';
-export function CockpitIssues({snapshot,name,onEvidence,canEvidence}:{canEvidence:(item:CockpitIssue)=>boolean;snapshot:CockpitSnapshot;name:(id:string)=>string;onEvidence:(item:CockpitIssue)=>void}){
- const data=snapshot.modules.issues?.data,[expanded,setExpanded]=useState(false);if(!snapshot.modules.issues)return null;
+export function CockpitIssues({snapshot,name,onEvidence,canEvidence,compact=false}:{compact?:boolean;canEvidence:(item:CockpitIssue)=>boolean;snapshot:CockpitSnapshot;name:(id:string)=>string;onEvidence:(item:CockpitIssue)=>void}){
+ const data=snapshot.modules.issues?.data,[expanded,setExpanded]=useState(false);if(!snapshot.modules.issues)return compact?<section className="cockpit-issues cockpit-issues-compact" aria-label={t('重点事项')}><h3>{t('重点核查')}</h3><p>{t('本次快照未加载重点事项，不能据此判断没有事件。')}</p></section>:null;
  const items=data?.items||[],visible=expanded?items:items.slice(0,3);
  const messages=(id?:string)=><a href={cockpitMessageLink(snapshot.context.project,id)} target="_blank" rel="noopener noreferrer">{t('在消息中心查看（新窗口）')}</a>;
- return <section className="cockpit-issues" aria-label={t('重点事项')}><div className="cockpit-face-heading"><h3>{t('重点事项')}</h3>{messages()}</div><p>{t('仅包含所选对象及有效统计表计；确认与恢复分别记录。当前状态不回推至历史查询截止。')}</p><p>{t('状态观察：{0}',data?.stateObservedAt||t('暂无数据'))}</p>
+ return <section className={compact?"cockpit-issues cockpit-issues-compact":"cockpit-issues"} aria-label={t('重点事项')}><div className="cockpit-face-heading"><h3>{compact?t('重点核查'):t('重点事项')}</h3>{messages()}</div><details className="cockpit-issue-clock"><summary>{t('状态观察：{0}',data?.stateObservedAt||t('暂无数据'))}</summary><p>{t('仅包含所选对象及有效统计表计；确认与恢复分别记录。当前状态不回推至历史查询截止。')}</p></details>
  {!!snapshot.modules.issues.reasonCodes?.length&&<Alert showIcon type="warning" message={snapshot.modules.issues.reasonCodes.map(cockpitReasonText).join(t('；'))}/>}
  {!visible.length?<Empty description={t('当前范围没有可展示的重点事项')}/>:visible.map(item=><article key={item.id} className="cockpit-issue" data-issue={item.id}><Tag>{item.type==='energyAlarm'?t('正式能耗事件'):item.type==='ruleClue'?t('规则线索'):t('数据质量问题')}</Tag><strong>{item.metricId?cockpitMetricTitle(item.metricId):item.name||name(item.objectId)}</strong>
  {item.active!==null&&<p>{t('{0}；{1}',item.active?t('持续未恢复'):t('已恢复'),item.acknowledged?t('已确认'):t('未确认'))}</p>}
