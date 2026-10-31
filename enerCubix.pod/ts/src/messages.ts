@@ -1800,3 +1800,79 @@ Object.assign(englishMessages,{
 });
 
 Object.assign(englishMessages,{'专业页已重新读取；父驾驶舱快照仅作来源参考。':'The professional report has been re-read; the parent cockpit snapshot is provenance only.'});
+
+Object.assign(englishMessages,{
+ "关注能源费用": "Focus energy cost",
+ "辅助能源用量": "Auxiliary energy usage",
+ "单位面积用量": "Usage per unit area",
+ "关注能源碳排放": "Focus energy carbon emissions",
+ "当前未恢复能耗事件": "Current unrecovered energy events",
+ "驾驶舱指标": "Cockpit metric",
+ "本期没有可用数值": "No current-period value is available",
+ "参照期没有可用数值": "No reference-period value is available",
+ "两期覆盖不完整，不计算变化率": "Period coverage is incomplete; no change rate is calculated",
+ "两期单位或能源不兼容": "The period units or energy categories are incompatible",
+ "包含替代值，不计算变化率": "Replacement values are present; no change rate is calculated",
+ "参照期为零，百分比不可计算": "The reference period is zero; a percentage cannot be calculated",
+ "范围内币种不一致": "The scope contains incompatible currencies",
+ "当前事件状态不可用": "Current event state is unavailable",
+ "当前事件状态读取失败": "Current event state could not be read",
+ "闰日参照调整至二月末日": "The leap-day reference was clamped to the last day of February",
+ "两期时区偏移不同": "The periods have different timezone offsets",
+ "日历对齐后的两期时长不同": "The calendar-aligned periods have different durations",
+ "不存在的当地时刻已按项目时区调整": "A nonexistent local time was adjusted using the project timezone",
+ "重复的当地时刻已按项目时区解析": "An ambiguous local time was resolved using the project timezone",
+ "本次快照未提供此指标": "This snapshot does not provide this metric",
+ "当前仅有部分有效用量": "Only a valid usage subtotal is available",
+ "历史样本超过当前查询上限，请缩小范围": "History exceeds the current sample limit; select a smaller scope",
+ "计量关系尚未完整确认": "Metering relationships are not fully confirmed",
+ "未启用同期比较": "Reference comparison is disabled",
+ "较参照期变化 {0}": "Change from reference: {0}",
+ "两期数据不可比": "The periods are not comparable",
+ "{0}受限：{1}": "{0} is limited: {1}",
+ "请核对数据来源与配置": "Check the data sources and configuration",
+ "当前范围有 {0} 个未恢复能耗事件，状态观察于 {1}。": "The scope has {0} unrecovered energy events. State observed at {1}.",
+ "在两期完整且可比的范围内，关注能源用量变化 {0}；这不是核定节能收益。": "For complete, comparable periods, focus energy usage changed by {0}; this is not verified energy savings.",
+ "请展开查看此结论的规则与输入依据。": "Expand to inspect the rule and inputs supporting this conclusion."
+});
+
+Object.assign(englishMessages,{
+ "管理结论": "Management conclusions",
+ "查看结论依据": "View conclusion evidence",
+ "计算规则": "Calculation rule",
+ "{0}，版本 {1}": "{0}, version {1}",
+ "来源引用": "Source references",
+ "核心经营指标": "Core operating metrics",
+ "当前状态，不代表历史区间": "Current state, not a historical interval",
+ "暂无有效数值": "No valid value is available",
+ "完整区间碳排放": "Complete interval carbon emissions",
+ "完整区间单位面积用量": "Complete interval usage per unit area",
+ "按当前费率分析估算，非结算账单。": "Estimated using the current tariffs; not a settlement bill.",
+ "状态观察：{0}": "State observed: {0}",
+ "查看指标依据": "View metric evidence",
+ "本期实际区间": "Actual current period",
+ "参照实际区间": "Actual reference period",
+ "本期数值": "Current-period value",
+ "参照期数值": "Reference-period value",
+ "两期时长差（秒）": "Difference in period duration (seconds)",
+ "{0}：覆盖率 {1}": "{0}: coverage {1}",
+ "查看计算配置快照": "View calculation configuration snapshot"
+});
+
+Object.assign(englishMessages,{
+ "驾驶舱自定义区间": "Cockpit custom period",
+ "同期比较": "Reference comparison",
+ "自定义区间默认不比较": "Custom periods have no comparison by default",
+ "默认同刻比较": "Default comparison at the same local cutoff",
+ "不比较": "No comparison",
+ "指定参照区间": "Specify a reference period",
+ "参照区间（结束时间不含）": "Reference period (exclusive end)",
+ "驾驶舱参照区间": "Cockpit reference period",
+ "日期输入时区：{0}；请求保留绝对时刻，结果按 FIN 项目时区显示。": "Date input timezone: {0}. Requests preserve absolute instants; results use the FIN project timezone."
+});
+
+Object.assign(englishMessages,{"辅助能源":"Auxiliary energy","自定义时间":"Custom period"});
+
+Object.assign(englishMessages,{"个":"count"});
+
+Object.assign(englishMessages,{'查看数据清洗依据':'View data cleaning evidence','配置冻结观察区间':'Configuration freezing observation period','历史读取观察区间':'History read observation period'});

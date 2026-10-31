@@ -450,3 +450,6 @@ Object.assign(serverMessages,cockpitEnglish);
 Object.assign(chineseServerMessages,cockpitChinese);
 Object.assign(serverMessages,{missingArea:'No valid statistical area configured. Available consumption is retained.',ambiguousArea:'Service area boundaries are ambiguous. Reference explicit service spaces to calculate combined intensity.'});
 Object.assign(chineseServerMessages,{missingArea:'未配置有效统计面积，已有用量仍保留。',ambiguousArea:'服务面积边界不明确，请引用明确的服务空间后计算合计单位面积指标。'});
+
+Object.assign(serverMessages,{cockpitComparison:'Select a valid comparison mode.',cockpitComparisonRange:'Select a valid reference period ending no later than the query cutoff and spanning at most 366 local days.',cockpitAuxiliaryCategory:'Select a different, accessible auxiliary energy category.',cockpitConfigurationChanged:'Configuration changed while preparing the query. Refresh explicitly to create a new snapshot.'});
+Object.assign(chineseServerMessages,{cockpitComparison:'请选择有效的同期比较方式。',cockpitComparisonRange:'请选择有效的参照区间，结束不得晚于查询截止，范围不得超过366个当地日。',cockpitAuxiliaryCategory:'请选择不同且可读取的辅助能源类型。',cockpitConfigurationChanged:'准备查询期间配置已变化，请主动刷新以生成新快照。'});
