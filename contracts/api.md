@@ -17,6 +17,49 @@ Cost energy-flow scope totals use the same selected primary-meter frontier as th
 
 Package versions come from `build.fan` and the package manifests. From 0.12.12, the frontend identifies its own compiled version, detects a different backend version and offers a localized reload; the versioned HTML entry avoids silently reusing an older UI. Implementation, local validation, integration and deployment are separate evidence levels. Sections explicitly labeled historical below describe retired behavior, not current API promises.
 
+## Cockpit snapshot (development candidate, not an installed-version claim)
+
+POST `cockpit` is a read-only authenticated operation, using the same native FIN session and CSRF route as `report`. It is not a configuration save and does not scan or acknowledge alarms. The packaged native application entry opens the versioned `#/cockpit?project=...`; `#/dashboard` retains the previous overview. The frontend capability switch can fall back to the previous overview.
+
+Request shape (schema version 1):
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "client-sequence",
+  "reportScope": {"dimension": "space", "nodeIds": ["native-space-ref"], "selectionIntent": "range"},
+  "focusCategoryId": "energy-category-ref",
+  "time": {"preset": "thisMonth", "period": "day"},
+  "comparison": {"mode": "presetDefault"},
+  "modules": ["kpis", "trend", "time", "endUse", "organization", "balance", "efficiency", "issues"]
+}
+```
+
+`dimension` accepts space/metering/organization; `selectionIntent` is range or explicitObjects. A focus object is client observation state and does not expand or change the statistical scope. `time.preset` accepts today/thisMonth/thisYear/custom; custom includes absolute `from/to`. `asOf` is optional on a new request and fixed in a returned snapshot. Comparison is none/presetDefault/custom (custom includes from/to). Today compares with yesterday at the same local cutoff; month/year compare with the previous year at the same calendar cutoff. Returned comparison ranges disclose leap-day, DST and duration adjustments. Missing, replacement, incompatible or zero-reference data do not acquire an unsupported percentage.
+
+The response contains `snapshotId/requestId/generatedAt/context/provenance/boundary/modules/reports/quality/capabilities/limitations`. Context includes the project timezone and absolute current/reference intervals. Provenance includes current configuration Ref/mod fingerprint, own-primary history basis, actual read-observation interval, applied cleaning snapshots, source-last-observed time and any streaming limits. `sourceLastObservedAt` is an observation, never proof that history is complete up to that instant. A new query at the same asOf can see late source history or newer configuration; snapshots are not historical MVCC.
+
+`boundary.meterIds/sourcePointIds` identify the effective energy boundary. Different views of the same set/configuration/range reuse the same base-use result. Explicit overlapping objects keep their own details but do not expose a mixed scalar or invented shares. Energy always comes from each device's explicitly configured primary history, including virtual devices; contributions never substitute for missing own history.
+
+Each optional module has `status:ok|partial|empty|unavailable|error`, data and reasonCodes. Missing optional configuration or an ordinary isolated module failure does not erase other successful results. Invalid input, authorization failures and request resource failures remain whole-request errors. Report references resolve to existing ReportResult objects in the same package:
+
+| Module | Frozen data |
+| --- | --- |
+| kpis | Four cards, strict/available values, quality, comparison and controlled management conclusions; carbon falls back to current ongoing events when its coefficient is missing |
+| trend | Main energy profile reportRef |
+| time | Hour-of-day mean energy reportRef, complete-local-day heatmap, excluded incomplete days and only configured working-calendar reports |
+| endUse | Utility reportRef, effective meter IDs and additive flag; unassigned use remains separate |
+| organization | Current hierarchy, root IDs and unassigned bucket; parent and child levels are not added together |
+| balance | Existing energy-flow reportRef and independent graph IDs; original graph/accounting/shared-source contracts apply |
+| efficiency | Applicable COP config Ref/mod, numerator, denominator, ratio, service boundary and reportRef; total output/total input, never a mean of interval ratios |
+| issues | One current event observation, stable episode/native alarm identity, acknowledgement and recovery separately, read-only hourly evidence and actual metric quality issues |
+
+Current native event observation is separate from historical asOf. Selected objects and effective statistical meters define event scope; selecting a measured total does not imply all descendant events. An acknowledged but unrecovered episode remains ongoing. Event evidence may precede the parent's energy interval; opening it uses a separate absolute request and preserves the parent snapshot. Message-center eventId links locate an existing episode without scanning or acknowledgement. No guessed native deep-link or new alarm/message store is introduced.
+
+The cockpit uses bounded chunked native primary reads and request-local prepared summaries. Legacy report sample protection is unchanged. Production limits are 200 devices, two energy categories,20 COP configurations,366 local days plus the explicit reference,50k target raw block,200k raw samples held by the adapter,20m scanned samples,20s soft/30s hard execution and8MiB result. Per-user/project admission is1, per-project admission2;429 returns Retry-After:2. Limits produce explicit errors rather than empty/zero data. Adapter counters are not a claim about FIN native internal buffers, JVM RSS or achieved performance.
+
+Implementation, SDK/controlled-browser verification and actual FIN deployment are separate. The contract above describes the candidate source; consult Linear CPT-10/CPT-11 and a frozen package hash for runtime acceptance and release evidence. No additional test project, historical rewrite or deployment is authorized by this contract.
+
 ## Native equipment storage (0.4.0)
 
 All normal meter/sensor saves, including batch assignment and role changes, write FIN's existing equipment record. Its ID is the physical equipment ID; `nativeEquip:true` and a model marker are not required to choose this storage path. Parent references point to upstream equipment IDs, and every equipment business scalar/reference is stored as a visible `enerCubix*` tag on that same record. Normal saves never create an independent meter archive. Editing retained historical archives first repairs their native equipment configuration with validated references, optimistic revisions and recovery snapshots; no user migration workflow is required. Shared tariffs, calendars, expressions and other project configuration retain their own records.
