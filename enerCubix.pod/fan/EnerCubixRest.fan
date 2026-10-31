@@ -18,7 +18,7 @@ const class EnerCubixRest : WebMod
       body := Str:Obj?[:]
       if (req.method == "POST")
       {
-        if (route != "report" && route != "cleaning/preview") repo.mustWrite
+        if (!readPost(route)) repo.mustWrite
         if (!req.headers.get("Content-Type","").lower.startsWith("application/json")) throw ArgErr("请求必须使用 application/json")
         raw := readBody(req.in)
         parsed := JsonInStream(raw.in).readJson
@@ -40,6 +40,7 @@ const class EnerCubixRest : WebMod
         case "tree/manage": data=repo.manage(body)
         case "tree/copy": case "tree/move": case "tree/toggle": data=repo.tree(route.split('/').last,str(body,"id"),body["parentId"] as Str,body["mod"])
         case "report": data=repo.report(body)
+        case "cockpit": data=repo.cockpit(body)
         case "cleaning/preview": data=EnerCubixCleaningRepo(repo).preview(body)
         case "tasks": data=EnerCubixJobs(repo).run(body)
         case "alarms": data=repo.alarms
@@ -88,4 +89,7 @@ const class EnerCubixRest : WebMod
     }
     return out.toStr
   }
+
+  ** Authentication and FIN CSRF still run through the native /api project route.
+  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit"].contains(route) }
 }

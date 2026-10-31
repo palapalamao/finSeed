@@ -387,23 +387,8 @@ class EnerCubixRepo
 
   [Str:Obj?] report([Str:Obj?] input)
   {
-    mustRead
-    request := input.dup
-    now:=DateTime.now
-    cutoff:=input["asOf"] == null ? now : EnerCubixKnownUsage.cutoff(input)
-    request["asOf"]=(cutoff < now ? cutoff : now.toTimeZone(cutoff.tz)).toIso
-    request["tz"] = cx.proj.meta["tz"] ?: "Shanghai"
-    EnerCubixForecast.validate(request)
-    request.remove("legacyMembership")
-    request.remove("meterHistorySegments")
-    request.remove("leakSegment")
-    request.remove("_comparisonScope")
-    if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
-    all := input["perArea"] == true || ((input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin") ? liveRecords : records
-    all=EnerCubixNativeEquipRepo(this).validateRead(all)
-    if (request["kind"] == "energyFlow") all=flowRecords(all)
-    if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
-    request=EnerCubixEngine.flowScope(request,all)
+    prepared:=prepareReport(input)
+    request:=(Str:Obj?)prepared["request"]; all:=([Str:Obj?][])prepared["records"]
     result:=EnerCubixHistory.report(request,all,EnerCubixHistory.load(cx,request,all))
     if (EnerCubixComparisonScope.active(request) || request["kind"] == "energyFlow")
     {
@@ -419,6 +404,48 @@ class EnerCubixRepo
       }
     }
     return result
+  }
+
+  [Str:Obj?] cockpit([Str:Obj?] input)
+  {
+    mustRead
+    now:=DateTime.now
+    tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
+    prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
+    all:=([Str:Obj?][])prepared["records"]
+    normalized:=input.dup
+    normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
+    return EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin)
+  }
+
+  ** Existing report and cockpit share native mapping and configuration preparation.
+  private [Str:Obj?] prepareReport([Str:Obj?] input, Bool cockpit := false)
+  {
+    mustRead
+    request := input.dup
+    now:=DateTime.now
+    cutoff:=input["asOf"] == null ? now : EnerCubixKnownUsage.cutoff(input)
+    request["asOf"]=(cutoff < now ? cutoff : now.toTimeZone(cutoff.tz)).toIso
+    request["tz"] = cx.proj.meta["tz"] ?: "Shanghai"
+    EnerCubixForecast.validate(request)
+    request.remove("legacyMembership")
+    request.remove("meterHistorySegments")
+    request.remove("leakSegment")
+    request.remove("_comparisonScope")
+    if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
+    all:=[Str:Obj?][,]
+    if (cockpit)
+    {
+      source:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
+      all=EnerCubixNativeSpace.load(cx).project(source.findAll |r| {r["_comparisonReadable"] != false})
+      EnerCubixCockpit.guardVisibleScope(request,all,source)
+    }
+    else all=input["perArea"] == true || ((input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin") ? liveRecords : records
+    all=EnerCubixNativeEquipRepo(this).validateRead(all)
+    if (request["kind"] == "energyFlow") all=flowRecords(all)
+    if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
+    request=EnerCubixEngine.flowScope(request,all)
+    return ["request":request,"records":all]
   }
 
   private [Str:Obj?][] flowRecords([Str:Obj?][] visible)

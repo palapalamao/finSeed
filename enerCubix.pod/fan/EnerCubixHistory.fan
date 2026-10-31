@@ -17,18 +17,39 @@ class EnerCubixHistory
     return report
   }
 
-  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records)
+  ** Freeze every planned primary point and its cleaning config before any history read.
+  internal static [Str:Obj?][] loadPrepared(Context cx, Str:Obj? request, [Str:Obj?][] records)
+  {
+    points:=Str:Dict?[:]; configs:=Str:Dict[:]
+    EnerCubixMath.strings(request["_cockpitPointIds"]).each |id|
+    {
+      point:=cx.db.readById(Ref(id),false)
+      // Opaque permission failure: no point ID/name is returned to this caller.
+      if (point != null && !cx.canRead(point)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
+      points[id]=point
+      if (point?.get("hisFunc") == "enerCubixCleanHis")
+      {
+        try { configs[id]=point.has("enerCubixCleaningOwned") ? EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(point) : (point["hisFuncConfig"] as Dict ?: Etc.emptyDict) }
+        catch (Err e) { configs[id]=Etc.emptyDict }
+      }
+    }
+    out:=load(cx,request,records,points,configs)
+    out.each |h| {p:=points[h["pointId"].toStr]; h["configRefs"]=p == null ? [Str:Obj?][,] : [["id":p.id.id,"mod":EnerCubixRepo.iso(p["mod"])]]}
+    return out
+  }
+
+  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, [Str:Dict?]? frozenPoints := null, [Str:Dict]? frozenConfigs := null)
   {
     plan:=range(request,records)
     from:=(DateTime)plan["from"]; to:=(DateTime)plan["to"]
     out:=[Str:Obj?][,]
     modeRecords:=EnerCubixDimension.active(request) ? EnerCubixDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
-    pointIds(request,records).each |id|
+    (frozenPoints == null ? pointIds(request,records) : frozenPoints.keys).each |id|
     {
       Dict? point:=null
       try
       {
-        point=cx.db.readById(Ref(id),false)
+        point=frozenPoints == null ? cx.db.readById(Ref(id),false) : frozenPoints[id]
         if (point == null || !point.has("his")) { out.add(unavailable(id,"missing")); return }
         if (!cx.canRead(point)) { out.add(unavailable(id,"forbidden")); return }
         if (!primaryReadAllowed(point,records)) { out.add(unavailable(id,"missingSource")); return }
@@ -54,7 +75,9 @@ class EnerCubixHistory
         if (overrides.size > 1) throw ArgErr("Conflicting EnerCubix history modes")
         if (point["hisFunc"] == "enerCubixCleanHis" && request["raw"] != true)
         {
-          result:=cleanRead(cx,point,span,Etc.emptyDict,Etc.emptyDict)
+          config:=frozenConfigs?.get(id)
+          if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
+          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["enerCubixCleaningPreview":Marker.val]),config ?: Etc.emptyDict)
           out.add(normalizeClean(point,result,from,to,request["kind"] == "trend"))
           return
         }
@@ -68,7 +91,7 @@ class EnerCubixHistory
       }
       catch (ArgErr e)
       {
-        code:=["missingSource","missingCleaningProfile","duplicateSource","cycle","incompatibleCategory","incompatibleUnit","missingBranches"].contains(e.msg) ? e.msg : "invalidCleaningConfiguration"
+        code:=frozenPoints != null && e.msg.startsWith("History exceeds ") ? "historySampleLimit" : (["missingSource","missingCleaningProfile","duplicateSource","cycle","incompatibleCategory","incompatibleUnit","missingBranches"].contains(e.msg) ? e.msg : "invalidCleaningConfiguration")
         failed:=unavailable(id,code); failed["error"]=e.msg; out.add(failed)
       }
       catch (Err e) { out.add(unavailable(id,"historyReadError")) }
