@@ -1783,3 +1783,20 @@ Object.assign(englishMessages,{
  '历史逐表计费用模式，未包含未来费率调整':'Historical meter cost patterns, excluding future tariff changes','预测依据':'Forecast basis','预测去重表计':'Deduplicated forecast meters'
 });
 Object.assign(englishMessages,{'共享成员仅说明图中的引用关系，不重复计入范围费用。':'Shared members only describe graph references and are not added again to the scope cost.'});
+
+Object.assign(englishMessages,{
+ '范围选择方式':'Scope selection mode','范围':'Range','明确对象':'Explicit objects',
+ '已恢复绝对查询条件并重新读取，这是新快照。':'Absolute query conditions restored and re-read. This is a new snapshot.',
+ '当前配置已变化；此处保留原快照，重新查询将使用当前配置。':'Configuration has changed. The original snapshot is retained; a new query uses current configuration.',
+ '真实空间与对象':'Actual spaces and objects','选择焦点仅查看配置，不改变统计范围或全局用量。':'Selecting focus shows configuration without changing the statistical scope or global usage.',
+ '焦点详情':'Focus details','对象类型':'Object type','对象用量':'Object usage','当前快照未加载此对象用量':'Usage for this object is not loaded in the current snapshot',
+ '设为统计范围':'Set as statistical scope','清除焦点':'Clear focus','请选择范围内的对象':'Select an object within the scope',
+ '打开专业趋势':'Open professional profile','打开完整能流':'Open full energy flow','汇报布局':'Presentation layout','退出汇报布局':'Exit presentation layout',
+ '返回条件无效或对象已不可读，请重新选择统计范围。':'Return conditions are invalid or objects are no longer readable. Select the statistical scope again.',
+ '重新选择范围':'Select scope again','返回驾驶舱':'Return to cockpit','正在查看驾驶舱原快照的专业投影。':'Viewing a professional projection of the original cockpit snapshot.',
+ '基于相同查询条件重新读取；父驾驶舱快照仅作来源参考。':'Re-read using the same query conditions; the parent cockpit snapshot is provenance only.',
+ '父快照：{0}':'Parent snapshot: {0}','当前配置已变化；重新读取使用当前配置。':'Configuration has changed; the re-read uses current configuration.',
+ '站点':'Site','楼层':'Floor','设备':'Equipment','固定绝对区间':'Fixed absolute interval'
+});
+
+Object.assign(englishMessages,{'专业页已重新读取；父驾驶舱快照仅作来源参考。':'The professional report has been re-read; the parent cockpit snapshot is provenance only.'});

@@ -28,6 +28,7 @@ export class CockpitQuery {
    this.publish({phase:expired?'sessionExpired':'error',snapshot:this.state.snapshot,error:error instanceof Error?error.message:t('无法读取驾驶舱，请检查当前 FIN 会话。')});
   }
  }
+ restore(snapshot:CockpitSnapshot){this.cancel();this.publish({phase:'ready',snapshot:freeze(structuredClone(snapshot))});}
  cancel(){++this.sequence;this.controller?.abort();if(this.state.phase==='loading'||this.state.phase==='refreshing')this.publish({phase:this.state.snapshot?'ready':'idle',snapshot:this.state.snapshot});}
 }
 export function defaultCockpitSelection(catalog:Catalog):{scope:CockpitRequest['reportScope'];categoryId:string}|undefined{

@@ -2,9 +2,9 @@ import type {ReportResult} from './types';
 
 export interface CockpitScope {dimension:'space'|'metering'|'organization';nodeIds:string[];selectionIntent:'range'|'explicitObjects'}
 export interface CockpitRequest {
- schemaVersion:1;requestId:string;reportScope:CockpitScope;focusCategoryId:string;
+ schemaVersion:1;requestId:string;reportScope:CockpitScope;focusCategoryId:string;auxiliaryCategoryId?:string;
  time:{preset:'today'|'thisMonth'|'thisYear'|'custom';period:'hour'|'day'|'month';from?:string;to?:string};
- asOf?:string;modules:('kpis'|'trend')[];comparison?:{mode:'none'};
+ asOf?:string;modules:('kpis'|'trend')[];comparison?:{mode:'none'|'presetDefault'|'custom';from?:string;to?:string};
 }
 export interface CockpitMetric {
  id:string;categoryId?:string;value:number|null;valueType:'number'|'na'|'null';unit:string;quality:string;
@@ -14,7 +14,7 @@ export interface CockpitMetric {
 export interface CockpitModule<T> {status:'ok'|'partial'|'empty'|'unavailable'|'error';data?:T;reasonCodes?:string[];error?:{code:string;message?:string}}
 export interface CockpitSnapshot {
  schemaVersion:1;snapshotId:string;requestId:string;generatedAt:string;
- context:{project:string;projectTimeZone:string;reportScope:CockpitScope;focusCategoryId:string;time:CockpitRequest['time']&{from:string;to:string};asOf:string};
+ context:{project:string;projectTimeZone:string;reportScope:CockpitScope;focusCategoryId:string;auxiliaryCategoryId?:string;time:CockpitRequest['time']&{from:string;to:string};asOf:string;comparison?:CockpitRequest['comparison']};
  provenance:{configFingerprint:string;relationshipBasis:'currentConfiguration';historyBasis:'ownPrimaryPointRaw';historyObservedFrom:string;historyObservedTo:string;sourceLastObservedAt:string|null;configRefs:{id:string;mod?:string}[]};
  boundary:{id:string;meterIds:string[];sourcePointIds:string[];aggregateAllowed:boolean;overlaps:unknown[];excluded:unknown[]};
  modules:{kpis?:CockpitModule<{values:CockpitMetric[];conclusions:unknown[]}>;trend?:CockpitModule<{reportRef:string}>};

@@ -14,6 +14,8 @@ import {type Catalog,type ReportKind,type ReportRequest} from './types';
 import {version as uiVersion} from '../package.json';
 import {LanguageSwitcher} from './LanguageSwitcher';
 import {CockpitPage,cockpitEnabled} from './CockpitPage';
+import {CockpitReturnStore,createNavigation,decodeNavigation,encodeNavigation,readableNavigation,projectProfile,type NavigationContextV1,type CockpitViewState} from './cockpitNavigation';
+import type {CockpitSnapshot} from './cockpitTypes';
 
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
 type View=ReportKind|ManageView|'messages'|'cockpit';
@@ -31,17 +33,30 @@ export function App(){
  const[loading,setLoading]=useState(true);
  const[error,setError]=useState('');
  const[mobileOpen,setMobileOpen]=useState(false);
- const api=useMemo(()=>project?new EnerCubixApi(project):null,[project]);
+ const returnStore=useRef(new CockpitReturnStore());
+ const [routeNavigation,setRouteNavigation]=useState(()=>new URLSearchParams(location.hash.split('?')[1]||'').get('navigation'));
+ const [sessionExpired,setSessionExpired]=useState(false);
+ const clearSession=useCallback(()=>{returnStore.current.clear();setSessionExpired(true);},[]);
+ const api=useMemo(()=>project?new EnerCubixApi(project,clearSession):null,[project,clearSession]);
  const requestSequence=useRef(0);
+ const cacheOwner=useRef<string|undefined>(undefined);
  const lastAnalysis=useRef<ReportKind>('profile');
- const reload=useCallback(async()=>{if(!api)return;const sequence=++requestSequence.current;setLoading(true);try{const next=await api.catalog();if(sequence===requestSequence.current){setCatalog(next);setError('');}}catch(error){if(sequence===requestSequence.current)setError(error instanceof Error?error.message:t('无法读取项目配置'));}finally{if(sequence===requestSequence.current)setLoading(false);}},[api]);
- useEffect(()=>{setCatalog(null);void reload();return()=>{requestSequence.current++;};},[reload]);
- useEffect(()=>{const update=()=>{setView(readView());setTemplateId(readTemplate());setProject(projectFromLocation(location));};window.addEventListener('hashchange',update);return()=>window.removeEventListener('hashchange',update);},[]);
+ const reload=useCallback(async()=>{if(!api)return;const sequence=++requestSequence.current;setLoading(true);try{const next=await api.catalog();if(sequence===requestSequence.current){const owner=JSON.stringify([next.project,next.user.name]);if(cacheOwner.current!==owner){returnStore.current.clear();cacheOwner.current=owner;}setCatalog(next);setError('');}}catch(error){if(sequence===requestSequence.current)setError(error instanceof Error?error.message:t('无法读取项目配置'));}finally{if(sequence===requestSequence.current)setLoading(false);}},[api]);
+ useEffect(()=>{returnStore.current.clear();setSessionExpired(false);setCatalog(null);void reload();return()=>{requestSequence.current++;};},[reload]);
+ useEffect(()=>{const update=()=>{const nextView=readView(),encoded=new URLSearchParams(location.hash.split('?')[1]||'').get('navigation');setRouteNavigation(encoded);setView(nextView);setTemplateId(readTemplate());setProject(projectFromLocation(location));if(nextView==='cockpit'&&encoded){setCatalog(null);void reload();}};window.addEventListener('hashchange',update);return()=>window.removeEventListener('hashchange',update);},[reload]);
  const configView=management.includes(view as ManageView);
  const settingsView=settingsViews.includes(view as ManageView);
  const analysisView=!configView&&view!=='dashboard'&&view!=='cockpit'&&view!=='messages';
  useEffect(()=>{if(analysisView)lastAnalysis.current=view as ReportKind;},[view,analysisView]);
- const navigate=(next:View,nextTemplate?:string)=>{setView(next);setTemplateId(nextTemplate);setMobileOpen(false);location.hash='/' + next + '?project=' + encodeURIComponent(project)+(nextTemplate?'&template='+encodeURIComponent(nextTemplate):'');};
+ const navigate=(next:View,nextTemplate?:string)=>{setRouteNavigation(null);setView(next);setTemplateId(nextTemplate);setMobileOpen(false);location.hash='/' + next + '?project=' + encodeURIComponent(project)+(nextTemplate?'&template='+encodeURIComponent(nextTemplate):'');};
+ const context=useMemo(()=>decodeNavigation(routeNavigation,project),[routeNavigation,project]);
+ const navigationAllowed=context&&catalog&&readableNavigation(catalog,context);
+ const restored=context&&navigationAllowed?returnStore.current.read(catalog!,context):undefined;
+ const initialReportSnapshot=useMemo(()=>context&&restored&&!restored.configurationChanged&&context.targetKind===view?projectProfile(restored.snapshot,context.targetRequest):undefined,[context,restored?.snapshot,restored?.configurationChanged,view]);
+ const navigationHash=(next:View,navigation:NavigationContextV1)=>'/' + next + '?project='+encodeURIComponent(project)+'&navigation='+encodeURIComponent(encodeNavigation(navigation));
+ const drill=(navigation:NavigationContextV1,snapshot:CockpitSnapshot,viewState:CockpitViewState)=>{if(!catalog||!readableNavigation(catalog,navigation))return;returnStore.current.save(catalog,navigation,snapshot,viewState);history.replaceState(null,'','#'+navigationHash('cockpit',navigation));location.hash=navigationHash(navigation.targetKind,navigation);};
+ const syncSnapshot=(snapshot:CockpitSnapshot,viewState:CockpitViewState)=>{if(context?.parentSnapshotId===snapshot.snapshotId)return;const next=createNavigation(snapshot,'profile',viewState);history.replaceState(null,'','#'+navigationHash('cockpit',next));};
+ const returnToCockpit=()=>{if(context)location.hash=navigationHash('cockpit',context);};
  const version=uiVersion;
  const versionMismatch=!!catalog?.version&&catalog.version!==uiVersion;
  const destinations=[
@@ -74,7 +89,7 @@ export function App(){
      {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/enerCubix/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame">
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
-      {view==='cockpit'?<CockpitPage key={project} api={api!} catalog={catalog} onLegacy={()=>navigate('dashboard')} onConfigure={()=>navigate('tree')}/>:view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
+      {sessionExpired?<Alert type="error" message={t('FIN 会话已失效，请在 FIN 中重新登录。')}/>:routeNavigation&&(!context||!navigationAllowed)?<Alert type="warning" message={t('返回条件无效或对象已不可读，请重新选择统计范围。')} action={<Button onClick={()=>navigate('cockpit')}>{t('重新选择范围')}</Button>}/>:view==='cockpit'?<CockpitPage key={project+(context?.returnToken||'')} initialRequest={context?.appliedContext} restored={restored} onDrill={drill} onSnapshot={syncSnapshot} api={api!} catalog={catalog} onLegacy={()=>navigate('dashboard')} onConfigure={()=>navigate('tree')}/>:view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project+(context?.returnToken||'')+(context?view:'')} initialRequest={context?.targetKind===view?context.targetRequest:undefined} initialSnapshot={initialReportSnapshot} navigationContext={context} configurationChanged={restored?.configurationChanged} onReturn={context?returnToCockpit:undefined} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
      </div>
     </>}
    </Layout.Content>
