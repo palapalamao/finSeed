@@ -33,7 +33,17 @@ class EnerCubixHistory
         catch (Err e) { configs[id]=Etc.emptyDict }
       }
     }
-    out:=load(cx,request,records,points,configs)
+    out:=[Str:Obj?][,]
+    ranges:=EnerCubixMath.maps(request["_cockpitRanges"])
+    if (ranges.isEmpty) out=load(cx,request,records,points,configs)
+    else ranges.each |range|
+    {
+      selected:=points.findAll |point,id| {EnerCubixMath.strings(range["pointIds"]).contains(id)}
+      q:=request.dup.setAll(["from":range["from"],"to":range["to"],"metric":"energy"])
+      part:=load(cx,q,records,selected,configs)
+      part.each |h| {h["_cockpitFrom"]=range["from"]; h["_cockpitTo"]=range["to"]}
+      out.addAll(part)
+    }
     out.each |h| {p:=points[h["pointId"].toStr]; h["configRefs"]=p == null ? [Str:Obj?][,] : [["id":p.id.id,"mod":EnerCubixRepo.iso(p["mod"])]]}
     return out
   }

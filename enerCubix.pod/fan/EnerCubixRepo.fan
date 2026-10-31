@@ -415,7 +415,7 @@ class EnerCubixRepo
     all:=([Str:Obj?][])prepared["records"]
     normalized:=input.dup
     normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
-    return EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin)
+    return EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]| {EnerCubixNativeAlarms(this).list})
   }
 
   ** Existing report and cockpit share native mapping and configuration preparation.

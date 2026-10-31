@@ -305,7 +305,7 @@ internal class EnerCubixContext
     if (t == null) return EnerCubixValue(null,"missingTariff",raw.sources)
     if (!usedTariffs.containsKey(r["id"].toStr))
     {
-      snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId"].contains(key)}
+      snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId","currency"].contains(key)}
       usedTariffs[r["id"].toStr]=snapshot.dup.set("nodeId",r["id"])
     }
     mode := t["mode"]?.toStr ?: "flat"

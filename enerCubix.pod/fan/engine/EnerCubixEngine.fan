@@ -107,6 +107,7 @@ class EnerCubixEngine
       if (dimension != null && ["space","organization","group"].contains(record["kind"]?.toStr ?: "") && !dimension.scope(id)) throw ArgErr("Selected node does not belong to the report dimension")
       if (dimension != null && kind == "leak" && !["meter","totalMeter"].contains(record["kind"]?.toStr ?: "")) throw ArgErr("Leak analysis requires a master meter")
       cats:=ctx.categories(id)
+      if (request["_cockpitCategoryId"] != null) cats=cats.findAll |cat| {cat == request["_cockpitCategoryId"]}
       if (cats.isEmpty) cats=[""]
       cats.each |cat|
       {
