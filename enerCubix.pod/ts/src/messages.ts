@@ -1876,3 +1876,27 @@ Object.assign(englishMessages,{"辅助能源":"Auxiliary energy","自定义时�
 Object.assign(englishMessages,{"个":"count"});
 
 Object.assign(englishMessages,{'查看数据清洗依据':'View data cleaning evidence','配置冻结观察区间':'Configuration freezing observation period','历史读取观察区间':'History read observation period'});
+
+Object.assign(englishMessages,{
+ "{0} {1} ÷ {2} m² = {3} {4}": "{0} {1} ÷ {2} m² = {3} {4}",
+ "统计面积缺失或无效，能耗数值仍保留。": "The statistical area is missing or invalid. Energy usage remains available.",
+ "服务面积边界不明确，保留能耗，不计算混合单位面积指标。": "The service-area boundary is unclear. Energy usage is retained without calculating a mixed intensity.",
+ "按原生服务空间去重，面积只计一次。": "Deduplicated native service-space area; each area is counted once.",
+ "使用明确配置的自定义服务面积。": "Uses the explicitly configured custom service area.",
+ "请核对本次统计面积的来源与边界。": "Check this statistical area’s sources and boundary.",
+ "统计面积与计算依据": "Statistical area and calculation evidence",
+ "用量与面积边界标识": "Energy and area boundary identifier",
+ "服务空间引用": "Service-space references",
+ "面积来源": "Area source",
+ "原生引用": "Native reference",
+ "配置版本": "Configuration version",
+ "原始面积标签": "Original area tag",
+ "版本未提供": "Version not supplied",
+ "服务空间 {0} 已去重，仅计一次。": "Service space {0} is deduplicated and counted once.",
+ "空间 {0} 已包含于 {1}，不重复计面积。": "Space {0} is contained by {1}; its area is not counted again.",
+ "安装位置不作为计量覆盖范围；本次面积来源随快照保留。": "Installation location does not establish the metered service area. These area sources are preserved with the snapshot."
+});
+
+Object.assign(englishMessages,{'统计面积':'Statistical area','自定义面积':'Custom area','自定义面积边界':'Custom-area boundaries'});
+
+Object.assign(englishMessages,{'{0}：{1} m²（{2}）；来源引用 {3}，版本 {4}，原始面积 {5} {6}':'{0}: {1} m² ({2}); source reference {3}, version {4}, original area {5} {6}'});

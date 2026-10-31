@@ -3,6 +3,11 @@ import type {EnerCubixRecord,ReportSnapshot} from './types';
 afterEach(()=>vi.resetModules());
 
 describe('explicit statistical area',()=>{
+ it.each(['zh-CN','en-US'])('exports original native area references, revisions and units in %s',async language=>{
+  (await import('./i18n')).initializeLocale(language);const {areaBasisRows}=await import('./serviceArea');
+  const snapshot={result:{extra:{areaBasis:[{nodeId:'__selection__',baseValue:300,baseUnit:'kWh',value:0.3,unit:'kWh/m²',area:{value:1000,quality:'ok',unit:'m²',sources:[{id:'floor',nativeRef:'native-floor',mod:'floor-v1',name:'Frozen 1F',area:1000,source:'space',nativeArea:{nativeRef:'native-floor',mod:'floor-v1',tag:'area',value:10763.91,unit:'ft²',areaM2:1000}}]}}]}}} as unknown as ReportSnapshot;
+  const before=structuredClone(snapshot),text=areaBasisRows(snapshot).join('');expect(text).toContain('native-floor');expect(text).toContain('floor-v1');expect(text).toContain('10,763.91 ft²');expect(text).toContain('300 kWh ÷ 1,000 m² = 0.3 kWh/m²');expect(snapshot).toEqual(before);
+ });
  it('offers only native sites and floors and submits an area-only patch',async()=>{
   const {areaSpaces,spaceAreaPayload}=await import('./serviceArea');
   const site:EnerCubixRecord={id:'overlay',kind:'space',name:'Campus',mod:'original',nativeReadonly:true,nativeSourceKind:'site',nativeSourceId:'native-site',area:800};

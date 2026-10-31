@@ -2,6 +2,7 @@ import {Tag} from 'antd';
 import type {CockpitMetric,CockpitSnapshot} from './cockpitTypes';
 import {cockpitCards,cockpitComparisonText,cockpitConclusionText,cockpitMetricTitle,cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
 import {locale,t} from './i18n';
+import {CockpitAreaEvidence} from './CockpitAreaEvidence';
 
 function basis(metric:CockpitMetric):string{
  if(metric.valueBasis==='currentState')return t('当前状态，不代表历史区间');
@@ -29,6 +30,7 @@ export function CockpitKpis({snapshot,name}:{snapshot:CockpitSnapshot;name:(id:s
      {!!metric.comparison?.reasonCodes.length&&<p>{metric.comparison.reasonCodes.map(cockpitReasonText).join(t('；'))}</p>}
      <dl><dt>{t('来源引用')}</dt><dd>{metric.sourceIds.map(name).join('、')||'—'}</dd></dl>
      {metric.coverage?.map((coverage,index)=><p key={String(coverage.id||index)}>{t('{0}：覆盖率 {1}',name(String(coverage.nodeId||coverage.id||'—')),typeof coverage.coverage==='number'?new Intl.NumberFormat(locale,{style:'percent',maximumFractionDigits:1}).format(coverage.coverage):'—')}</p>)}
+     {metric.details?.areaResolution&&<CockpitAreaEvidence resolution={metric.details.areaResolution} formula={metric.details.formula}/>}
      {metric.details&&<details><summary>{t('查看计算配置快照')}</summary><pre>{JSON.stringify(metric.details,null,2)}</pre></details>}
     </details>
    </section>)}
