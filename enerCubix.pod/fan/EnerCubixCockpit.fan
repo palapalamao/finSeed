@@ -92,14 +92,6 @@ class EnerCubixCockpit
     observedTo:=readClock()
     report:=EnerCubixHistory.report(request,frozen,EnerCubixCockpitMetrics.histories(request,histories))
     row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).find |r| {r["categoryId"] == category}
-    complete:=row == null ? null : EnerCubixMath.num(row["value"])
-    known:=row == null ? null : EnerCubixMath.num(row["knownValue"])
-    quality:=row?.get("quality") as Str ?: "missing"
-    if (["filtered","substituted","na"].contains(quality)) complete=null
-    na:=row?.get("valueType") == "na" || row?.get("knownValueType") == "na"
-    if (complete == null && known == null && na) quality="na"
-    reasons:=Str[,]
-    if (!allowed) {complete=null; known=null; quality="overlappingScopes"}
     boundaryQuality:=row?.get("scopeQuality") as Str
     if (boundaryQuality != null && !["topologyIncomplete","accountingIncomplete","duplicateSource"].contains(boundaryQuality)) boundaryQuality=null
     sources:=meters.map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str p->Bool| {!p.isEmpty}
@@ -108,15 +100,13 @@ class EnerCubixCockpit
     {
       allowed=false; boundary["aggregateAllowed"]=false
       boundary["reasonCode"]=boundaryQuality
-      complete=null; known=null; quality=boundaryQuality
     }
-    if (complete == null) reasons.add(quality)
-    value:=complete ?: known
-    basis:=complete != null ? "complete" : (known != null ? "knownSubtotal" : "unavailable")
     coverage:=EnerCubixMath.maps(((Map)report["extra"])["usageCoverage"])
-    if (value != null && (quality == "substituted" || row?.get("knownQuality") == "substituted")) basis="cleanedWithReplacement"
-    metric:=Str:Obj?["id":"energy","categoryId":category,"value":value,"valueType":value != null ? "number" : (na && allowed ? "na" : "null"),"unit":row?.get("unit") ?: ctx.unit(ids.first,category,"energy"),"quality":complete == null && known != null ? "partial" : quality,"valueBasis":basis,"completeValue":complete,"knownValue":known,"sourceIds":row?.get("sourceIds") ?: boundary["sourcePointIds"],"reasonCodes":reasons,"boundaryId":boundaryId]
-    metric["coverage"]=coverage
+    metric:=EnerCubixCockpitMetrics.metric(report,"energy",category,boundary)
+    if (row == null) metric.setAll(["unit":ctx.unit(ids.first,category,"energy"),"sourceIds":boundary["sourcePointIds"]])
+    if (!allowed) metric["valueType"]="null"
+    complete:=EnerCubixMath.num(metric["completeValue"])
+    known:=EnerCubixMath.num(metric["knownValue"])
     reports:=Str:Obj?["profile-energy":report]
     values:=kpis ? EnerCubixCockpitMetrics.values(request,frozen,histories,metric,boundary,auxiliary,reports) : [metric]
     if (kpis && comparison["mode"] != "none")

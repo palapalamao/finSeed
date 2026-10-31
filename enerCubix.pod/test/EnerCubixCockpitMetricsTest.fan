@@ -255,6 +255,24 @@ class EnerCubixCockpitMetricsTest : Test
     verifyEq(((Map)result["provenance"])["sourceLastObservedAt"],at.toIso)
   }
 
+  Void testExecuteKeepsInterpolatedOnlyGapUnavailable()
+  {
+    q:=request
+    q["time"]=["preset":"custom","period":"hour","from":(at+30min).toIso,"to":(at+90min).toIso]
+    q["comparison"]=["mode":"none"]
+    hs:=[Str:Obj?][["pointId":"p","unit":"kWh","mode":"cumulative","samples":[["ts":at.toIso,"value":100f],["ts":now.toIso,"value":200f]]]]
+    r:=run(q,records,hs)
+    report:=(Map)((Map)r["reports"])["profile-energy"]
+    row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).first
+    verifyEq(row["value"],50f)
+    verifyEq(row["quality"],"estimated")
+    verifyNull(row["knownValue"])
+    verifyNull(metric(r,"energy")["value"])
+    verifyNull(metric(r,"energy")["completeValue"])
+    verifyEq(metric(r,"energy")["valueBasis"],"unavailable")
+    verifyEq(metric(r,"energy")["quality"],"missing")
+  }
+
   Void testKnownDisplayDoesNotPromoteEstimatedStrictValues()
   {
     row:=Str:Obj?["categoryId":"c","unit":"kWh","value":10.92896174872294f,"valueType":"number","quality":"estimated","knownValue":null,"knownValueType":"null","knownQuality":"missing","sourceIds":["p"]]
