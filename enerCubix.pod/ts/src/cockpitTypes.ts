@@ -1,7 +1,7 @@
 import type {ReportResult} from './types';
 
 export type CockpitFace='space'|'time'|'endUse'|'organization'|'balance'|'efficiency';
-export const cockpitModules=['kpis','trend','time','endUse','organization','balance','efficiency'] as const;
+export const cockpitModules=['kpis','trend','time','endUse','organization','balance','efficiency','issues'] as const;
 export interface CockpitScope {dimension:'space'|'metering'|'organization';nodeIds:string[];selectionIntent:'range'|'explicitObjects'}
 export interface CockpitAreaSource {id:string;name:string;area:number|null;source:'space'|'custom';nativeRef:string|null;mod:string|null;nativeArea:null|{nativeRef:string;mod:string|null;tag:'area';value:number|null;unit:string|null;areaM2:number|null}}
 export interface CockpitAreaResolution {status:'ok'|'missingArea'|'ambiguousArea';areaM2:number|null;basis:'nativeSpace'|'custom'|'mixed'|'unknown';spaceRefs:string[];customBoundaryIds:string[];excludedOverlaps:{id:string;coveredBy:string;reasonCode:'containedSpace'|'duplicateServiceSpace'}[];energyBoundaryId:string;sourceRevisions:CockpitAreaSource[];reasonCodes:string[]}
@@ -25,13 +25,15 @@ export interface CockpitEndUseData {reportRef:string;additive:boolean;meterIds:s
 export interface CockpitDistributionNode {id:string;name:string;parentId:string|null;nodeKind:'organization'|'unassigned';meterIds:string[];unit:string;value:number|null;valueType:'number'|'null'|'na';completeValue:number|null;knownValue:number|null;valueBasis:CockpitMetric['valueBasis'];quality:string;sourceIds:string[]}
 export interface CockpitOrganizationData {rootIds:string[];nodes:CockpitDistributionNode[];meterIds:string[];meterReportRef:string;additive:boolean}
 export interface CockpitCopItem {configId:string;name:string;configRef:{id:string;mod:string|null};numerator:CockpitMetric;denominator:CockpitMetric;ratio:CockpitMetric;from:string;to:string;asOf:string;coverageIds:string[];reportRef:string;actualEfficiency?:number;baselineEfficiency?:number}
+export interface CockpitIssue {id:string;type:'energyAlarm'|'ruleClue'|'dataQuality';objectId:string;name?:string;categoryId:string;unit:string;evidenceFrom:string|null;evidenceTo:string|null;active:boolean|null;acknowledged:boolean|null;recoveredAt?:string|null;stateObservedAt:string|null;sourceIds:string[];reasonCodes?:string[];metricId?:string;nativeAlarmId?:string;episodeId?:string;ackAt?:string;ackBy?:string;ackNote?:string;actual?:number|null;reference?:number|null;hourCount?:number;hours?:{ts:string;value:number|null;unit:string|null;limit:number|null;quality:string|null}[];evidenceTarget?:{kind:'profile';request:{kind:'profile';dimension:CockpitScope['dimension'];nodeIds:string[];categoryIds:string[];from:string;to:string;asOf:string;period:'hour';metric:'energy'}};nativeDetail?:{available:boolean;reasonCode:string}}
+export interface CockpitIssuesData {stateObservedAt:string|null;items:CockpitIssue[];total:number;topIds:string[];activeEventCount:number|null;eventScope:{basis:'selectedObjectsAndEffectiveMeters';objectIds:string[];meterIds:string[];categoryId:string}}
 export interface CockpitModule<T> {status:'ok'|'partial'|'empty'|'unavailable'|'error';data?:T;reasonCodes?:string[];error?:{code:string;message?:string}}
 export interface CockpitSnapshot {
  schemaVersion:1;snapshotId:string;requestId:string;generatedAt:string;
  context:{project:string;projectTimeZone:string;reportScope:CockpitScope;focusCategoryId:string;auxiliaryCategoryId?:string|null;time:CockpitRequest['time']&{from:string;to:string};asOf:string;comparison?:CockpitRequest['comparison']};
  provenance:{configFingerprint:string;relationshipBasis:'currentConfiguration';historyBasis:'ownPrimaryPointRaw';historyObservedFrom:string;historyObservedTo:string;sourceLastObservedAt:string|null;configRefs:{id:string;mod?:string}[];historyPlan?:{from:string;to:string;pointIds:string[]}[];appliedCleaning?:{pointId:string;profileId:string;profileVersion:number;parameters:Record<string,unknown>}[];historyConfigObservedFrom?:string|null;historyConfigObservedTo?:string|null};
  boundary:{id:string;meterIds:string[];sourcePointIds:string[];aggregateAllowed:boolean;overlaps:unknown[];excluded:unknown[]};
- modules:{kpis?:CockpitModule<{values:CockpitMetric[];conclusions:CockpitConclusion[]}>;trend?:CockpitModule<{reportRef:string}>;time?:CockpitModule<CockpitTimeData>;endUse?:CockpitModule<CockpitEndUseData>;organization?:CockpitModule<CockpitOrganizationData>;balance?:CockpitModule<{reportRef:string;graphIds:string[]}>;efficiency?:CockpitModule<{items:CockpitCopItem[]}>};
+ modules:{kpis?:CockpitModule<{values:CockpitMetric[];conclusions:CockpitConclusion[]}>;trend?:CockpitModule<{reportRef:string}>;time?:CockpitModule<CockpitTimeData>;endUse?:CockpitModule<CockpitEndUseData>;organization?:CockpitModule<CockpitOrganizationData>;balance?:CockpitModule<{reportRef:string;graphIds:string[]}>;efficiency?:CockpitModule<{items:CockpitCopItem[]}>;issues?:CockpitModule<CockpitIssuesData>};
  reports:Record<string,ReportResult>;quality:Record<string,unknown>[];
  capabilities:{canRead:boolean;canManage:boolean;availableFaces:string[]};limitations:string[];
 }

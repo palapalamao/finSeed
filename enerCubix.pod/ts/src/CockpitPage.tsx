@@ -16,6 +16,8 @@ import {cockpitAuxiliaryCategory} from './cockpitMetrics';
 import {CockpitMain} from './CockpitMain';
 import {CockpitFlow} from './CockpitFlow';
 import {cockpitCopNavigation} from './cockpitEfficiencyProjection';
+import {CockpitIssues} from './CockpitIssues';
+import {cockpitIssueNavigation} from './cockpitIssueProjection';
 import './cockpit.css';
 
 // Keep the legacy dashboard route available throughout incremental delivery.
@@ -75,6 +77,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,initialRequest,res
     {restored?.configurationChanged&&<Alert type="warning" showIcon message={t('当前配置已变化；此处保留原快照，重新查询将使用当前配置。')}/>}
     <div className="cockpit-context"><strong>{snapshot.context.reportScope.nodeIds.map(name).join('、')} / {name(snapshot.context.focusCategoryId)}</strong><p>{time(snapshot.context.time.from)} — {time(snapshot.context.time.to)} {t('（结束时间不含）')}</p><p>{t('项目时区：{0}',snapshot.context.projectTimeZone)}</p></div>
     <CockpitKpis snapshot={snapshot} name={name}/>
+    <CockpitIssues key={snapshot.snapshotId} snapshot={snapshot} name={name} canEvidence={item=>!!cockpitIssueNavigation(snapshot,item,currentView())} onEvidence={item=>{const view=currentView(),navigation=cockpitIssueNavigation(snapshot,item,view);if(navigation)onDrill(navigation,snapshot,view);}}/>
     <CockpitMain snapshot={snapshot} face={face} onFace={setFace} onReport={drillFace} name={name} focusObjectId={focused?.id} onFlow={()=>drill('energyFlow')} onCop={id=>{const view=currentView();onDrill(cockpitCopNavigation(snapshot,id,view),snapshot,view);}}/>
     {face==='space'&&<section className="cockpit-focus-section" aria-label={t('真实空间与对象')}><div><h3>{t('真实空间与对象')}</h3><p>{t('选择焦点仅查看配置，不改变统计范围或全局用量。')}</p><ul className="cockpit-object-list">{focusRows.map(row=><li key={row.id}><button type="button" aria-pressed={focused?.id===row.id} onClick={()=>setFocusObjectId(row.id)}>{focusPath(catalog,row.id!,snapshot.context.reportScope)}</button></li>)}</ul></div><section className="cockpit-focus-panel" aria-label={t('焦点详情')}><h3>{t('焦点详情')}</h3>{focused?<><strong>{focused.name}</strong><dl><dt>{t('对象类型')}</dt><dd>{t(({site:'站点',floor:'楼层',equip:'设备'} as Record<string,string>)[String(focused.nativeSourceKind||focused.nativeLevel)]||'对象')}</dd><dt>{t('主能耗点')}</dt><dd>{String(focused.pointId||t('未配置'))}</dd><dt>{t('对象用量')}</dt><dd>{t('当前快照未加载此对象用量')}</dd></dl><Button onClick={setStatisticalScope}>{t('设为统计范围')}</Button><Button onClick={()=>setFocusObjectId(undefined)}>{t('清除焦点')}</Button></>:<p>{t('请选择范围内的对象')}</p>}<div className="cockpit-drill-actions"><Button onClick={()=>drill('profile')}>{t('打开专业趋势')}</Button><Button onClick={()=>drill('energyFlow')}>{t('打开完整能流')}</Button><Button onClick={()=>setPresentationMode(value=>!value)}>{presentationMode?t('退出汇报布局'):t('汇报布局')}</Button></div></section></section>}
     <div className="cockpit-primary">

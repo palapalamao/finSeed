@@ -38,10 +38,10 @@ function ChangeMessages({api,records}:{api:EnerCubixApi;records:EnerCubixRecord[
  </section>;
 }
 
-export function MessageCenter({api,canWrite,records}:{api:EnerCubixApi;canWrite:boolean;records:EnerCubixRecord[]}){
+export function MessageCenter({api,canWrite,records,eventId}:{eventId?:string;api:EnerCubixApi;canWrite:boolean;records:EnerCubixRecord[]}){
  return <div className="management message-center"><div className="workspace-title"><div><h2>{t('消息中心')}</h2><p>{t('查看能耗报警和重要变更记录。')}</p></div></div>
   <Tabs defaultActiveKey="alarms" items={[
-   {key:'alarms',label:t('报警'),children:<Alarms api={api} canWrite={canWrite} records={records}/>},
+   {key:'alarms',label:t('报警'),children:<Alarms eventId={eventId} api={api} canWrite={canWrite} records={records}/>},
    {key:'changes',label:t('重要变更'),children:<ChangeMessages api={api} records={records}/>}
   ]}/>
  </div>;
