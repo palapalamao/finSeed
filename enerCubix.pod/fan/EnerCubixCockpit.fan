@@ -132,7 +132,8 @@ class EnerCubixCockpit
         v["comparison"]=EnerCubixCockpitMetrics.comparisonValue(v,previous,comparison)
       }
     }
-    events:=EnerCubixCockpitMetrics.events(kpis ? activeEvents : null,ctx,ids,category,boundary,readClock)
+    observation:=EnerCubixCockpitIssues.observe(kpis || enabled.contains("issues") ? activeEvents : null,ctx,ids,category,boundary,readClock,project)
+    events:=EnerCubixCockpitMetrics.events(observation,category,boundary)
     carbon:=values.find |v| {v["id"] == "co2"}
     if (carbon != null && ((List)carbon["reasonCodes"]).contains("missingCoefficient"))
       values[values.index(carbon)]=events
@@ -151,6 +152,12 @@ class EnerCubixCockpit
     {
       if (efficiency["error"] == true) modules["efficiency"]=EnerCubixCockpitFlow.error
       else EnerCubixCockpitEfficiency.attach(efficiency,histories,boundary,reports,modules)
+    }
+    if (enabled.contains("issues"))
+    {
+      try {modules["issues"]=EnerCubixCockpitIssues.project(observation,events,values,request,boundary,ctx)}
+      catch (EnerCubixHttpErr e) {throw e}
+      catch (Err e) {modules["issues"]=EnerCubixCockpitFlow.error}
     }
     config:=EnerCubixCockpitMetrics.configuration(ctx,ids,auxiliary == null ? [category] : [category,auxiliary])
     config=config.dup.addAll(EnerCubixMath.maps(flow["configuration"])).addAll(EnerCubixMath.maps(efficiency["configuration"])).unique.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
@@ -225,7 +232,7 @@ class EnerCubixCockpit
     ids.each |id| {ref(id,project)}
     category:=text(input,"focusCategoryId"); ref(category,project)
     modules:=strings(input["modules"])
-    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization","efficiency","balance"].contains(m)}) throw ArgErr("cockpitModules")
+    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization","efficiency","balance","issues"].contains(m)}) throw ArgErr("cockpitModules")
     if (input["auxiliaryCategoryId"] != null)
     {
       auxiliary:=text(input,"auxiliaryCategoryId"); ref(auxiliary,project)

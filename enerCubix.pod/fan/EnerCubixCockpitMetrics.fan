@@ -267,28 +267,13 @@ internal class EnerCubixCockpitMetrics
     return ["kind":context["kind"],"currentRange":context["currentRange"],"referenceRange":context["referenceRange"],"current":a,"reference":b,"comparable":valid,"difference":delta.value,"changeRate":rate.value,"reasonCodes":reasons.unique,"durationDifferenceSeconds":context["durationDifferenceSeconds"]]
   }
 
-  static Str:Obj? events(|->[Str:Obj?][]|? provider, EnerCubixContext ctx, Str[] ids, Str category, Str:Obj? boundary, |->DateTime| clock)
+  static Str:Obj? events(Str:Obj? observation, Str category, Str:Obj? boundary)
   {
-    value:=Str:Obj?["id":"activeAlarms","categoryId":category,"value":null,"valueType":"null","unit":"count","quality":"missing","valueBasis":"unavailable","completeValue":null,"knownValue":null,"sourceIds":Str[,],"reasonCodes":["ACTIVE_EVENTS_UNAVAILABLE"],"boundaryId":boundary["id"],"stateObservedAt":null]
-    if (provider == null) return value
-    episodes:=[Str:Obj?][,]
-    try {episodes=provider()}
-    catch (IOErr e) {value["reasonCodes"]=["ACTIVE_EVENTS_READ_ERROR"];return value}
-    catch (TimeoutErr e) {value["reasonCodes"]=["ACTIVE_EVENTS_READ_ERROR"];return value}
-    catch (ArgErr e) {value["reasonCodes"]=["ACTIVE_EVENTS_READ_ERROR"];return value}
-    episodes=episodes.findAll |e|
-    {
-      if (e["categoryId"] != category) return false
-      node:=e["nodeId"] as Str ?: ""
-      if (ids.contains(node) || ((List)boundary["meterIds"]).contains(node)) return true
-      members:=ctx.scopeMeters(node,category)
-      return !members.isEmpty && members.all |m| {((List)boundary["meterIds"]).contains(m["id"])}
-    }
-    value["stateObservedAt"]=clock().toIso
-    if (episodes.any |e| {e["nativeAlarmMissing"] == true}) return value
-    active:=episodes.findAll |e| {e["nativeActive"] == true || (e["nativeActive"] == null && e["recoveredAt"] == null && e["nativeRecoveredAt"] == null)}
-    roots:=active.map |e->Str| {e["episodeId"] as Str ?: e["id"].toStr}.unique.sort
-    value.setAll(["value":roots.size.toFloat,"valueType":"number","quality":"ok","valueBasis":"currentState","completeValue":roots.size.toFloat,"knownValue":roots.size.toFloat,"sourceIds":roots,"reasonCodes":Str[,]])
+    reasons:=EnerCubixMath.strings(observation["reasonCodes"])
+    value:=Str:Obj?["id":"activeAlarms","categoryId":category,"value":null,"valueType":"null","unit":"count","quality":"missing","valueBasis":"unavailable","completeValue":null,"knownValue":null,"sourceIds":Str[,],"reasonCodes":reasons,"boundaryId":boundary["id"],"stateObservedAt":observation["stateObservedAt"]]
+    if (!reasons.isEmpty) return value
+    roots:=EnerCubixMath.maps(observation["episodes"]).findAll |e| {EnerCubixCockpitIssues.active(e)}.map |e->Str| {e["episodeId"] as Str ?: e["id"].toStr}.unique.sort
+    value.setAll(["value":roots.size.toFloat,"valueType":"number","quality":"ok","valueBasis":"currentState","completeValue":roots.size.toFloat,"knownValue":roots.size.toFloat,"sourceIds":roots])
     return value
   }
 

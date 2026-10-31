@@ -420,7 +420,11 @@ class EnerCubixRepo
       if (EnerCubixMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
       normalized:=input.dup
       normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
-      result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]| {EnerCubixNativeAlarms(this).list})
+      result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]|
+      {
+        return EnerCubixCockpitIssues.readableEvents(EnerCubixNativeAlarms(this).list,cx.proj.name) |id->Bool|
+        {source:=cx.db.readById(Ref(id),false);return source != null && cx.canRead(source)}
+      })
       if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
       return result
     }
