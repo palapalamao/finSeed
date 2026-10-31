@@ -28,6 +28,18 @@ describe('cockpit submitted contexts',()=>{
   expect(query.getSnapshot().snapshot?.provenance.sourceLastObservedAt).toBeNull();
   expect(Object.isFrozen(query.getSnapshot().snapshot?.modules.kpis?.data?.values)).toBe(true);
  });
+ it('freezes shared decoded evidence once while retaining its shared identity',async()=>{
+  const result=snapshot('shared'),sources=result.modules.kpis!.data!.values[0].sourceIds;
+  result.boundary.sourcePointIds=sources;
+  const freezing=vi.spyOn(Object,'freeze');
+  try{
+   const query=new CockpitQuery(async()=>result);await query.apply(request('shared'));
+   const saved=query.getSnapshot().snapshot!,shared=saved.boundary.sourcePointIds;
+   expect(saved.modules.kpis!.data!.values[0].sourceIds).toBe(shared);
+   expect(Object.isFrozen(shared)).toBe(true);
+   expect(freezing.mock.calls.filter(([value])=>value===shared)).toHaveLength(1);
+  }finally{freezing.mockRestore();}
+ });
  it('stops after native session expiry rather than retrying in a loop',async()=>{
   let calls=0;const query=new CockpitQuery(async()=>{calls++;throw new ApiError('session_expired','sign in');});
   await query.apply(request('one'));await query.apply(request('two'));

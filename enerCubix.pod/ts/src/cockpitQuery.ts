@@ -3,7 +3,7 @@ import type {Catalog} from './types';
 import {serverMessage,t} from './i18n';
 export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string}
 export function cockpitQueryError(state:CockpitQueryState):string{return state.errorSource?serverMessage(state.errorSource):state.error||'';}
-function freeze<T>(value:T):T {if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
+function freeze<T>(value:T):T {if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 export class CockpitQuery {
  private state:CockpitQueryState={phase:'idle'};
  private sequence=0;

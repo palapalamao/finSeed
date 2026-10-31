@@ -4,6 +4,7 @@ import type {Catalog,ComparisonScope,FinPoint,ReportRequest,ReportResult,EnerCub
 import type {CleaningPreview} from './cleaning';
 import type {ChangeMessagePage} from './changeMessages';
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
+import {decodeCockpitPayload} from './cockpitPayload';
 export class ApiError extends Error {constructor(public code:string,message:string,public sourceMessage?:string){super(message);this.name='ApiError';}}
 export function unwrap<T>(value:unknown,status=200):T {
  if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"),"FIN 返回了无效的响应。请检查项目和服务状态。");
@@ -32,7 +33,11 @@ export class EnerCubixApi {
  migrationPreview=()=>this.request<MigrationPreview>('migration/preview');
  migration=(body:Record<string,unknown>)=>this.request<{job:EnerCubixRecord|null;applied?:number}>('migration',body);
  report=(request:ReportRequest,signal?:AbortSignal)=>this.request<ReportResult>('report',request,signal);
- cockpit=(request:CockpitRequest,signal?:AbortSignal)=>this.request<CockpitSnapshot>('cockpit',request,signal);
+ cockpit=async(request:CockpitRequest,signal?:AbortSignal):Promise<CockpitSnapshot>=>{
+  const data=await this.request<unknown>('cockpit',{...request,payloadEncoding:'compact-v1'},signal);
+  try{return decodeCockpitPayload<CockpitSnapshot>(data);}
+  catch{throw new ApiError('invalid_response',t('FIN 返回了无效的响应。请检查项目和服务状态。'),'FIN 返回了无效的响应。请检查项目和服务状态。');}
+ };
  comparisonScopes=(nodeIds:string[],signal?:AbortSignal)=>this.request<{scopes:ComparisonScope[]}>(`comparison-scopes?nodeIds=${encodeURIComponent(nodeIds.join(','))}`,undefined,signal);
  alarms=()=>this.request<EnerCubixRecord[]>('alarms');
  changeMessages=(offset=0,limit=30,signal?:AbortSignal)=>this.request<ChangeMessagePage>(`messages/changes?offset=${offset}&limit=${limit}`,undefined,signal);
