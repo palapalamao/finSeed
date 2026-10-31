@@ -5,9 +5,9 @@ import {cockpitBalanceSnapshot,cockpitCompactFlow} from './cockpitFlowProjection
 import {energyFlowGraphs,energyFlowGraphSnapshot,focusEnergyFlowSnapshot} from './energyFlow';
 import {EnergyFlowGraphsView} from './EnergyFlowGraphsView';
 import {cockpitReasonText} from './cockpitMetrics';
-import {t} from './i18n';
+import {locale,t} from './i18n';
 export function CockpitFlow({snapshot,focusObjectId,compact=false,onOpen}:{snapshot:CockpitSnapshot;focusObjectId?:string;compact?:boolean;onOpen:()=>void}){
- const report=useMemo(()=>cockpitBalanceSnapshot(snapshot),[snapshot]);const graphs=useMemo(()=>report?energyFlowGraphs(report.result):[],[report]);
+ const report=useMemo(()=>cockpitBalanceSnapshot(snapshot),[snapshot,locale]);const graphs=useMemo(()=>report?energyFlowGraphs(report.result):[],[report]);
  const [chosen,setChosen]=useState<string>(),[localFocus,setLocalFocus]=useState<Record<string,string>>({}),[expanded,setExpanded]=useState(false);
  const selected=graphs.find(graph=>graph.graphId===chosen)||graphs.find(graph=>(graph.objectId||graph.focusId)===focusObjectId)||graphs[0],id=selected?.graphId||selected?.objectId||selected?.focusId;
  const panel=useMemo(()=>report&&id?focusEnergyFlowSnapshot(energyFlowGraphSnapshot(report,id),localFocus[id]):undefined,[report,id,localFocus]);

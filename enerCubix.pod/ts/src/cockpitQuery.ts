@@ -1,7 +1,8 @@
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
-import {t} from './i18n';
-export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string}
+import {serverMessage,t} from './i18n';
+export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string}
+export function cockpitQueryError(state:CockpitQueryState):string{return state.errorSource?serverMessage(state.errorSource):state.error||'';}
 function freeze<T>(value:T):T {if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 export class CockpitQuery {
  private state:CockpitQueryState={phase:'idle'};
@@ -19,13 +20,14 @@ export class CockpitQuery {
   try{
    const result=await this.load(structuredClone(request),controller.signal);
    if(sequence!==this.sequence||controller.signal.aborted)return;
-   if(result.schemaVersion!==1||result.requestId!==request.requestId)throw new Error(t('驾驶舱响应与当前查询不一致，请重新查询。'));
+   if(result.schemaVersion!==1||result.requestId!==request.requestId)throw Object.assign(new Error(t('驾驶舱响应与当前查询不一致，请重新查询。')),{sourceMessage:'驾驶舱响应与当前查询不一致，请重新查询。'});
    this.publish({phase:'ready',snapshot:freeze(structuredClone(result))});
   }catch(error){
    if(sequence!==this.sequence||controller.signal.aborted)return;
    const code=error&&typeof error==='object'&&'code'in error?error.code:undefined;
    const expired=code==='session_expired'||code==='unauthorized';
-   this.publish({phase:expired?'sessionExpired':'error',snapshot:this.state.snapshot,error:error instanceof Error?error.message:t('无法读取驾驶舱，请检查当前 FIN 会话。')});
+   const source=error&&typeof error==='object'&&'sourceMessage'in error&&typeof error.sourceMessage==='string'?error.sourceMessage:code==='network'?'无法连接 FIN，请检查网络与当前会话。':!(error instanceof Error)?'无法读取驾驶舱，请检查当前 FIN 会话。':undefined;
+   this.publish({phase:expired?'sessionExpired':'error',snapshot:this.state.snapshot,errorSource:source,error:error instanceof Error?error.message:t('无法读取驾驶舱，请检查当前 FIN 会话。')});
   }
  }
  restore(snapshot:CockpitSnapshot){this.cancel();this.publish({phase:'ready',snapshot:freeze(structuredClone(snapshot))});}

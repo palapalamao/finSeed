@@ -1,11 +1,12 @@
-import {t} from './i18n';
+import {t,localizedRecord} from './i18n';
 import type {ReportKind} from './types';
 
+const groupLabels=localizedRecord(()=>({usage:t('趋势与负荷'),structure:t('构成与排名'),comparison:t('对比分析'),efficiency:t('效率与折算'),diagnostics:t('差额与预测')}));
 export const analysisGroups:{key:string;label:string;kinds:ReportKind[]}[]=[
- {key:'usage',label:t('趋势与负荷'),kinds:['profile','daily','trend']},
- {key:'structure',label:t('构成与排名'),kinds:['ranking','proportion','utility','energyFlow']},
- {key:'comparison',label:t('对比分析'),kinds:['comparison']},
- {key:'efficiency',label:t('效率与折算'),kinds:['cop','primary','workingHours','workingDays']},
- {key:'diagnostics',label:t('差额与预测'),kinds:['leak','forecast']}
+ {key:'usage',get label(){return groupLabels.usage;},kinds:['profile','daily','trend']},
+ {key:'structure',get label(){return groupLabels.structure;},kinds:['ranking','proportion','utility','energyFlow']},
+ {key:'comparison',get label(){return groupLabels.comparison;},kinds:['comparison']},
+ {key:'efficiency',get label(){return groupLabels.efficiency;},kinds:['cop','primary','workingHours','workingDays']},
+ {key:'diagnostics',get label(){return groupLabels.diagnostics;},kinds:['leak','forecast']}
 ];
 export const analysisGroup=(kind:ReportKind)=>analysisGroups.find(group=>group.kinds.includes(kind));

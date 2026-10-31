@@ -6,8 +6,8 @@ import {energyFlowBreadcrumbs,energyFlowData,energyFlowFocus,energyFlowLayout,en
 import type {ReportSnapshot} from './types';
 import './energyFlow.css';
 
-const formatter=new Intl.NumberFormat(locale,{maximumFractionDigits:2});
-const percentageFormatter=new Intl.NumberFormat(locale,{maximumFractionDigits:1});
+const formatter={format:(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(value)};
+const percentageFormatter={format:(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:1}).format(value)};
 const valueText=(value:number|null)=>value!==null&&Number.isFinite(value)?formatter.format(value):'—';
 const nodeLabel=(node:EnergyFlowNode)=>node.nodeType==='summary'?t(node.unit==='元'?'费用汇总':'能源汇总'):node.nodeType==='difference'?node.unit==='元'?t('费用差额'):node.balanceMode==='consistency'?t('计算差额'):t('计量差额'):node.nodeType==='utility'&&!node.utilityId?t('未指定分项'):node.name;
 const percentageText=(value:number|null,percentage:number|null)=>value!==null&&value!==0&&percentage!==null&&Number.isFinite(percentage)?`${percentageFormatter.format(percentage)}%`:'—';

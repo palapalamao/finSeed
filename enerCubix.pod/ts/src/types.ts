@@ -1,4 +1,4 @@
-import {t} from './i18n';
+import {t,localizedRecord} from './i18n';
 import type {MeterOrigin} from './meterOrigin';
 export type Kind = 'space'|'nativePoint'|'organization'|'group'|'meter'|'totalMeter'|'sensor'|'category'|'subcategory'|'utility'|'tariff'|'calendar'|'expression'|'cop'|'template'|'settings'|'binding'|'job'|'alarm'|'cleaningProfile';
 export type Dimension = 'space'|'metering'|'organization'|'legacy';
@@ -18,7 +18,7 @@ export interface ReportDisplay {objects:Record<string,string>;sources:Record<str
 export interface ReportSnapshot {request:ReportRequest;result:ReportResult;generatedAt:string;title:string;project:string;categoryIds?:string[];categoryNames?:string[];display?:ReportDisplay}
 export const nodeKinds:Kind[]=['group','meter','totalMeter','sensor'];
 export const treeDimensions=['space','metering','organization'] as const;
-export const dimensionNames:Record<Dimension,string>={space:t("空间"),metering:t("计量"),organization:t("组织"),legacy:t("历史报表口径")};
-export const names:Record<Kind,string>={space:t("空间"),nativePoint:t("FIN 原点"),organization:t("组织"),group:t("分组"),meter:t("分表"),totalMeter:t("总表"),sensor:t("传感器"),category:t("能源类型"),subcategory:t("能源子类"),utility:t("分项"),tariff:t("费率"),calendar:t("日历"),expression:t("计算公式"),cop:t("COP 配置"),template:t("报表模板"),settings:t("系统设置"),binding:t("参考点"),job:t("计算任务"),alarm:t("报警"),cleaningProfile:t("数据清洗方案")};
-export const reportNames:Record<ReportKind,string>={energyFlow:t("能流图"),dashboard:t("能源概览"),profile:t("能耗概况"),ranking:t("能耗排名"),proportion:t("能耗占比"),utility:t("分项能耗"),daily:t("日均负荷"),comparison:t("对比分析"),primary:t("一次能源分析"),cop:t("COP 分析"),leak:t("泄漏分析"),workingHours:t("工作时段分析"),workingDays:t("工作日分析"),regression:t("回归分析（旧模板）"),forecast:t("能耗预测"),trend:t("多点趋势")};
-export const metricNames:Record<Metric,string>={energy:t("能耗"),cost:t("费用"),coal:t("标准煤"),co2:t("碳排放"),rawcoal:t("原煤"),oil:t("石油当量")};
+export const dimensionNames:Record<Dimension,string>=localizedRecord(()=>({space:t("空间"),metering:t("计量"),organization:t("组织"),legacy:t("历史报表口径")}));
+export const names:Record<Kind,string>=localizedRecord(()=>({space:t("空间"),nativePoint:t("FIN 原点"),organization:t("组织"),group:t("分组"),meter:t("分表"),totalMeter:t("总表"),sensor:t("传感器"),category:t("能源类型"),subcategory:t("能源子类"),utility:t("分项"),tariff:t("费率"),calendar:t("日历"),expression:t("计算公式"),cop:t("COP 配置"),template:t("报表模板"),settings:t("系统设置"),binding:t("参考点"),job:t("计算任务"),alarm:t("报警"),cleaningProfile:t("数据清洗方案")}));
+export const reportNames:Record<ReportKind,string>=localizedRecord(()=>({energyFlow:t("能流图"),dashboard:t("能源概览"),profile:t("能耗概况"),ranking:t("能耗排名"),proportion:t("能耗占比"),utility:t("分项能耗"),daily:t("日均负荷"),comparison:t("对比分析"),primary:t("一次能源分析"),cop:t("COP 分析"),leak:t("泄漏分析"),workingHours:t("工作时段分析"),workingDays:t("工作日分析"),regression:t("回归分析（旧模板）"),forecast:t("能耗预测"),trend:t("多点趋势")}));
+export const metricNames:Record<Metric,string>=localizedRecord(()=>({energy:t("能耗"),cost:t("费用"),coal:t("标准煤"),co2:t("碳排放"),rawcoal:t("原煤"),oil:t("石油当量")}));

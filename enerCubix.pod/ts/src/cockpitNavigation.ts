@@ -14,7 +14,8 @@ const dimensions=['space','metering','organization'];
 const validId=(id:unknown):id is string=>typeof id==='string'&&id.length>0&&id.length<=256&&!/[\u0000-\u001f]/.test(id);
 const validIds=(ids:unknown):ids is string[]=>Array.isArray(ids)&&ids.length>0&&ids.length<=200&&ids.every(validId)&&new Set(ids).size===ids.length;
 const absolute=(value:unknown):value is string=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value)&&Number.isFinite(Date.parse(value));
-function validInterval(from:unknown,to:unknown){return absolute(from)&&absolute(to)&&Date.parse(to)>Date.parse(from)&&Date.parse(to)-Date.parse(from)<=366*86400000;}
+// Coarse URL bound allows offset/DST shifts across366 local days; the backend enforces the local-day limit.
+function validInterval(from:unknown,to:unknown){return absolute(from)&&absolute(to)&&Date.parse(to)>Date.parse(from)&&Date.parse(to)-Date.parse(from)<=367*86400000;}
 export function absoluteCockpitRequest(snapshot:CockpitSnapshot):CockpitRequest {const c=snapshot.context;return {schemaVersion:1,requestId:'restore',reportScope:structuredClone(c.reportScope),focusCategoryId:c.focusCategoryId,...(c.auxiliaryCategoryId?{auxiliaryCategoryId:c.auxiliaryCategoryId}:{}),time:{preset:'custom',period:c.time.period,from:c.time.from,to:c.time.to},asOf:c.asOf,comparison:c.comparison?.from&&c.comparison.to?{mode:'custom',from:c.comparison.from,to:c.comparison.to}:{mode:'none'},modules:cockpitModules.filter(module=>Object.hasOwn(snapshot.modules,module))};}
 // getRandomValues also works on ordinary HTTP FIN origins.
 function returnToken(){if(crypto.randomUUID)return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=bytes[6]&15|64;bytes[8]=bytes[8]&63|128;const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');}

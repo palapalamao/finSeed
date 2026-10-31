@@ -4,22 +4,22 @@ import type {Catalog,ComparisonScope,FinPoint,ReportRequest,ReportResult,EnerCub
 import type {CleaningPreview} from './cleaning';
 import type {ChangeMessagePage} from './changeMessages';
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
-export class ApiError extends Error {constructor(public code:string,message:string){super(message);this.name='ApiError';}}
+export class ApiError extends Error {constructor(public code:string,message:string,public sourceMessage?:string){super(message);this.name='ApiError';}}
 export function unwrap<T>(value:unknown,status=200):T {
- if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"));
+ if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"),"FIN 返回了无效的响应。请检查项目和服务状态。");
  const body=value as {ok?:boolean;data?:T;error?:{code?:string;msg?:string}};
- if(body.ok!==true||status<200||status>=300)throw new ApiError(body.error?.code||`http_${status}`,body.error?.msg?serverMessage(body.error.msg):t("请求失败，请检查当前 FIN 会话与项目权限。"));
- if(!('data'in body))throw new ApiError('invalid_response',t("FIN 响应缺少数据。"));return body.data as T;
+ if(body.ok!==true||status<200||status>=300)throw new ApiError(body.error?.code||`http_${status}`,body.error?.msg?serverMessage(body.error.msg):t("请求失败，请检查当前 FIN 会话与项目权限。"),body.error?.msg||"请求失败，请检查当前 FIN 会话与项目权限。");
+ if(!('data'in body))throw new ApiError('invalid_response',t("FIN 响应缺少数据。"),"FIN 响应缺少数据。");return body.data as T;
 }
 export {projectFromLocation} from './projectLocation';
 export class EnerCubixApi {
  readonly base:string;
- constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开能源魔方，或在地址的 #/profile?project=项目名 中指定项目。"));this.base=`/api/${encodeURIComponent(project)}/ext/enerCubix/v1`;}
+ constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开能源魔方，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开能源魔方，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/enerCubix/v1`;}
  async request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
   let response:Response;
   try{response=await finCsrfFetch(`${this.base}/${path}`,{method:body===undefined?'GET':'POST',headers:{Accept:'application/json',...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});}
-  catch(error){if(error instanceof Error&&error.name==='AbortError')throw error;if(error&&typeof error==='object'&&'status'in error){if(error.status===401){this.onSessionExpired?.();throw new ApiError('unauthorized',t("FIN 会话已过期，请在 FIN 中重新登录。"));}if(error.status===403)throw new ApiError('forbidden',t("当前 FIN 会话无权访问此项目。"));if('_isCsrfError'in error&&error._isCsrfError){this.onSessionExpired?.();throw new ApiError('session_expired',t("FIN 会话已失效，请在 FIN 中重新登录。"));}}throw new ApiError('network',t("无法连接 FIN，请检查网络与当前会话。"));}
-  let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及能源魔方扩展是否已启用。"));}
+  catch(error){if(error instanceof Error&&error.name==='AbortError')throw error;if(error&&typeof error==='object'&&'status'in error){if(error.status===401){this.onSessionExpired?.();throw new ApiError('unauthorized',t("FIN 会话已过期，请在 FIN 中重新登录。"),"FIN 会话已过期，请在 FIN 中重新登录。");}if(error.status===403)throw new ApiError('forbidden',t("当前 FIN 会话无权访问此项目。"),"当前 FIN 会话无权访问此项目。");if('_isCsrfError'in error&&error._isCsrfError){this.onSessionExpired?.();throw new ApiError('session_expired',t("FIN 会话已失效，请在 FIN 中重新登录。"),"FIN 会话已失效，请在 FIN 中重新登录。");}}throw new ApiError('network',t("无法连接 FIN，请检查网络与当前会话。"),"无法连接 FIN，请检查网络与当前会话。");}
+  let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及能源魔方扩展是否已启用。"),login?"FIN 会话已失效，请在 FIN 中重新登录。":"FIN 未返回 JSON，请检查项目名称及能源魔方扩展是否已启用。");}
   try{return unwrap<T>(value,response.status);}catch(error){if(response.status===401||error instanceof ApiError&&(['session_expired','unauthorized','http_401'].includes(error.code)))this.onSessionExpired?.();throw error;}
  }
  catalog=()=>this.request<Catalog>('catalog');

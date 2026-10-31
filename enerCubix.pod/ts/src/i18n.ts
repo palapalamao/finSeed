@@ -13,6 +13,11 @@ export type Locale=keyof typeof languageDefinitions;
 export type LanguagePreference=Locale|'auto';
 export let languagePreference:LanguagePreference='auto';
 let preferenceKey:string|undefined;
+let finUserLanguage='en-US';
+const localeListeners=new Set<()=>void>();
+export function subscribeLocale(listener:()=>void){localeListeners.add(listener);return()=>{localeListeners.delete(listener);};}
+export const localeSnapshot=()=>locale;
+export function localizedRecord<T extends Record<string,string>>(factory:()=>T):T{const record=factory();subscribeLocale(()=>Object.assign(record,factory()));return record;}
 const isLocale=(value:unknown):value is Locale=>typeof value==='string'&&Object.hasOwn(languageDefinitions,value);
 /** FIN's authenticated request locale is the default language source. */
 export function resolveFinLocale(language:string):Locale{
@@ -24,6 +29,11 @@ export function resolveFinLocale(language:string):Locale{
 export let locale:Locale='en-US';
 let activeLanguage=languageDefinitions[locale];
 
+export function translateFor(language:Locale,source:string,...values:unknown[]):string{
+ const dictionary=languageDefinitions[language];
+ const message=language==='zh-CN'?source:dictionary.messages[source]??dictionary.serverMessages[source]??englishMessages[source]??serverMessages[source]??source;
+ return message.replace(/\{(\d+)\}/g,(token,index:string)=>Number(index)<values.length?String(values[Number(index)]):token);
+}
 export function t(source:string,...values:unknown[]):string{
  const message=locale==='zh-CN'?source:activeLanguage.messages[source]??activeLanguage.serverMessages[source]??englishMessages[source]??serverMessages[source]??source;
  return message.replace(/\{(\d+)\}/g,(token,index:string)=>Number(index)<values.length?String(values[Number(index)]):token);
@@ -49,19 +59,23 @@ export function serverMessage(source:string):string{
  return source;
 }
 
-export function changeLanguage(preference:LanguagePreference){
+export function changeLanguage(preference:LanguagePreference,{inPlace=false}:{inPlace?:boolean}={}){
  if(!preferenceKey||preference===languagePreference||(preference!=='auto'&&!isLocale(preference)))return;
  try{
   if(preference==='auto')localStorage.removeItem(preferenceKey);else localStorage.setItem(preferenceKey,preference);
  }catch{throw new Error(t('无法保存语言设置，请检查浏览器的站点存储权限。'));}
- location.reload();
+ if(inPlace){languagePreference=preference;applyLocale();localeListeners.forEach(listener=>listener());}else location.reload();
 }
 
 export function initializeLocale(finLanguage:string,username?:string){
+ finUserLanguage=finLanguage;
  preferenceKey=username?'enerCubix.locale.v2.'+encodeURIComponent(username):undefined;
  languagePreference='auto';
  try{const saved=preferenceKey?localStorage.getItem(preferenceKey):null;if(isLocale(saved))languagePreference=saved;}catch{/* Keep the authenticated FIN language when storage is unavailable. */}
- locale=languagePreference==='auto'?resolveFinLocale(finLanguage):languagePreference;
+ applyLocale();
+}
+function applyLocale(){
+ locale=languagePreference==='auto'?resolveFinLocale(finUserLanguage):languagePreference;
  activeLanguage=languageDefinitions[locale];
  dayjs.locale(activeLanguage.dayjsLocale);
  if(typeof document!=='undefined'){
