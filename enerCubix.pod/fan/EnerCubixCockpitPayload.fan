@@ -32,7 +32,12 @@ internal class EnerCubixCockpitPayload
         if (list.all |v| {((Map)v).keys.map |k->Str| {k.toStr}.sort == columns})
         {
           table=true
-          out=["\$cockpitTable":["columns":columns,"rows":list.map |v->Obj?| {columns.map |c->Obj?| {value(((Map)v)[c],"")}}]]
+          constants:=Str:Obj?[:]
+          columns.findAll |c| {list.all |v| {((Map)v)[c] == first[c]}}.each |c| {constants[c]=value(first[c],"")}
+          variable:=columns.findAll |c| {!constants.containsKey(c)}
+          data:=Str:Obj?["columns":variable,"rows":list.map |v->Obj?| {variable.map |c->Obj?| {value(((Map)v)[c],"")}}]
+          if (!constants.isEmpty) data["constants"]=constants
+          out=["\$cockpitTable":data]
         }
       }
       if (!table) out=list.map |v->Obj?| {value(v,"")}

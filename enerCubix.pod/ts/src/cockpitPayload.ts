@@ -28,12 +28,15 @@ export function decodeCockpitPayload<T>(input:unknown):T {
   }
   if(own(value,'$cockpitTable')){
    const table=value.$cockpitTable;
-   if(++tables>512||Object.keys(value).length!==1||!object(table)||Object.keys(table).length!==2||!Array.isArray(table.columns)||!Array.isArray(table.rows))return invalid();
+   if(++tables>512||Object.keys(value).length!==1||!object(table)||Object.keys(table).some(key=>!['columns','rows','constants'].includes(key))||!Array.isArray(table.columns)||!Array.isArray(table.rows)||own(table,'constants')&&!object(table.constants))return invalid();
    const columns=table.columns;
-   if(columns.length>64||columns.some(column=>typeof column!=='string')||new Set(columns).size!==columns.length||(rows+=table.rows.length)>500000)return invalid();
+   const constants=object(table.constants)?table.constants:{},constantKeys=Object.keys(constants),fixed:Record<string,unknown>={};
+   if(columns.length+constantKeys.length>64||columns.some(column=>typeof column!=='string')||new Set([...columns,...constantKeys]).size!==columns.length+constantKeys.length||(rows+=table.rows.length)>500000||nodes+constantKeys.length*table.rows.length>2000000)return invalid();
+   constantKeys.forEach(key=>assign(fixed,key,read(constants[key],depth+1)));
    return table.rows.map(row=>{
-    if(!Array.isArray(row)||row.length!==columns.length)return invalid();
+    if(!Array.isArray(row)||row.length!==columns.length||(nodes+=constantKeys.length)>2000000)return invalid();
     const restored:Record<string,unknown>={};
+    constantKeys.forEach(key=>assign(restored,key,fixed[key]));
     columns.forEach((column,index)=>assign(restored,column as string,read(row[index],depth+1)));
     return restored;
    });

@@ -29,4 +29,10 @@ describe('negotiated cockpit compact-v1',()=>{
   const business={$cockpitRef:'business-data',$cockpitTable:{columns:['business'],rows:[[0]]},$cockpitLiteral:{nested:true}};
   expect(decodeCockpitPayload(wire({parameters:{$cockpitLiteral:business}}))).toEqual({parameters:business});
  });
+ it('restores constant columns without merging hours and rejects overlapping names',()=>{
+  const from='2026-11-01T01:00:00-04:00',next='2026-11-01T01:00:00-05:00';
+  expect(decodeCockpitPayload(wire({$cockpitTable:{columns:['from','value'],constants:{pointId:'p:project:r:7f000001-1a000001',quality:'na'},rows:[[from,0],[next,null]]}}))).toEqual([{pointId:'p:project:r:7f000001-1a000001',quality:'na',from,value:0},{pointId:'p:project:r:7f000001-1a000001',quality:'na',from:next,value:null}]);
+  expect(()=>decodeCockpitPayload(wire({$cockpitTable:{columns:['value'],constants:{value:0},rows:[[1]]}}))).toThrow('invalid_response');
+  expect(()=>decodeCockpitPayload(wire({$cockpitTable:{columns:[],constants:Object.fromEntries(Array.from({length:64},(_,i)=>[String(i),0])),rows:Array(40000).fill([])}}))).toThrow('invalid_response');
+ });
 });

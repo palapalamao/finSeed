@@ -189,7 +189,7 @@ class EnerCubixCockpit
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
     if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
     snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
-    return input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(snapshot) : snapshot
+    return input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot)) : snapshot
   }
 
   ** Hidden scope members cannot silently disappear from a supposedly complete total.
