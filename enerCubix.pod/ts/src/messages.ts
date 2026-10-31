@@ -1967,3 +1967,5 @@ Object.assign(englishMessages,{"按当地日和小时列出原始数值；不存
 Object.assign(englishMessages,{"证据 {0}":"Evidence {0}","参照区间：{0} 至 {1}":"Reference period: {0} to {1}","部分数据可用":"Partial data available","暂不可用":"Unavailable","读取失败":"Read failed","原始视角字段：{0}":"Raw view fields: {0}","复杂单元格以证据编号引用，完整内容在本附录中仅保存一次。":"Complex cells refer to evidence IDs. Each complete evidence block is retained once in this appendix."});
 
 Object.assign(englishMessages,{"底层逐区间诊断以数据集路径、已返回数量、总数及截断状态列示；完整原始诊断见同快照 JSON／Excel。未知总数或状态保留为空。":"Raw interval diagnostics are identified by dataset path, returned count, total count, and truncation state. Complete diagnostics remain in the same-snapshot JSON/Excel. Unknown totals or states remain null."});
+
+Object.assign(englishMessages,{"页面数值按显示精度呈现，可能存在微小尾差；Excel 和 JSON 保留未舍入的计算值。":"Displayed values may differ slightly due to rounding. Excel and JSON retain unrounded calculated values."});
