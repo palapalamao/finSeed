@@ -6,11 +6,12 @@ import type {CockpitTargetKind} from './cockpitNavigation';
 import {cockpitOrganizationReport,cockpitReferencedReport} from './cockpitReport';
 import {ReportChart} from './ReportView';
 import {CockpitFlow} from './CockpitFlow';
+import {CockpitEfficiency} from './CockpitEfficiency';
 import {reportCellText,reportLabel} from './reportDisplay';
 import {cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
 import {locale,t} from './i18n';
 
-const faceLabel=(face:CockpitFace)=>({space:t('空间'),time:t('时间'),endUse:t('用途'),organization:t('组织'),balance:t('计量平衡')})[face];
+const faceLabel=(face:CockpitFace)=>({space:t('空间'),time:t('时间'),endUse:t('用途'),organization:t('组织'),balance:t('计量平衡'),efficiency:t('能效')})[face];
 function ReportRows({snapshot,name}:{snapshot:ReportSnapshot;name:(id:string)=>string}){
  const fields=['name','hour','value','knownValue','unit','quality','working','nonworking','knownWorking','knownNonworking','workingPercentage','knownPercentage','sourceIds'].filter(key=>snapshot.result.rows.some(row=>row[key]!==undefined));
  return <div className="cockpit-table-scroll"><table><thead><tr>{fields.map(field=><th key={field}>{reportLabel(snapshot,field)}</th>)}</tr></thead><tbody>{snapshot.result.rows.map((row,index)=><tr key={index}>{fields.map(field=><td key={field}>{field==='sourceIds'&&Array.isArray(row[field])?(row[field] as string[]).map(name).join('、'):field.endsWith('Percentage')&&typeof row[field]==='number'?new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(row[field])+'%':reportCellText(snapshot,field,row[field],false,row)}</td>)}</tr>)}</tbody></table></div>;
@@ -30,8 +31,8 @@ function Heatmap({cells,excluded,name}:{cells:CockpitHeatmapCell[];excluded:numb
   </>}
  </section>;
 }
-export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,onFlow}:{focusObjectId?:string;onFlow:()=>void;snapshot:CockpitSnapshot;face:CockpitFace;onFace:(face:CockpitFace)=>void;onReport:(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>void;name:(id:string)=>string}){
- const faces:CockpitFace[]=['space',...(['time','endUse','organization','balance'] as const).filter(id=>snapshot.capabilities.availableFaces.includes(id))];
+export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,onFlow,onCop}:{onCop:(id:string)=>void;focusObjectId?:string;onFlow:()=>void;snapshot:CockpitSnapshot;face:CockpitFace;onFace:(face:CockpitFace)=>void;onReport:(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>void;name:(id:string)=>string}){
+ const faces:CockpitFace[]=['space',...(['time','endUse','organization','efficiency','balance'] as const).filter(id=>snapshot.capabilities.availableFaces.includes(id))];
  const daily=useMemo(()=>snapshot.modules.time?.data?cockpitReferencedReport(snapshot,snapshot.modules.time.data.dailyReportRef):undefined,[snapshot]);
  const utility=useMemo(()=>snapshot.modules.endUse?.data?cockpitReferencedReport(snapshot,snapshot.modules.endUse.data.reportRef):undefined,[snapshot]);
  const shareReport=useMemo(()=>utility?{...utility,result:{...utility.result,rows:((utility.result.extra?.utilityShares||[]) as Record<string,unknown>[]).map<Record<string,unknown>>(row=>({...row,name:row.utilityId?row.name:t('未指定分项')}))}}:undefined,[utility]);
@@ -44,6 +45,7 @@ export function CockpitMain({snapshot,face,onFace,onReport,name,focusObjectId,on
   {face!=='space'&&<div className="cockpit-face-panel" data-face={face}>
    {!!module?.reasonCodes?.length&&<Alert showIcon type="info" message={[...new Set(module.reasonCodes.map(cockpitReasonText))].join(t('；'))}/>}
    {!module?.data?<Empty description={module?.status==='error'?t('该视角暂时不可用，请刷新后重试。'):t('当前快照未提供此视角，请刷新查询。')}/>:<>
+    {face==='efficiency'&&<CockpitEfficiency snapshot={snapshot} onOpen={onCop} name={name}/>}
     {face==='balance'&&<CockpitFlow snapshot={snapshot} focusObjectId={focusObjectId} onOpen={onFlow}/>}
     {face==='time'&&daily&&<><h3>{t('各小时平均用量')}</h3><p>{t('显示每小时平均能量，单位沿用主点能量单位；不等同于瞬时功率。')}</p><ReportChart snapshot={daily} profileType="line"/><details><summary>{t('查看小时均值明细')}</summary><ReportRows name={name} snapshot={daily}/></details><Button onClick={()=>onReport('daily')}>{t('打开日均用量报告')}</Button><Heatmap key={snapshot.snapshotId} cells={snapshot.modules.time!.data!.heatmap} excluded={snapshot.modules.time!.data!.excludedDays.length} name={name}/>{working.map(report=><details key={report.result.kind}><summary>{report.title}</summary><ReportRows name={name} snapshot={report}/><Button onClick={()=>onReport(report.result.kind as 'workingHours'|'workingDays')}>{t('打开对应专业报告')}</Button></details>)}</>}
     {face==='endUse'&&utility&&shareReport&&<><h3>{t('用途分布')}</h3><p>{t('只按本次有效表计集合的用途属性归组；未指定用途单列，不将物理差额当作用途。')}</p><p>{t('构成基于已有用量，不代表完整区间。')}</p>{!snapshot.modules.endUse!.data!.additive?<Alert type="warning" showIcon message={t('范围包含共享或重叠来源，不计算构成占比；请改选互不重叠的表计。')}/>:shareReport.result.rows.some(row=>typeof row.knownPercentage==='number'&&row.knownPercentage>0)?<ReportChart snapshot={utility} shares/>:<Alert type="info" showIcon message={t('总量为零或没有可用占比，保留分项数值。')}/>}<ReportRows name={name} snapshot={shareReport}/><details><summary>{t('查看分项表计明细')}</summary><ReportRows name={name} snapshot={utility}/></details><Button onClick={()=>onReport('utility')}>{t('打开分项用量报告')}</Button></>}

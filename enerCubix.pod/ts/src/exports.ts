@@ -32,7 +32,8 @@ export function makeSnapshot(request:ReportRequest,result:ReportResult,title:str
  return snapshot;
 }
 export function filterSnapshot(snapshot:ReportSnapshot|null,categoryIds:string[],categoryNames:string[]):ReportSnapshot|null{
- if(!snapshot||!categoryIds.length)return snapshot;
+ // COP is a cross-energy ratio scoped by its configuration, not an energy-category series.
+ if(!snapshot||!categoryIds.length||snapshot.result.kind==='cop')return snapshot;
  const output=structuredClone(snapshot);const selected=new Set(categoryIds);const ids=new Set(output.result.series.filter(series=>isReferenceCurve(series,output.result.kind,snapshot.request.referenceIds)||selected.has(series.categoryId||'')).map(series=>series.id));
  const keep=(row:Record<string,unknown>)=>row.role==='reference'||selected.has(String(row.categoryId||''))||ids.has(String(row.id||''))||categoryIds.some(category=>String(row.key||'').startsWith(`${category}|`));
  output.result.series=output.result.series.filter(series=>isReferenceCurve(series,output.result.kind,snapshot.request.referenceIds)||selected.has(series.categoryId||''));output.result.rows=output.result.rows.filter(keep);
