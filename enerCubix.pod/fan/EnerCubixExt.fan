@@ -30,9 +30,12 @@ const class EnerCubixExt : Ext, Weblet
     {
       if (req.method != "GET") { res.sendErr(405); return }
       res.headers["Cache-Control"]="no-store"
-      res.redirect(("/pod/enerCubix/res/web/enerCubix/index-${EnerCubixLib#.pod.version}.html#/dashboard?project="+cx.proj.name).toUri,302)
+      res.redirect(appUri(cx.proj.name),302)
       return
     }
     res.sendErr(404)
   }
+
+  internal static Uri appUri(Str project)
+  { ("/pod/enerCubix/res/web/enerCubix/index-${EnerCubixLib#.pod.version}.html#/cockpit?project="+project).toUri }
 }

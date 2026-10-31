@@ -1,5 +1,11 @@
 class EnerCubixRestTest : Test
 {
+  Void testNativeEntryUsesVersionedCockpit()
+  {
+    verifyEq(EnerCubixExt.appUri("cubeTest").toStr,
+      "/pod/enerCubix/res/web/enerCubix/index-${EnerCubixLib#.pod.version}.html#/cockpit?project=cubeTest")
+  }
+
   Void testShortJsonBody()
   {
     text := "{\"名称\":\"能耗\"}"

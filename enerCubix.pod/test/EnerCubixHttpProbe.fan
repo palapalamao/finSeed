@@ -70,7 +70,7 @@ const class EnerCubixHttpProbe : WebMod
     checks["HTTP three dimensions and migration preview"]=true
     shell:=call("/api/enerCubix_acceptance/ext/enerCubix/")
     expect(shell,302)
-    if (shell["location"] != "/pod/enerCubix/res/web/enerCubix/index.html#/dashboard?project=enerCubix_acceptance") throw Err("Native application entry redirect mismatch")
+    if (shell["location"] != EnerCubixExt.appUri("enerCubix_acceptance").toStr) throw Err("Native application entry redirect mismatch")
     entry:=call("/pod/enerCubix/res/web/enerCubix/index.html")
     expect(entry,200)
     module:=entry["module"] as Str ?: throw Err("Packed SPA module missing")
