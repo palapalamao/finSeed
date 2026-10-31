@@ -118,6 +118,7 @@ class EnerCubixCockpit
     modules:=Str:Obj?[:]
     if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request)]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
+    EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
     config:=EnerCubixCockpitMetrics.configuration(ctx,ids,auxiliary == null ? [category] : [category,auxiliary])
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
@@ -145,7 +146,9 @@ class EnerCubixCockpit
     if (DateTime.fromIso(request["to"].toStr) > cutoff) limitations.add("REQUEST_END_AFTER_AS_OF")
     if (histories.any |h| {h["quality"] == "historySampleLimit"}) limitations.add("HISTORY_SAMPLE_LIMIT")
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
-    return (Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":Str[,]],"limitations":limitations].toImmutable
+    faces:=enabled.findAll |m| {["time","endUse","organization"].contains(m)}
+    if (!faces.isEmpty) faces.insert(0,"space")
+    return (Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
   }
 
   ** Hidden scope members cannot silently disappear from a supposedly complete total.
@@ -185,7 +188,7 @@ class EnerCubixCockpit
     ids.each |id| {ref(id,project)}
     category:=text(input,"focusCategoryId"); ref(category,project)
     modules:=strings(input["modules"])
-    if (modules.isEmpty || modules.any |m| {!["kpis","trend"].contains(m)}) throw ArgErr("cockpitModules")
+    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization"].contains(m)}) throw ArgErr("cockpitModules")
     if (input["auxiliaryCategoryId"] != null)
     {
       auxiliary:=text(input,"auxiliaryCategoryId"); ref(auxiliary,project)
