@@ -13,14 +13,15 @@ import {BrandMark,productName,productTagline} from './brand';
 import {type Catalog,type ReportKind,type ReportRequest} from './types';
 import {version as uiVersion} from '../package.json';
 import {LanguageSwitcher} from './LanguageSwitcher';
+import {CockpitPage,cockpitEnabled} from './CockpitPage';
 
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
-type View=ReportKind|ManageView|'messages';
+type View=ReportKind|ManageView|'messages'|'cockpit';
 const management:ManageView[]=['tree','categories','tariffs','calendars','expressions','copConfig','bindings','templates','tasks','settings','otherSettings'];
 const settingsViews:ManageView[]=management.filter(key=>key!=='templates');
 const reportViews:ReportKind[]=['dashboard','regression',...analysisGroups.flatMap(group=>group.kinds)];
 function readTemplate(){return new URLSearchParams(location.hash.split('?')[1]||'').get('template')||undefined;}
-function readView():View{const view=location.hash.slice(1).split('?')[0].replace(/^\//,'');if(view==='alarms')return 'messages';return [...reportViews,'messages',...management].includes(view as View)?view as View:'dashboard';}
+function readView():View{const view=location.hash.slice(1).split('?')[0].replace(/^\//,'');if(view==='alarms')return 'messages';return [...reportViews,'messages',...(cockpitEnabled?['cockpit']:[]),...management].includes(view as View)?view as View:cockpitEnabled?'cockpit':'dashboard';}
 
 export function App(){
  const[project,setProject]=useState(()=>projectFromLocation(location));
@@ -38,19 +39,19 @@ export function App(){
  useEffect(()=>{const update=()=>{setView(readView());setTemplateId(readTemplate());setProject(projectFromLocation(location));};window.addEventListener('hashchange',update);return()=>window.removeEventListener('hashchange',update);},[]);
  const configView=management.includes(view as ManageView);
  const settingsView=settingsViews.includes(view as ManageView);
- const analysisView=!configView&&view!=='dashboard'&&view!=='messages';
+ const analysisView=!configView&&view!=='dashboard'&&view!=='cockpit'&&view!=='messages';
  useEffect(()=>{if(analysisView)lastAnalysis.current=view as ReportKind;},[view,analysisView]);
  const navigate=(next:View,nextTemplate?:string)=>{setView(next);setTemplateId(nextTemplate);setMobileOpen(false);location.hash='/' + next + '?project=' + encodeURIComponent(project)+(nextTemplate?'&template='+encodeURIComponent(nextTemplate):'');};
  const version=uiVersion;
  const versionMismatch=!!catalog?.version&&catalog.version!==uiVersion;
  const destinations=[
-  {key:'dashboard',label:t('总览'),icon:<DashboardOutlined/>,target:'dashboard' as View},
+  {key:'dashboard',label:t('总览'),icon:<DashboardOutlined/>,target:(cockpitEnabled?'cockpit':'dashboard') as View},
   {key:'analysis',label:t('分析工作台'),icon:<BarChartOutlined/>,target:(analysisView?view:lastAnalysis.current) as View},
   {key:'templates',label:t('报告模板'),icon:<FileTextOutlined/>,target:'templates' as View},
   {key:'messages',label:t('消息中心'),icon:<BellOutlined/>,target:'messages' as View},
   {key:'configuration',label:t('设置'),icon:<SettingOutlined/>,target:'tree' as View}
  ];
- const selectedDestination=analysisView?'analysis':settingsView?'configuration':view;
+ const selectedDestination=analysisView?'analysis':settingsView?'configuration':view==='cockpit'?'dashboard':view;
  const navigation=(mobile=false)=><nav className={mobile?'mobile-navigation':'primary-navigation'} aria-label={t('主导航')}>{destinations.map(item=><Button key={item.key} type="text" aria-label={item.label} icon={mobile?item.icon:undefined} aria-current={selectedDestination===item.key?'page':undefined} className={selectedDestination===item.key?'nav-active':undefined} onClick={()=>navigate(item.target)}>{item.label}</Button>)}</nav>;
  return <ConfigProvider locale={componentLocales[locale]} theme={{token:{colorPrimary:'#137f7a',colorSuccess:'#218374',colorInfo:'#3976ba',colorBgLayout:'#f3f6f8',colorText:'#24323d',borderRadius:6,fontFamily:'"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',fontSize:13,controlHeight:34},components:{Table:{headerBg:'#f3f6f8'},Layout:{headerBg:'#fff'}}}}>
   <Layout className="app-layout enercubix-app">
@@ -73,7 +74,7 @@ export function App(){
      {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/enerCubix/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame">
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
-      {view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
+      {view==='cockpit'?<CockpitPage key={project} api={api!} catalog={catalog} onLegacy={()=>navigate('dashboard')} onConfigure={()=>navigate('tree')}/>:view==='messages'?<MessageCenter api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
      </div>
     </>}
    </Layout.Content>

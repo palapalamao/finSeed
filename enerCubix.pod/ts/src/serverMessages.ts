@@ -1,4 +1,6 @@
 // Only service-owned messages are translated. Captured names and identifiers are preserved.
+const cockpitEnglish={"cockpitSchema":"Unsupported cockpit request version.","cockpitRequestId":"The cockpit request identifier is too long.","cockpitScope":"Select a valid statistical scope and selection mode.","cockpitScopeLimit":"Select between 1 and 200 scope objects.","cockpitRef":"An object reference is invalid or belongs to another project.","cockpitModules":"Select supported cockpit modules.","cockpitComparison":"This cockpit slice does not yet support comparison queries.","cockpitTime":"Select a supported period with valid absolute timestamps.","cockpitTimeRange":"The period must have a later end and span no more than 366 local days.","cockpitField":"The cockpit request contains a missing or invalid field.","cockpitMeterLimit":"The scope contains more than 200 meters. Select a smaller scope.","cockpitScopeForbidden":"The requested scope or energy category is unavailable or not accessible."};
+const cockpitChinese={"cockpitSchema":"驾驶舱请求版本不受支持。","cockpitRequestId":"驾驶舱请求标识过长。","cockpitScope":"请选择有效的统计范围及选择方式。","cockpitScopeLimit":"请选择 1 至 200 个范围对象。","cockpitRef":"对象引用无效或不属于当前项目。","cockpitModules":"请选择已支持的驾驶舱模块。","cockpitComparison":"当前驾驶舱切片尚未支持同期比较。","cockpitTime":"请选择支持的统计间隔并填写有效的绝对时间。","cockpitTimeRange":"结束时间必须晚于开始时间，区间不得超过 366 个当地日。","cockpitField":"驾驶舱请求存在缺失或无效的字段。","cockpitMeterLimit":"统计范围超过 200 块表计，请缩小范围。","cockpitScopeForbidden":"所选统计范围或能源分类不可用或没有读取权限。"};
 export const serverMessages:Record<string,string>={
  '无效费率时段分类':'Invalid tariff time-band category',
  '部分时段未配置尖峰谷平分类，保留为未分类':'Some periods have no tariff time-band label and remain unclassified',
@@ -444,5 +446,7 @@ Object.assign(chineseServerMessages,{'{0} : referencePartialCoverage':'{0}：参
 Object.assign(serverMessages,{"spaceAreaOnly":"Only area can be changed through this editor on a native FIN site or floor. Other properties are maintained in FIN.","spaceAreaForbidden":"You do not have permission to edit the area of this FIN site or floor.","invalidServiceArea":"Area must be a finite number greater than zero.","invalidAreaSource":"Select a valid area source.","invalidAreaSpace":"Select an accessible FIN site or floor as the service space."});
 Object.assign(chineseServerMessages,{"spaceAreaOnly":"原生楼宇和楼层仅允许通过面积入口修改面积，其他属性由 FIN 维护。","spaceAreaForbidden":"没有此 FIN 楼宇或楼层的面积编辑权限。","invalidServiceArea":"面积必须为大于零的有限数值。","invalidAreaSource":"请选择有效的面积来源。","invalidAreaSpace":"请选择可访问的 FIN 楼宇或楼层作为服务空间。"});
 
+Object.assign(serverMessages,cockpitEnglish);
+Object.assign(chineseServerMessages,cockpitChinese);
 Object.assign(serverMessages,{missingArea:'No valid statistical area configured. Available consumption is retained.',ambiguousArea:'Service area boundaries are ambiguous. Reference explicit service spaces to calculate combined intensity.'});
 Object.assign(chineseServerMessages,{missingArea:'未配置有效统计面积，已有用量仍保留。',ambiguousArea:'服务面积边界不明确，请引用明确的服务空间后计算合计单位面积指标。'});

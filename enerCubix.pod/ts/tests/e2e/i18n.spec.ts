@@ -36,6 +36,8 @@ test.describe('English controls and exports',()=>{
   await installTransport(page);await openView(page,'profile');
   await page.getByRole('button',{name:'Open navigation',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Overview',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Energy operations cockpit',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Legacy overview',exact:true}).click();
   await expect(page.locator('.workspace-title h2')).toHaveText('Energy overview');
  });
  test('opens all analysis and configuration workspaces in English',async({page})=>{
