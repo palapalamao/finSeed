@@ -9,7 +9,7 @@ export interface CoveragePeriod {
 }
 export interface CoverageGroup {
  key:string;nodeId:string;pointId:string;name:string;source:string;unit:string;periods:CoveragePeriod[];
- coveredSeconds:number|null;intervalCount:number|null;intervals:CoverageInterval[];detailsTruncated:boolean;overlapping:boolean;
+ coveredSeconds:number|null;intervalCount:number|null;intervals:CoverageInterval[];detailsTruncated:boolean;overlapping:boolean;diagnosticLimited?:boolean;diagnosticReturnedCount?:number;diagnosticTotalCount?:number|null;
  firstReading?:string;lastReading?:string;
 }
 const maps=(value:unknown):Record<string,unknown>[]=>Array.isArray(value)?value.filter((v):v is Record<string,unknown>=>!!v&&typeof v==='object'):[];
@@ -44,7 +44,8 @@ function uniqueIntervals(rows:CoverageInterval[]):CoverageInterval[]{
  const seen=new Set<string>();return rows.filter(row=>{const key=JSON.stringify([row.intervalStart,row.intervalEnd,row.value,row.valueType,row.quality]);if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(a.intervalStart)-Date.parse(b.intervalStart));
 }
 export function coverageGroups(snapshot:ReportSnapshot):CoverageGroup[]{
- const usage=snapshot.result.extra?.knownUsage as {sourceUsage?:unknown;detailsTruncated?:boolean}|undefined;
+ const usage=snapshot.result.extra?.knownUsage as {sourceUsage?:unknown;detailsTruncated?:boolean;sourceUsageTruncated?:boolean;sourceUsageDiagnosticRef?:string}|undefined;
+ const meta=snapshot.diagnostics?.metadata,usageDiagnostic=meta?.entries.find(entry=>entry.id===usage?.sourceUsageDiagnosticRef),limited=usageDiagnostic?.truncated===true||usage?.sourceUsageTruncated===true;
  const groups=new Map<string,{group:CoverageGroup;rows:CoveragePeriod[];seen:Set<string>}>();
  const asOf=Math.min(Date.parse(snapshot.result.asOf||snapshot.request.asOf||snapshot.generatedAt),Date.parse(snapshot.result.to));
  for(const row of maps(usage?.sourceUsage)){
@@ -54,12 +55,12 @@ export function coverageGroups(snapshot:ReportSnapshot):CoverageGroup[]{
   if(!entry){
    const sourceIds=Array.isArray(row.sourceIds)?row.sourceIds.filter((id):id is string=>typeof id==='string'):[pointId];
    const source=sourceIds.map(id=>snapshot.display?.sources[id]).filter(Boolean).join(' / ')||snapshot.display?.sources[pointId]||'';
-   const group:CoverageGroup={key,nodeId,pointId,unit,name:snapshot.display?.objects[nodeId]||snapshot.result.series.find(s=>s.nodeId===nodeId)?.name||'',source,periods:[],coveredSeconds:0,intervalCount:0,intervals:[],detailsTruncated:false,overlapping:false};
+   const group:CoverageGroup={key,nodeId,pointId,unit,name:snapshot.display?.objects[nodeId]||snapshot.result.series.find(s=>s.nodeId===nodeId)?.name||'',source,periods:[],coveredSeconds:0,intervalCount:0,intervals:[],detailsTruncated:false,overlapping:false,diagnosticLimited:limited,diagnosticReturnedCount:usageDiagnostic?.returnedCount,diagnosticTotalCount:usageDiagnostic?.totalCount};
    entry={group,rows:[],seen:new Set()};groups.set(key,entry);
   }
   const rowKey=JSON.stringify([from,to,row.knownValue,row.knownValueType,row.knownQuality,row.coveredSeconds,row.intervalCount]);if(entry.seen.has(rowKey))continue;entry.seen.add(rowKey);
   const intervals=maps(row.intervals).map(r=>({intervalStart:string(r.intervalStart),intervalEnd:string(r.intervalEnd),value:number(r.value),valueType:string(r.valueType),quality:string(r.quality)}));
-  entry.rows.push({key:rowKey,from,to,value:number(row.knownValue),valueType:string(row.knownValueType),quality:string(row.knownQuality),status:status(row,from,to,asOf),coveredSeconds:count(row.coveredSeconds),intervalCount:count(row.intervalCount),intervals,detailsTruncated:row.detailsTruncated===true,slots:1});
+  entry.rows.push({key:rowKey,from,to,value:number(row.knownValue),valueType:string(row.knownValueType),quality:string(row.knownQuality),status:status(row,from,to,asOf),coveredSeconds:count(row.coveredSeconds),intervalCount:count(row.intervalCount),intervals,detailsTruncated:row.detailsTruncated===true||meta?.entries.some(entry=>entry.id===row.intervalsDiagnosticRef&&entry.truncated)===true,slots:1});
   const first=string(row.intervalStart),last=string(row.intervalEnd);
   if(number(row.knownValue)!==null){
    if(first&&(!entry.group.firstReading||Date.parse(first)<Date.parse(entry.group.firstReading)))entry.group.firstReading=first;
@@ -79,7 +80,7 @@ export function coverageGroups(snapshot:ReportSnapshot):CoverageGroup[]{
    }else group.periods.push({...row,intervals:[...row.intervals]});
   }
   group.intervals=uniqueIntervals(group.intervals);group.periods.forEach(p=>{p.intervals=uniqueIntervals(p.intervals);});
-  if(group.overlapping){group.coveredSeconds=null;group.intervalCount=null;}
+  if(group.overlapping||group.diagnosticLimited){group.coveredSeconds=null;group.intervalCount=null;}if(group.diagnosticLimited)group.detailsTruncated=true;
  }
  return [...groups.values()].map(e=>e.group);
 }

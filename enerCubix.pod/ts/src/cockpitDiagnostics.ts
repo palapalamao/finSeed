@@ -1,0 +1,12 @@
+import type {CockpitDiagnostics,CockpitDiagnosticEntry,CockpitSnapshot} from './cockpitTypes';
+import type {ReportSnapshot} from './types';
+import {t} from './i18n';
+type Translate=(key:string,...values:unknown[])=>string;
+export function diagnosticKind(kind:CockpitDiagnosticEntry['kind'],tr:Translate=t){return {coveragePeriods:tr('覆盖时段诊断'),sourceUsage:tr('源点用量诊断'),sourceIntervals:tr('源点区间诊断'),cleaningEvents:tr('清洗事件诊断')}[kind];}
+export function diagnosticGrain(grain:CockpitDiagnosticEntry['grain'],tr:Translate=t){return {hour:tr('覆盖时段记录（可跨多小时）'),sourceRead:tr('源读取时段'),sourceInterval:tr('源点区间'),cleaningEvent:tr('清洗事件')}[grain];}
+export function diagnosticReason(reason:CockpitDiagnosticEntry['reason'],tr:Translate=t){return {complete:tr('本包已返回该类全部诊断'),snapshotDiagnosticBudget:tr('达到本快照诊断总预算'),upstreamDiagnosticLimit:tr('上游诊断已限量，原总数可能未知'),upstreamAndSnapshotLimit:tr('上游与本快照诊断均限量')}[reason];}
+export function diagnosticSummary(meta:CockpitDiagnostics,tr:Translate=t){return meta.truncated?tr('本快照诊断记录部分返回：共返回 {0} 条，总预算 {1} 条；统计结果与数据质量另行标注。',meta.returnedCount,meta.rowBudget):tr('本快照诊断记录已完整返回：共 {0} 条，总预算 {1} 条；诊断记录不等同于统计时序。',meta.returnedCount,meta.rowBudget);}
+export function diagnosticEntries(meta:CockpitDiagnostics,refs?:string[]){return refs?meta.entries.filter(entry=>entry.reportRefs.some(ref=>refs.includes(ref))):meta.entries;}
+export function attachCockpitDiagnostics(report:ReportSnapshot,snapshot:CockpitSnapshot,refs:string[]):ReportSnapshot{return snapshot.diagnostics?{...report,diagnostics:{snapshotId:snapshot.snapshotId,reportRefs:[...refs],metadata:snapshot.diagnostics}}:report;}
+export function diagnosticRows(meta:CockpitDiagnostics,refs?:string[],tr:Translate=t){return diagnosticEntries(meta,refs).map(entry=>[entry.id,diagnosticKind(entry.kind,tr),diagnosticGrain(entry.grain,tr),entry.returnedCount,entry.totalCount??tr('未知'),diagnosticReason(entry.reason,tr),entry.objectIds.join(' / '),entry.sourceIds.join(' / '),entry.sourceIdsComplete?tr('是'):tr('否'),entry.requestRange.from,entry.requestRange.to,entry.requestRange.asOf,entry.returnedRange?.from??tr('未包含'),entry.returnedRange?.to??tr('未包含'),entry.reportRefs.join(' / ')]);}
+export const diagnosticHeaders=(tr:Translate=t)=>[tr('诊断编号'),tr('诊断类型'),tr('诊断粒度'),tr('已返回诊断数'),tr('诊断总数'),tr('诊断限量原因'),tr('对象引用'),tr('源点'),tr('源点列表完整'),tr('请求起始'),tr('请求结束'),tr('查询截止'),tr('已返回起始'),tr('已返回结束'),tr('关联报告')];

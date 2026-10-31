@@ -1,7 +1,7 @@
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
 import {serverMessage,t} from './i18n';
-export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string}
+export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string;pendingRequestId?:string}
 export function cockpitQueryError(state:CockpitQueryState):string{return state.errorSource?serverMessage(state.errorSource):state.error||'';}
 function freeze<T>(value:T):T {if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 export class CockpitQuery {
@@ -16,7 +16,7 @@ export class CockpitQuery {
  async apply(request:CockpitRequest){
   if(this.state.phase==='sessionExpired')return;
   const sequence=++this.sequence;this.controller?.abort();const controller=new AbortController();this.controller=controller;
-  this.publish({phase:this.state.snapshot?'refreshing':'loading',snapshot:this.state.snapshot});
+  this.publish({phase:this.state.snapshot?'refreshing':'loading',snapshot:this.state.snapshot,pendingRequestId:request.requestId});
   try{
    const result=await this.load(structuredClone(request),controller.signal);
    if(sequence!==this.sequence||controller.signal.aborted)return;

@@ -15,7 +15,7 @@ export interface ReportPoint {ts:string;value:number|null;valueType?:'number'|'n
 export interface Series {id:string;nodeId?:string;name:string;categoryId?:string;unit:string;points:ReportPoint[];role?:'history'|'forecast'|'reference';referencePeriod?:'current'|'comparison'}
 export interface ReportResult {kind:ReportKind;from:string;to:string;asOf?:string;period:string;series:Series[];rows:Record<string,unknown>[];warnings:string[];summary:Record<string,unknown>;extra?:Record<string,unknown>;rangeAdjustment?:{status:'adjusted'|'unavailable';requestedFrom:string;requestedTo:string}}
 export interface ReportDisplay {objects:Record<string,string>;sources:Record<string,string>;meterKinds:Record<string,string>;meterOrigins?:Record<string,MeterOrigin>;sourceHistory?:Record<string,FinPoint>}
-export interface ReportSnapshot {request:ReportRequest;result:ReportResult;generatedAt:string;title:string;project:string;categoryIds?:string[];categoryNames?:string[];display?:ReportDisplay}
+export interface ReportSnapshot {diagnostics?:import('./cockpitTypes').ReportDiagnosticContext;request:ReportRequest;result:ReportResult;generatedAt:string;title:string;project:string;categoryIds?:string[];categoryNames?:string[];display?:ReportDisplay}
 export const nodeKinds:Kind[]=['group','meter','totalMeter','sensor'];
 export const treeDimensions=['space','metering','organization'] as const;
 export const dimensionNames:Record<Dimension,string>=localizedRecord(()=>({space:t("空间"),metering:t("计量"),organization:t("组织"),legacy:t("历史报表口径")}));

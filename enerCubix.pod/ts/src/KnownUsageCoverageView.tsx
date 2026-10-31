@@ -17,12 +17,13 @@ function CoverageSource({group,snapshot}:{group:CoverageGroup;snapshot:ReportSna
  const value=(p:CoveragePeriod)=>p.valueType==='na'?'NA':p.value===null?'—':numberText(p.value);
  return <article className="usage-coverage-source">
   <div className="usage-coverage-source-heading"><h4>{group.name||t('对象名称不可用')}</h4><span>{t('源点：{0}',group.source||t('源点名称不可用'))} · {t(group.unit)}</span></div>
-  <dl className="usage-coverage-summary"><div><dt>{t('有数值覆盖时长')}</dt><dd>{coverageDuration(group.coveredSeconds)}</dd></div><div><dt>{t('有数值记录范围')}</dt><dd className="usage-coverage-range">{time(group.firstReading)}<span aria-hidden="true"> — </span>{time(group.lastReading)}</dd></div></dl>
+  <dl className="usage-coverage-summary"><div><dt>{t('有数值覆盖时长')}</dt><dd>{group.diagnosticLimited?t('诊断限量，见统计覆盖明细'):coverageDuration(group.coveredSeconds)}</dd></div><div><dt>{group.diagnosticLimited?t('已返回诊断中的记录范围'):t('有数值记录范围')}</dt><dd className="usage-coverage-range">{time(group.firstReading)}<span aria-hidden="true"> — </span>{time(group.lastReading)}</dd></div></dl>
+  {group.diagnosticLimited&&<p className="usage-coverage-note">{t('源点用量诊断仅返回 {0} 条；原总数 {1}。这里只显示已返回片段，完整覆盖以统计覆盖明细为准。',group.diagnosticReturnedCount??'—',group.diagnosticTotalCount??t('未知'))}</p>}
   {group.overlapping&&<Alert type="warning" showIcon message={t('覆盖记录存在重叠，保留各条记录，不重复合计时长。')}/>}
   <details className="usage-coverage-periods" data-export-ignore="true"><summary>{t('查看连续时段（{0} 段）',group.periods.length)}</summary>
    <div className="usage-coverage-controls"><p>{t('相邻且状态相同的记录已合并；时间沿用报告时区，结束时间不含。')}</p><label><Switch size="small" checked={issuesOnly} onChange={v=>{setIssuesOnly(v);setExpanded([]);}}/>{t('只看缺测与异常')}</label></div>
-   {group.detailsTruncated&&<p className="usage-coverage-note" role="note">{t('原始区间仅返回 {0} 条明细；小计、区间数和覆盖时长仍按全部数据统计。',group.intervals.length)}</p>}
-   <Table<CoveragePeriod> size="small" rowKey="key" className="usage-coverage-period-table" dataSource={rows} scroll={{x:720}} pagination={{pageSize:8,showSizeChanger:false,hideOnSinglePage:true}} locale={{emptyText:issuesOnly?t('没有缺测或异常时段。'):t('此范围没有覆盖记录。')}} columns={[
+   {group.detailsTruncated&&!group.diagnosticLimited&&<p className="usage-coverage-note" role="note">{t('原始区间仅返回 {0} 条明细；小计、区间数和覆盖时长仍按全部数据统计。',group.intervals.length)}</p>}
+   <Table<CoveragePeriod> size="small" rowKey="key" className="usage-coverage-period-table" dataSource={rows} scroll={{x:720}} pagination={{pageSize:8,showSizeChanger:false,hideOnSinglePage:true}} locale={{emptyText:group.diagnosticLimited?t('已返回片段中没有此类记录；未返回部分未知。'):issuesOnly?t('没有缺测或异常时段。'):t('此范围没有覆盖记录。')}} columns={[
     {title:t('查询时段'),key:'range',render:(_,p)=><span className="usage-coverage-range">{time(p.from)}<span>—</span>{time(p.to)}</span>},
     {title:t('状态'),key:'status',render:(_,p)=><span className={`usage-coverage-status usage-coverage-${p.status}`} title={reportQualityText(snapshot,p.quality)}>{coverageStatusText(p.status)}</span>},
     {title:t('已有用量'),key:'value',align:'right',render:(_,p)=><span className="usage-coverage-number">{value(p)} {t(group.unit)}</span>},

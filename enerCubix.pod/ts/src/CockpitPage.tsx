@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {useEffect,useMemo,useRef,useState,useSyncExternalStore,useCallback} from 'react';
 import {Alert,Button,Empty,Select,Spin,Tag} from 'antd';
 import type {EnerCubixApi} from './api';
 import type {Catalog} from './types';
@@ -23,6 +23,8 @@ import {cockpitCopNavigation} from './cockpitEfficiencyProjection';
 import {CockpitIssues} from './CockpitIssues';
 import {CockpitPresentation} from './CockpitPresentation';
 import {cockpitIssueNavigation} from './cockpitIssueProjection';
+import {useCockpitRefresh,CockpitRefreshControls,refreshStatus} from './CockpitRefresh';
+import {DiagnosticNotice} from './DiagnosticNotice';
 import './cockpit.css';
 
 // Keep the legacy dashboard route available throughout incremental delivery.
@@ -45,6 +47,8 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,initialRequest,res
  const changeMode=(value:boolean)=>{if(value&&!presentationMode)presentationScroll.current=window.scrollY;setPresentationMode(value);if(!value&&presentationScroll.current!==undefined)requestAnimationFrame(()=>window.scrollTo(0,presentationScroll.current!));};
  const query=useMemo(()=>new CockpitQuery((request,signal)=>api.cockpit(request,signal)),[api]);
  const state=useSyncExternalStore(query.subscribe,query.getSnapshot,query.getSnapshot);
+ const automatic=useCockpitRefresh(query,catalog.user.name,catalog.project);
+ const handleExportLock=useCallback((value:boolean)=>{automatic.controller.setPaused('export',value);onExportLock?.(value);},[automatic.controller,onExportLock]);
  // Explicit Apply/Refresh obtains a fresh observation cutoff. Restore and scope promotion use absoluteCockpitRequest instead.
  const makeRequest=():CockpitRequest|undefined=>selection&&scope&&categoryId?{schemaVersion:1,requestId:'cockpit-'+(++sequence.current),reportScope:scope,focusCategoryId:categoryId,...(auxiliaryCategoryId?{auxiliaryCategoryId}:{}),time:preset==='custom'?{preset,period:dates.period,from:dates.from,to:dates.to}:{preset,period:preset==='today'?'hour':preset==='thisYear'?'month':'day'},comparison:dates.comparison.mode==='custom'?dates.comparison:{mode:dates.comparison.mode},modules:[...cockpitModules]}:undefined;
  const apply=()=>{const request=makeRequest();if(request)void query.apply(request);};
@@ -63,13 +67,13 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,initialRequest,res
  const focused=focusRows.find(r=>r.id===focusObjectId),spaceFocus=snapshot?cockpitSpaceObjects(snapshot,catalog).find(node=>node.id===focusObjectId):undefined;
  const selectedFocusId=focused?.id||spaceFocus?.id;
  const currentView=():CockpitViewState=>({focusObjectId:selectedFocusId,selectedFace:face,presentationMode,scrollY:window.scrollY,draft:{scope:scope!,categoryId:categoryId!,preset,auxiliarySelection:auxiliarySelection||auxiliaryCategoryId||'__area__',dates}});
- const drill=(kind:'profile'|'energyFlow')=>{if(!snapshot)return;const view=currentView();onDrill(createNavigation(snapshot,kind,view),snapshot,view);};
- const drillFace=(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>{if(!snapshot)return;const view=currentView();onDrill(createFaceNavigation(snapshot,kind,view),snapshot,view);};
+ const drill=(kind:'profile'|'energyFlow')=>{if(!snapshot)return;automatic.controller.setPaused('route',true);const view=currentView();onDrill(createNavigation(snapshot,kind,view),snapshot,view);};
+ const drillFace=(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>{if(!snapshot)return;automatic.controller.setPaused('route',true);const view=currentView();onDrill(createFaceNavigation(snapshot,kind,view),snapshot,view);};
  useEffect(()=>{if(snapshot&&scope&&categoryId)onSnapshot?.(snapshot,currentView());},[snapshot,face,selectedFocusId,presentationMode]);
  const setStatisticalScope=()=>{if(!selectedFocusId||!snapshot)return;const next:CockpitScope={dimension:snapshot.context.reportScope.dimension,nodeIds:[selectedFocusId],selectionIntent:spaceFocus?.basis==='ownPrimary'||!!focused&&['meter','totalMeter'].includes(focused.kind)?'explicitObjects':'range'};const applied=absoluteCockpitRequest(snapshot);setScope(next);setFocusObjectId(undefined);setCategoryId(applied.focusCategoryId);setAuxiliarySelection(applied.auxiliaryCategoryId||'__area__');setPreset('custom');setDates({from:applied.time.from,to:applied.time.to,period:applied.time.period,comparison:applied.comparison||{mode:'none'}});void query.apply({...applied,requestId:'scope-'+(++sequence.current),reportScope:next});};
  return <main className={presentationMode?"cockpit-page cockpit-presentation":"cockpit-page"} aria-labelledby="cockpit-title">
-  <header className="cockpit-heading"><div><h2 id="cockpit-title">{t('能源经营驾驶舱')}</h2>{snapshot?<div className="cockpit-context"><strong>{snapshot.context.reportScope.nodeIds.map(name).join(' / ')} · {name(snapshot.context.focusCategoryId)}</strong><p>{time(snapshot.context.time.from)} — {time(snapshot.context.time.to)} {t('（结束时间不含）')} · {snapshot.context.projectTimeZone}</p></div>:<p>{t('从真实用量开始，定位范围并核对数据依据。')}</p>}</div><div className="cockpit-heading-actions">{selection&&<><Button className="cockpit-conditions-trigger" aria-expanded={conditionsOpen} aria-controls="cockpit-query-fields" onClick={()=>setConditionsOpen(value=>!value)}>{t('统计范围与条件')}</Button><Button className="cockpit-query-submit" type="primary" disabled={state.phase==='sessionExpired'||!scope?.nodeIds.length||!!dateInvalid} onClick={apply}>{dirty?t('应用条件'):t('刷新数据')}</Button>{dirty&&<Tag className="cockpit-query-state">{t('条件尚未应用')}</Tag>}</>}<Button onClick={onLegacy}>{t('旧版总览')}</Button>{snapshot&&<CockpitPresentation snapshot={snapshot} objects={Object.fromEntries(catalog.records.filter(r=>r.id).map(r=>[r.id!,r.name]))} presentationMode={presentationMode} onMode={changeMode} onLock={onExportLock||(()=>{})} loading={loading}/>}</div></header>
-  {!selection?<section className="cockpit-empty"><Empty description={t('尚无可分析的主能耗点配置')}/><p>{t('请先选择设备、绑定主能耗点并配置能源分类。')}</p>{catalog.user.canWrite?<Button onClick={onConfigure}>{t('配置计量资产')}</Button>:<p>{t('请联系项目管理员完善配置。')}</p>}</section>:<>
+  <header className="cockpit-heading"><div><h2 id="cockpit-title">{t('能源经营驾驶舱')}</h2>{snapshot?<div className="cockpit-context"><strong>{snapshot.context.reportScope.nodeIds.map(name).join(' / ')} · {name(snapshot.context.focusCategoryId)}</strong><p>{time(snapshot.context.time.from)} — {time(snapshot.context.time.to)} {t('（结束时间不含）')} · {snapshot.context.projectTimeZone}</p></div>:<p>{t('从真实用量开始，定位范围并核对数据依据。')}</p>}</div><div className="cockpit-heading-actions">{selection&&<><Button className="cockpit-conditions-trigger" aria-expanded={conditionsOpen} aria-controls="cockpit-query-fields" onClick={()=>setConditionsOpen(value=>!value)}>{t('统计范围与条件')}</Button><Button className="cockpit-query-submit" type="primary" disabled={state.phase==='sessionExpired'||!scope?.nodeIds.length||!!dateInvalid} onClick={apply}>{dirty?t('应用条件'):t('刷新数据')}</Button>{dirty&&<Tag className="cockpit-query-state">{t('条件尚未应用')}</Tag>}</>}<Button onClick={()=>{automatic.controller.setPaused('route',true);onLegacy();}}>{t('旧版总览')}</Button>{snapshot&&<CockpitPresentation snapshot={snapshot} objects={Object.fromEntries(catalog.records.filter(r=>r.id).map(r=>[r.id!,r.name]))} presentationMode={presentationMode} onMode={changeMode} onLock={handleExportLock} loading={loading}/>}{automatic.state.minutes>0&&<span className="cockpit-auto-status" role="status">{refreshStatus(automatic.state)}</span>}</div></header>
+  {!selection?<section className="cockpit-empty"><Empty description={t('尚无可分析的主能耗点配置')}/><p>{t('请先选择设备、绑定主能耗点并配置能源分类。')}</p>{catalog.user.canWrite?<Button onClick={()=>{automatic.controller.setPaused('route',true);onConfigure();}}>{t('配置计量资产')}</Button>:<p>{t('请联系项目管理员完善配置。')}</p>}</section>:<>
    <section hidden={!conditionsOpen} id="cockpit-query-fields" className="cockpit-controls" aria-label={t('驾驶舱查询条件')}>
     <div className="cockpit-controls-primary"><label>{t('统计范围')}<Select aria-label={t('统计范围')} mode="multiple" maxTagCount={1} value={scope?.nodeIds} onChange={nodeIds=>setScope(current=>({...current!,nodeIds}))} options={scopeRows.map(r=>({value:r.id,label:r.name}))}/></label>
     <label>{t('关注能源')}<Select aria-label={t('关注能源')} value={categoryId} onChange={value=>{setCategoryId(value);setAuxiliarySelection(undefined);}} options={categories.map(r=>({value:r.id,label:r.name}))}/></label>
@@ -78,7 +82,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,initialRequest,res
     <details className="cockpit-controls-more" open={preset==='custom'||undefined}><summary>{t('更多条件与比较')}</summary><div className="cockpit-controls-advanced">
     <label>{t('范围选择方式')}<Select aria-label={t('范围选择方式')} value={scope?.selectionIntent} onChange={selectionIntent=>setScope(current=>({...current!,selectionIntent}))} options={[{value:'range',label:t('范围')},{value:'explicitObjects',label:t('明确对象')}]}/></label>
     <label>{t('辅助能源')}<Select aria-label={t('辅助能源')} value={auxiliaryCategoryId||'__area__'} onChange={setAuxiliarySelection} options={[{value:'__area__',label:t('单位面积用量')},...categories.filter(category=>category.id!==categoryId&&catalog.records.some(meter=>['meter','totalMeter'].includes(meter.kind)&&meter.pointId&&meter.categoryId===category.id)).map(category=>({value:category.id!,label:category.name}))]}/></label>
-    <CockpitDates preset={preset} draft={dates} onChange={setDates}/></div></details>
+    <CockpitDates preset={preset} draft={dates} onChange={setDates}/><CockpitRefreshControls controller={automatic.controller} state={automatic.state}/></div></details>
    </section>
    <div aria-live="polite">{loading&&<p className="cockpit-loading"><Spin size="small"/> {t('正在读取驾驶舱数据…')}</p>}{state.error&&<Alert type="error" showIcon message={cockpitQueryError(state)}/>}</div>
    {snapshot&&<section className="cockpit-snapshot" data-cockpit-snapshot={snapshot.snapshotId} aria-label={t('驾驶舱数据快照')}>
@@ -91,6 +95,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,initialRequest,res
      reference={<CockpitReference snapshot={snapshot}/>}
      space={<CockpitSpace snapshot={snapshot} catalog={catalog} focusObjectId={selectedFocusId} onFocus={setFocusObjectId} onPromote={setStatisticalScope} onProfile={()=>drill('profile')} onFlow={()=>drill('energyFlow')}/>}
      issues={<CockpitIssues key={"issues-"+snapshot.snapshotId} snapshot={snapshot} compact name={name} canEvidence={item=>!!cockpitIssueNavigation(snapshot,item,currentView())} onEvidence={item=>{const view=currentView(),navigation=cockpitIssueNavigation(snapshot,item,view);if(navigation)onDrill(navigation,snapshot,view);}}/>}/>
+    {snapshot.diagnostics&&<DiagnosticNotice metadata={snapshot.diagnostics} snapshotId={snapshot.snapshotId} objects={Object.fromEntries(catalog.records.filter(row=>row.id).map(row=>[row.id!,row.name]))}/>}
     <details className="cockpit-primary"><summary>{t('数据时刻与来源')}</summary>
      <p>{t('只读取所选设备的主能耗点历史。')}</p>
      <section className="cockpit-evidence" aria-label={t('数据时刻')}><dl><dt>{t('查询截止')}</dt><dd>{time(snapshot.context.asOf)}</dd><dt>{t('末次数据观察（非完整截止）')}</dt><dd>{time(snapshot.provenance.sourceLastObservedAt)}</dd><dt>{t('快照生成')}</dt><dd>{time(snapshot.generatedAt)}</dd></dl></section>
