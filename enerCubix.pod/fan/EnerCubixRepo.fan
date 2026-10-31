@@ -417,6 +417,7 @@ class EnerCubixRepo
       tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
       prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
       all:=([Str:Obj?][])prepared["records"]
+      if (EnerCubixMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
       normalized:=input.dup
       normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
       result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]| {EnerCubixNativeAlarms(this).list})

@@ -25,7 +25,7 @@ class EnerCubixCockpit
     ids.each |id|
     {
       r:=frozen.find |r| {r["id"] == id}
-      if (r == null || r["nativeHidden"] == true || (!dim.scope(id) && !["meter","totalMeter"].contains(r["kind"]))) forbidden
+      if (r == null || r["nativeHidden"] == true || r["_comparisonReadable"] == false || (!dim.scope(id) && !["meter","totalMeter"].contains(r["kind"]))) forbidden
     }
     members:=[Str:Obj?][,]; overlaps:=[Str:Obj?][,]
     scopes:=ids.map |id->[Str:Obj?][]| {ctx.scopeMeters(id,category)}
@@ -54,17 +54,31 @@ class EnerCubixCockpit
       ids.each |id| {combined.addAll(ctx.scopeMeters(id,auxiliary))}
       if (combined.map |m->Str| {m["id"].toStr}.unique.size > 200) throw ArgErr("cockpitMeterLimit")
     }
+    Str:Obj? flow:=[:]
+    if (enabled.contains("balance"))
+    {
+      try {flow=EnerCubixCockpitFlow.prepare(request,frozen,project)}
+      catch (EnerCubixHttpErr e) {throw e}
+      catch (Err e) {flow=["error":true]}
+    }
+    evidence:=EnerCubixMath.maps(flow["meters"])
+    planned:=members.dup.addAll(evidence)
+    if (kpis && auxiliary != null) ids.each |id| {planned.addAll(ctx.scopeMeters(id,auxiliary))}
+    if (planned.map |m->Str| {m["id"].toStr}.unique.size > 200) throw ArgErr("cockpitMeterLimit")
     // One union plan, frozen before reads; disjoint periods never imply a year-wide scan.
     request["_cockpitPointIds"]=boundary["sourcePointIds"]
     historyRequest:=request.dup
     effectiveEnd:=DateTime.fromIso(request["asOf"].toStr)
     if (DateTime.fromIso(request["to"].toStr) < effectiveEnd) effectiveEnd=DateTime.fromIso(request["to"].toStr)
     historyRequest["to"]=effectiveEnd.toIso
-    plan:=EnerCubixCockpitMetrics.plan(request,kpis ? comparison : Str:Obj?["mode":"none"],ctx,kpis ? auxiliary : null,scope["selectionIntent"] == "explicitObjects",kpis)
+    plan:=EnerCubixCockpitMetrics.plan(request,kpis ? comparison : Str:Obj?["mode":"none"],ctx,kpis ? auxiliary : null,scope["selectionIntent"] == "explicitObjects",kpis,evidence)
     historyRequest["_cockpitReadRanges"]=[request]
     if (kpis && comparison["mode"] != "none") historyRequest["_cockpitReadRanges"]=[request,request.dup.setAll((Map)comparison["referenceRange"])]
     historyRequest["_cockpitRanges"]=plan
-    historyRequest["_cockpitPointIds"]=plan.map |r->Str[]| {EnerCubixMath.strings(r["pointIds"])}.flatten.unique.sort
+    pointIds:=Str[,];plan.each |r| {pointIds.addAll(EnerCubixMath.strings(r["pointIds"]))}
+    pointIds.unique.each |id| {ref(id,project)}
+    historyRequest["_cockpitPointIds"]=pointIds.unique.sort
+    historyRequest["_cockpitConfigIds"]=EnerCubixMath.maps(flow["configuration"]).map |r->Str| {r["id"].toStr}.unique.sort
     observedFrom:=readClock()
     histories:=plan.isEmpty ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
     histories=([Str:Obj?][])histories.toImmutable
@@ -121,7 +135,13 @@ class EnerCubixCockpit
     if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request)]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
     EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
+    if (enabled.contains("balance"))
+    {
+      if (flow["error"] == true) modules["balance"]=EnerCubixCockpitFlow.error
+      else EnerCubixCockpitFlow.attach(flow,histories,boundary,reports,modules)
+    }
     config:=EnerCubixCockpitMetrics.configuration(ctx,ids,auxiliary == null ? [category] : [category,auxiliary])
+    config=config.dup.addAll(EnerCubixMath.maps(flow["configuration"])).unique.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
@@ -151,7 +171,7 @@ class EnerCubixCockpit
     if (histories.any |h| {h["quality"] == "historySampleLimit"}) limitations.add("HISTORY_SAMPLE_LIMIT")
     if (histories.any |h| {h["quality"] == "streamingUnsupportedConfiguration"}) limitations.add("STREAMING_UNSUPPORTED_CONFIGURATION")
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
-    faces:=enabled.findAll |m| {["time","endUse","organization"].contains(m)}
+    faces:=enabled.findAll |m| {["time","endUse","organization","balance"].contains(m)}
     if (!faces.isEmpty) faces.insert(0,"space")
     return (Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
   }
@@ -193,7 +213,7 @@ class EnerCubixCockpit
     ids.each |id| {ref(id,project)}
     category:=text(input,"focusCategoryId"); ref(category,project)
     modules:=strings(input["modules"])
-    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization"].contains(m)}) throw ArgErr("cockpitModules")
+    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization","balance"].contains(m)}) throw ArgErr("cockpitModules")
     if (input["auxiliaryCategoryId"] != null)
     {
       auxiliary:=text(input,"auxiliaryCategoryId"); ref(auxiliary,project)

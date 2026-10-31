@@ -84,7 +84,8 @@ internal class EnerCubixEnergyFlow
       roots.add(r)
     }
     covered:=roots.findAll |root| {id:=root["id"].toStr;return dim.scope(id) && roots.any |other| {other != root && scopeAncestor(other["id"].toStr,id,dim)}}
-    roots=roots.findAll |root| {!covered.contains(root)}
+    if (req["_cockpitExplicitObjects"] == true) covered=[Str:Obj?][,]
+    else roots=roots.findAll |root| {!covered.contains(root)}
     reachable:=Str[,]
     roots.each |root|
     {

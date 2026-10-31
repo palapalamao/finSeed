@@ -62,6 +62,18 @@ class EnerCubixHistory
     ids:=EnerCubixMath.strings(request["_cockpitPointIds"])
     owners:=records.findAll |r| {r["nativeEquip"] == true && ids.contains(r["pointId"] as Str ?: "")}
     guards:=Str:Dict?[:]
+    // Flow formulas and current scope/relationship revisions participate in the
+    // same freeze as primary bindings, before the first native history block.
+    EnerCubixMath.strings(request["_cockpitConfigIds"]).each |id|
+    {
+      expected:=records.find |r| {r["id"] == id}
+      if (expected == null) configurationChanged
+      source:=expected["nativeSourceId"] as Str ?: id
+      actual:=read(source)
+      if (actual != null && !readable(actual)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
+      if (actual == null || EnerCubixRepo.iso(actual["mod"]) != expected["mod"]) configurationChanged
+      guards[source]=actual
+    }
     owners.each |owner|
     {
       id:=owner["id"].toStr

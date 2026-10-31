@@ -54,7 +54,7 @@ internal class EnerCubixCockpitMetrics
   }
 
   ** Per-point union: only billing baselines expand a period, never the gap between periods.
-  static [Str:Obj?][] plan(Str:Obj? request, Str:Obj? comparison, EnerCubixContext ctx, Str? auxiliary, Bool explicit := false, Bool billing := true)
+  static [Str:Obj?][] plan(Str:Obj? request, Str:Obj? comparison, EnerCubixContext ctx, Str? auxiliary, Bool explicit := false, Bool billing := true, [Str:Obj?][] evidence := [Str:Obj?][,])
   {
     periods:=[request]
     if (comparison["mode"] != "none") periods.add(request.dup.setAll((Map)comparison["referenceRange"]))
@@ -84,6 +84,13 @@ internal class EnerCubixCockpitMetrics
           candidates.add(["from":left.toIso,"to":end.toIso,"pointIds":[point]])
         }
       }
+    }
+    end:=DateTime.fromIso(request["to"].toStr); cutoff:=DateTime.fromIso(request["asOf"].toStr)
+    if (end > cutoff) end=cutoff
+    if (end > DateTime.fromIso(request["from"].toStr)) evidence.each |m|
+    {
+      point:=m["pointId"] as Str
+      if (point != null && !point.isEmpty) candidates.add(["from":request["from"],"to":end.toIso,"pointIds":[point]])
     }
     out:=[Str:Obj?][,]
     candidates.map |r->Str| {((Str[])r["pointIds"]).first}.unique.sort.each |point|
@@ -138,7 +145,7 @@ internal class EnerCubixCockpitMetrics
         if (["meter","totalMeter"].contains(r["kind"]) && categories.contains(r["categoryId"] as Str ?: "") && selected.contains(r["meterParentId"] as Str ?: "")) selected.add(r["id"].toStr)
         if (!selected.contains(r["id"] as Str ?: "") && !selected.contains(r["nativeSourceId"] as Str ?: "")) return
         selected.add(r["id"].toStr)
-        ["parentId","meterParentId","categoryId","subcategoryId","tariffId","cleaningProfileId","spaceId","nativeSpaceId","organizationId","areaSpaceId","canonicalId","nativeTreeParentId"].each |key| {if (r[key] is Str) selected.add(r[key].toStr)}
+        ["parentId","meterParentId","categoryId","subcategoryId","utilityId","expressionId","tariffId","cleaningProfileId","spaceId","nativeSpaceId","organizationId","areaSpaceId","canonicalId","nativeTreeParentId"].each |key| {if (r[key] is Str) selected.add(r[key].toStr)}
         if (["meter","totalMeter"].contains(r["kind"]))
         {
           tariff:=ctx.tariff(r)
@@ -148,7 +155,7 @@ internal class EnerCubixCockpitMetrics
       selected=selected.unique
       changed=selected.size != previous
     }
-    return ctx.byId.vals.findAll |r| {selected.contains(r["id"] as Str ?: "") && ["meter","totalMeter","space","organization","category","subcategory","tariff","calendar","cleaningProfile"].contains(r["kind"])}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
+    return ctx.byId.vals.findAll |r| {selected.contains(r["id"] as Str ?: "") && ["meter","totalMeter","space","organization","category","subcategory","utility","expression","tariff","calendar","cleaningProfile"].contains(r["kind"])}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
   }
 
   static [Str:Obj?][] values(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] all, Str:Obj? energy, Str:Obj? boundary, Str? auxiliary, Str:Obj? reports, Str prefix := "")
