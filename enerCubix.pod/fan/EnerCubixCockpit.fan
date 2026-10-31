@@ -4,7 +4,7 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null)
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null)
   {
     input=(Str:Obj?)input.toImmutable
     readClock:=clock ?: |->DateTime| {DateTime.now}
@@ -108,13 +108,13 @@ class EnerCubixCockpit
     complete:=EnerCubixMath.num(metric["completeValue"])
     known:=EnerCubixMath.num(metric["knownValue"])
     reports:=Str:Obj?["profile-energy":report]
-    values:=kpis ? EnerCubixCockpitMetrics.values(request,frozen,histories,metric,boundary,auxiliary,reports) : [metric]
+    values:=kpis ? EnerCubixCockpitMetrics.values(request,frozen,histories,metric,boundary,auxiliary,reports,"",kpiReport) : [metric]
     if (kpis && comparison["mode"] != "none")
     {
       referenceRequest:=request.dup.setAll((Map)comparison["referenceRange"])
       referenceReport:=EnerCubixHistory.report(referenceRequest,frozen,EnerCubixCockpitMetrics.histories(referenceRequest,histories))
       referenceEnergy:=EnerCubixCockpitMetrics.metric(referenceReport,"energy",category,boundary)
-      referenceValues:=EnerCubixCockpitMetrics.values(referenceRequest,frozen,histories,referenceEnergy,boundary,auxiliary,reports,"reference-")
+      referenceValues:=EnerCubixCockpitMetrics.values(referenceRequest,frozen,histories,referenceEnergy,boundary,auxiliary,reports,"reference-",kpiReport)
       reports["reference-profile-energy"]=referenceReport
       values.each |v|
       {
@@ -133,6 +133,12 @@ class EnerCubixCockpit
     if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request)]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
     EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
+    if (enabled.contains("space"))
+    {
+      try {modules["space"]=EnerCubixCockpitSpace.project(request,frozen,histories,pointIds.unique,boundary)}
+      catch (EnerCubixHttpErr e) {throw e}
+      catch (Err e) {modules["space"]=EnerCubixCockpitFlow.error}
+    }
     if (enabled.contains("balance"))
     {
       if (flow["error"] == true) modules["balance"]=EnerCubixCockpitFlow.error
@@ -181,8 +187,9 @@ class EnerCubixCockpit
     if (histories.any |h| {h["quality"] == "streamingUnsupportedConfiguration"}) limitations.add("STREAMING_UNSUPPORTED_CONFIGURATION")
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
-    if (!faces.isEmpty) faces.insert(0,"space")
-    return (Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
+    if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
+    snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
+    return input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(snapshot) : snapshot
   }
 
   ** Hidden scope members cannot silently disappear from a supposedly complete total.
@@ -212,8 +219,9 @@ class EnerCubixCockpit
   ** Client project/timezone and engine implementation fields are never accepted.
   internal static Str:Obj? query(Str:Obj? input, Str project, TimeZone tz, DateTime now)
   {
-    allowed:=["schemaVersion","requestId","reportScope","focusCategoryId","time","asOf","modules","comparison","auxiliaryCategoryId"]
+    allowed:=["schemaVersion","requestId","reportScope","focusCategoryId","time","asOf","modules","comparison","auxiliaryCategoryId","payloadEncoding"]
     if (input.keys.any |key| {!allowed.contains(key)} || input["schemaVersion"] isnot Int || input["schemaVersion"] != 1) throw ArgErr("cockpitSchema")
+    if (input["payloadEncoding"] != null && input["payloadEncoding"] != "compact-v1") throw ArgErr("cockpitPayloadEncoding")
     requestId:=text(input,"requestId"); if (requestId.size > 200) throw ArgErr("cockpitRequestId")
     scope:=object(input,"reportScope"); time:=object(input,"time")
     dimension:=text(scope,"dimension"); intent:=text(scope,"selectionIntent")
@@ -222,7 +230,7 @@ class EnerCubixCockpit
     ids.each |id| {ref(id,project)}
     category:=text(input,"focusCategoryId"); ref(category,project)
     modules:=strings(input["modules"])
-    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization","efficiency","balance","issues"].contains(m)}) throw ArgErr("cockpitModules")
+    if (modules.isEmpty || modules.any |m| {!["kpis","trend","time","endUse","organization","efficiency","balance","issues","space"].contains(m)}) throw ArgErr("cockpitModules")
     if (input["auxiliaryCategoryId"] != null)
     {
       auxiliary:=text(input,"auxiliaryCategoryId"); ref(auxiliary,project)

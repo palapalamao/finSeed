@@ -48,7 +48,7 @@ const class EnerCubixRest : WebMod
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw EnerCubixHttpErr(404,"NOT_FOUND","接口不存在")
       }
-      if (route == "cockpit" && JsonOutStream.writeJsonToStr(data).toBuf.size > 8388608) throw EnerCubixHttpErr(413,"RESPONSE_LIMIT","cockpitResponseLimit")
+      if (route == "cockpit" && JsonOutStream.writeJsonToStr(["ok":true,"data":data]).toBuf.size > 8388608) throw EnerCubixHttpErr(413,"RESPONSE_LIMIT","cockpitResponseLimit")
       send(200,["ok":true,"data":data])
     }
     catch (EnerCubixHttpErr e)

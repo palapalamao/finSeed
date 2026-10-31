@@ -158,16 +158,18 @@ internal class EnerCubixCockpitMetrics
     return ctx.byId.vals.findAll |r| {selected.contains(r["id"] as Str ?: "") && ["meter","totalMeter","space","organization","category","subcategory","utility","expression","tariff","calendar","cleaningProfile"].contains(r["kind"])}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
   }
 
-  static [Str:Obj?][] values(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] all, Str:Obj? energy, Str:Obj? boundary, Str? auxiliary, Str:Obj? reports, Str prefix := "")
+  static [Str:Obj?][] values(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] all, Str:Obj? energy, Str:Obj? boundary, Str? auxiliary, Str:Obj? reports, Str prefix := "", |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? reporter := null)
   {
+    project:=reporter ?: |Str:Obj? rq,[Str:Obj?][] rs,[Str:Obj?][] hs->Str:Obj?| {EnerCubixHistory.report(rq,rs,hs)}
     category:=EnerCubixMath.strings(q["categoryIds"]).first
     selected:=histories(q,all)
     values:=[energy]
     ["cost","co2"].each |id|
     {
+      try
+      {
       rq:=q.dup.set("metric",id)
-      report:=EnerCubixHistory.report(rq,records,selected)
-      reports[prefix+"profile-"+id]=report
+      report:=project(rq,records,selected)
       value:=metric(report,id,category,boundary)
       if (id == "cost")
       {
@@ -183,14 +185,22 @@ internal class EnerCubixCockpitMetrics
         refs:=records.findAll |r| {r["kind"] == "subcategory" && r["co2Factor"] != null}
         value["details"]=["coefficients":refs]
       }
+      reports[prefix+"profile-"+id]=report
       values.add(value)
+      }
+      catch (Err e)
+      {
+        if (!localProjectionError(e)) throw e
+        values.add(projectionError(id,category,boundary))
+      }
     }
     Str:Obj? third:=[:]
+    try
+    {
     if (auxiliary != null)
     {
       rq:=q.dup.set("categoryIds",[auxiliary]).set("_cockpitCategoryId",auxiliary)
-      report:=EnerCubixHistory.report(rq,records,selected)
-      reports[prefix+"profile-auxiliary"]=report
+      report:=project(rq,records,selected)
       third=metric(report,"auxiliaryEnergy",auxiliary,boundary)
       dimension:=EnerCubixDimension(q["dimension"].toStr,records,q["spaceSource"] == "fin")
       ctx:=EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone(q["tz"].toStr),dimension)
@@ -210,11 +220,11 @@ internal class EnerCubixCockpitMetrics
           }
         }
       }
+      reports[prefix+"profile-auxiliary"]=report
     }
     else
     {
-      report:=EnerCubixHistory.report(q.dup.set("perArea",true),records,selected)
-      reports[prefix+"profile-area"]=report
+      report:=project(q.dup.set("perArea",true),records,selected)
       third=metric(report,"areaIntensity",category,boundary)
       extra:=(Map)report["extra"]
       selection:=EnerCubixMath.maps(extra["areaBasis"]).find |r| {r["nodeId"] == "__selection__" && r["categoryId"] == category}
@@ -225,10 +235,24 @@ internal class EnerCubixCockpitMetrics
       formula:=Str:Obj?["version":1,"expression":"energy / areaM2","energyBoundaryId":boundary["id"],"numerator":numerator,
         "denominator":["value":area["areaM2"],"unit":"m²","sourceRevisions":area["sourceRevisions"]],"value":third["value"],"unit":third["unit"]]
       third["details"]=["areaBasis":extra["areaBasis"],"areaResolution":area,"formula":formula]
+      reports[prefix+"profile-area"]=report
+    }
+    }
+    catch (Err e)
+    {
+      if (!localProjectionError(e)) throw e
+      third=projectionError(auxiliary == null ? "areaIntensity" : "auxiliaryEnergy",auxiliary ?: category,boundary)
     }
     values.insert(2,third)
     return values
   }
+
+  ** Only local programming faults degrade a card. Input, auth/budget, timeout,
+  ** cancellation, I/O/resource and unknown error types remain request failures.
+  private static Bool localProjectionError(Err e)
+  { [Err#,NullErr#,CastErr#,IndexErr#].contains(e.typeof) && (e.cause == null || localProjectionError(e.cause)) }
+  private static Str:Obj? projectionError(Str id,Str category,Str:Obj? boundary)
+  { ["id":id,"categoryId":category,"status":"error","error":["code":"COCKPIT_METRIC_ERROR"],"value":null,"valueType":"null","unit":"","quality":"metricError","valueBasis":"unavailable","completeValue":null,"knownValue":null,"sourceIds":Str[,],"reasonCodes":["COCKPIT_METRIC_ERROR"],"boundaryId":boundary["id"],"coverage":[Str:Obj?][,]] }
 
   static Str:Obj? metric(Str:Obj? report, Str id, Str category, Str:Obj? boundary)
   {
