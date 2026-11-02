@@ -227,3 +227,14 @@ COP 数量先按原小时顺序归并，单位变换和可靠性覆盖仍逐小�
 精确本批完整108类778方法272079校验通过，290320ms，registry-cop-full-fantom.log；旧1800秒容量夹具不作为 native30秒证明。捕获 zeda 的8模块私有注册仍14键、11报告99顶层90extra及清洗计数、热图2328/209、空间和能流5行/1图等旧结果；此捕获无COP配置，实际COP计算的证明来自受控夹具。峰158303、44010小时、462回调/12094样本、unprepared0，关闭raw/temporary0，有限prepared48继续计账。默认8必需provenance与12报告59实有组仍相等，仅periodsCaptureId归一化。
 
 冻结 registry-cop-offline-test.pod SHAB657943F9D75E439693AAC221E964D5BF26A489F50ECDF2D367DB8975E7EAA54，4199713B，仅私有验证，元数据0.14.1不得当新版部署。完整证据registry-cop-evidence.json。外部计划构造、最终投影及codec共同计账、规则与native factory、未来桶、实机年度9模块/82点和UI/PDF未完成；所有权计数不是JVM堆测量。只读账号按用户暂缓，无 FIN 服务/配置/历史/浏览器操作。
+
+
+规则小时事实与第九模块私有注册（源码验证）
+
+nonWorking consumer 在原生主点小时帧仍活动时读取严格值及闭合完整小时资格，之后只留最大值、首次最大时段和有效/无效/非工作/触发计数。沿用原日历及例外、单位阈值换算、部分首末小时、跨小时证据与可靠性门槛；quota1000/1/0不影响判断，不用诊断样本推断资格。规则上游配置/权限范围/预算门槛仍在原Rules.project执行，prepared回调只供非工作时段数字结果，默认旧路径保留；budgetVariance继续使用冻结预算结果，不创建报警。
+
+专项5类21方法529检查通过，5505ms，覆盖真实零、部分小时、跨小时长区间、过滤/替代/NA、无效日历、单位不兼容及工作日例外，全DTO等旧结果；output在peer占满剩余额度时可清自身，state可先关。9模块受控联合仅2主点/1COP，非工作、禁用及预算偏差配置共存，nativeRead2/unprepared0，投影传空历史仍与旧规则相等，无隐式回退。
+
+精确完整110类782方法272185检查通过，292785ms（registry-rule-full-fantom.log）。捕获9模块注册仍14私有键；旧11报告99顶层90extra及清洗计数、2328热图/209排除日、空间和能流5行1图无差异。该zeda捕获COP/规则配置均为0，不能视为真实COP/规则运行。6窗口44010小时，462回调12094样本，峰158304、unprepared0，关闭raw/temporary0，有限prepared48仍计账。默认8必需provenance与12报告59实有组严格相等，仅periodsCaptureId归一化。
+
+冻结 registry-rule-offline-test.pod SHAFF3A470565A76F275AB845B326601295FFBCF2583434EC2A7857CE020C04C871，4237891B，元数据0.14.1仅私有验证，不能当新版部署。下一阶段须把copData/ruleData也收紧为完整查询签名，接元数据冻结/来源session、未来范围及所有最终图/REST共同计账，之后才切native并验82点。当前输入外部计划及最终投影未共同计账，逻辑计数不作堆测量。无服务/历史/配置/浏览器操作，只读账号暂缓；UI/PDF及实机验收未完成。

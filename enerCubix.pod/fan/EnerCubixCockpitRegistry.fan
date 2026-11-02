@@ -14,11 +14,12 @@ internal class EnerCubixCockpitRegistry
     {
       generation.hold(64+2*(q.size+8))
       if(DateTime.fromIso(q["to"].toStr)>DateTime.fromIso(q["asOf"].toStr)) throw ArgErr("cockpitRegistryFuturePlan")
-      if(!q.isImmutable || !records.isImmutable || !boundary.isImmutable || enabled.any |id| {!["kpis","trend","space","time","endUse","organization","balance","efficiency"].contains(id)}) throw ArgErr("cockpitRegistryPlan")
+      if(!q.isImmutable || !records.isImmutable || !boundary.isImmutable || enabled.any |id| {!["kpis","trend","space","time","endUse","organization","balance","efficiency","issues"].contains(id)}) throw ArgErr("cockpitRegistryPlan")
+      if(enabled.contains("issues") && !owned.isImmutable) throw ArgErr("cockpitRegistryRulePlan")
       if(enabled.contains("balance") && (!flowPlan.isImmutable || (flowEnabled && (flowPlan["canonicalRecords"] isnot List || flowPlan["request"] isnot Map)))) throw ArgErr("cockpitRegistryFlowPlan")
       if(enabled.contains("efficiency") && (!efficiencyPlan.isImmutable || (copEnabled && (efficiencyPlan["records"] isnot List || efficiencyPlan["request"] isnot Map || efficiencyPlan["items"] isnot List)))) throw ArgErr("cockpitRegistryCopPlan")
-      metadata.watch |->Void| {works.clear;queries.each |v| {v.clear};queries.clear;space.clear;currentPoints.clear;tariffs.clear;billing.clear;attachedCleaning.clear;flowMeters.clear;flowPeriods.clear;copWorks.clear;copKeys.clear;diagnostics=Str:Obj?[:];planning=null;flowCatalog=null;copCatalog=null}
-      metadata.hold(31+loadedPoints.size);currentPoints=loadedPoints.dup
+      metadata.watch |->Void| {works.clear;queries.each |v| {v.clear};queries.clear;space.clear;currentPoints.clear;tariffs.clear;billing.clear;attachedCleaning.clear;flowMeters.clear;flowPeriods.clear;copWorks.clear;copKeys.clear;ruleWorks.clear;diagnostics=Str:Obj?[:];planning=null;flowCatalog=null;copCatalog=null}
+      metadata.hold(32+loadedPoints.size);currentPoints=loadedPoints.dup
       catalog=EnerCubixCockpitCatalog(records,TimeZone(q["tz"].toStr),model,units)
       planning=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",metadata)
       if(flowEnabled)
@@ -58,6 +59,18 @@ internal class EnerCubixCockpitRegistry
           if(copKeys.unique.size!=items.size) throw ArgErr("cockpitRegistryCopPlan")
           items.each |item|
           {id:=((Map)item["config"])["id"].toStr;metadata.hold(20);copWorks[id]=EnerCubixCockpitCopWork(cq,item,copCatalog,budget);add("cop:"+id,EnerCubixCockpitReports.copQuery(cq,id))}
+        }
+      }
+      if(enabled.contains("issues") && owned["rulesComplete"]!=false)
+      {
+        generation.hold(2+((owned["rules"] as List)?.size ?: 0))
+        EnerCubixMath.maps(owned["rules"]).each |profile|
+        {
+          threshold:=EnerCubixMath.num(profile["threshold"])
+          if(profile["ruleType"]!="nonWorkingHighUsage" || profile["enabled"]!=true || profile["validation"]=="invalid" || profile["categoryRef"]!=q["_cockpitCategoryId"] || threshold==null || threshold<0f) return
+          id:=profile["id"].toStr
+          if(ruleWorks.containsKey(id)) throw ArgErr("cockpitRegistryRulePlan")
+          metadata.hold(12);ruleWorks[id]=EnerCubixCockpitRuleWork(q,profile,records,boundary,catalog,budget)
         }
       }
       add("profile-energy",q)
@@ -143,6 +156,7 @@ internal class EnerCubixCockpitRegistry
   private EnerCubixCockpitCatalog? copCatalog
   private Str:EnerCubixCockpitCopWork copWorks := [:]
   private Str[] copKeys := [,]
+  private Str:EnerCubixCockpitRuleWork ruleWorks := [:]
   private [Str:Obj?][] flowMeters := [,]
   private Str:Str flowPeriods := [:]
   private EnerCubixCockpitCapture? pool
@@ -210,6 +224,7 @@ internal class EnerCubixCockpitRegistry
       works.each |work| {withConsumerFrame |local| {work.addFrame(a,b,histories,local)}}
       if(flowWork!=null) withConsumerFrame |local| {flowWork.addFrame(a,b,histories,local)}
       copWorks.each |work| {withConsumerFrame |local| {work.addFrame(a,b,histories,local)}}
+      ruleWorks.each |work| {withConsumerFrame |local| {work.addFrame(a,b,histories,local)}}
       tariffs.each |cursor,id| {if(histories.containsKey(catalog.byId[id]["pointId"] as Str ?: "")) cursor.consumeHour}
       watermark=b
     }
@@ -235,6 +250,7 @@ internal class EnerCubixCockpitRegistry
       finally {scratch.close}
       Str[] copWarnings:=Str[,]
       copKeys.each |id| {copWorks[id].finish(copWarnings);copWarnings=(Str[])((Map)copWorks[id].result["report"])["warnings"]}
+      ruleWorks.each |work| {work.finish}
       cleaningKeys.each |key| {pool.seal(key)}
       diagnostics=pool.freeze;pool.bind(metadata);flowWork?.project;done=true
     }
@@ -271,6 +287,8 @@ internal class EnerCubixCockpitRegistry
   }
   Str:Obj? copData(Str id)
   {check;if(!done || attachedCleaning.size!=cleaningKeys.size || !copWorks.containsKey(id)) throw ArgErr("cockpitRegistryCopNotPrepared");return copWorks[id].result}
+  Str:Obj? ruleData(Str id)
+  {check;if(!done || attachedCleaning.size!=cleaningKeys.size || !ruleWorks.containsKey(id)) throw ArgErr("cockpitRegistryRuleNotPrepared");return ruleWorks[id].result}
   private Str:Obj? signature(Str:Obj? q)
   {q.findAll |v,k| {k!="_cockpitDeadline" && k!="_cockpitDiagnosticCapture" && k!="_cockpitPointIds"}}
   // Container type parameters can differ after native JSON/DTO conversion.
@@ -290,6 +308,7 @@ internal class EnerCubixCockpitRegistry
     closing=true
     flowWork?.close
     copWorks.each |work| {work.close}
+    ruleWorks.each |work| {work.close}
     works.each |work| {work.close}
     if(budget.diagnosticCapture===pool) budget.diagnosticCapture=null
     metadata.close;diagnosticOwner.close;flowModel?.close;copModel?.close;model.close;catalog=null;pool=null;flowWork=null;cleaningKeys.clear;closed=true

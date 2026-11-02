@@ -2,7 +2,7 @@
 ** alarm/message is created, and no history beyond the existing plan is read.
 internal class EnerCubixCockpitRules
 {
-  static Str:Obj? project(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? owned,Str:Obj? boundary,Str:Obj? budget,Str snapshotId)
+  static Str:Obj? project(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? owned,Str:Obj? boundary,Str:Obj? budget,Str snapshotId,|Str->Str:Obj?|? preparedRule := null)
   {
     evaluations:=[Str:Obj?][,];items:=[Str:Obj?][,]
     if(owned["rulesComplete"] == false) return ["evaluations":[["status":"unavailable","reasonCodes":["RULE_CONFIG_UNREADABLE"]]],"items":items]
@@ -32,7 +32,11 @@ internal class EnerCubixCockpitRules
         if(budget["status"] != "ok" || variance == null || p["currency"] != budget["currency"] || p["thresholdUnit"] != "%") {e["reasonCodes"]=["RULE_BUDGET_UNAVAILABLE"];return}
         e["actual"]=variance;e["unit"]="%";e["status"]=variance > threshold ? "triggered" : "notTriggered"
       }
-      else if(p["ruleType"] == "nonWorkingHighUsage") nonWorking(e,p,q,records,histories,boundary,threshold)
+      else if(p["ruleType"] == "nonWorkingHighUsage")
+      {
+        if(preparedRule==null) nonWorking(e,p,q,records,histories,boundary,threshold)
+        else e.setAll(preparedRule(p["id"].toStr))
+      }
       else {e["reasonCodes"]=["RULE_TYPE_UNSUPPORTED"];return}
       if(e["status"] != "triggered") return
       from:=e["triggerFrom"] ?: q["from"];to:=e["triggerTo"] ?: q["to"]
@@ -101,7 +105,7 @@ internal class EnerCubixCockpitRules
     }
     finally {if(guard != null) guard.temporary.val=baseline}
   }
-  private static Bool validCalendar(Str:Obj? c)
+  internal static Bool validCalendar(Str:Obj? c)
   {
     if(c["workDays"] isnot List || c["workHours"] isnot List) return false
     if(((List)c["workDays"]).any |v| {n:=EnerCubixMath.num(v);return n == null || n < 1f || n > 7f || n.floor != n}) return false

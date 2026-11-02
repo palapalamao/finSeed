@@ -4,7 +4,7 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:], |Str,Str:Obj?->Str:Obj?|? preparedReport := null,|Str->Str:Obj?|? preparedCop := null)
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:], |Str,Str:Obj?->Str:Obj?|? preparedReport := null,|Str->Str:Obj?|? preparedCop := null,|Str->Str:Obj?|? preparedRule := null)
   {
     input=(Str:Obj?)input.toImmutable
     ownedConfig=(Str:Obj?)ownedConfig.toImmutable
@@ -183,7 +183,7 @@ class EnerCubixCockpit
     {
       try
       {
-        clues:=EnerCubixCockpitRules.project(request,frozen,histories,ownedConfig,budgetBoundary,budgetResult,snapshotId)
+        clues:=EnerCubixCockpitRules.project(request,frozen,histories,ownedConfig,budgetBoundary,budgetResult,snapshotId,preparedRule)
         ruleConfiguration=EnerCubixMath.maps(clues["configuration"])
         modules["issues"]=EnerCubixCockpitIssues.project(observation,events,values,request,boundary,ctx,clues)
       }
