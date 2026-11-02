@@ -151,3 +151,11 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 功能RED为reportConsumerPlan；修正执行参数后的专项5类65方法3991校验通过（working-consumer-final-tests.log），覆盖25h DST、重复小时、非整小时、NA、零分母、失败peer隔离；首次执行误带不存在EnerCubixWorkingTest，记录为无效整套执行，未计通过。18设备+1000无关catalog点的工作日输出保留图下界16868、输出准入25776、联合峰106657。此前完整91类718方法260672校验仍对应39b03c00，本增量未重复完整套件。
 
 捕获main另用独立budget的原整段计算作oracle，带工作日/时段与例外配置；workingHours和workingDays各9个必需顶层及6个extra组完全一致，来源诊断采样不同未作相等声明。私有计算峰90803/raw691、385回调/12094捕获样本、unprepared0，关闭raw/temporary0，有限元数据35继续计账，无FIN I/O。默认整包8必需provenance/12报告60槽59实有组仍相等，原缺省coverage保留，仅periodsCaptureId归一化。working-consumer-evidence.json与working-consumer-native-parity.json；离线冻结包working-consumer-offline-test.pod SHA9B3C52C66CF3DCCF5D97D8F8F59ADBC9F9898FF748ED02124BFE48BE34678C61。全局联合读取/公平1000诊断、空间仅摘要、热图、flow/COP/规则和实机全站年度仍待，未提升为实机验收。
+
+空间仅摘要与热图选择性输出已实现私有缝。81焦点+18主点+1000无关catalog先复现完整小时报告构造PREPARED_READ_LIMIT；summary仅允许profile/energy/non-area物理scope，保留原totals/knownTotals/usageCoverage三个消费组，不生成未使用series/details/诊断；同小时跨表与独立整段归约不变。该受控例输出图下界15228、输出准入75187、私有联合峰126656。逐项对照缺测、NA、别名同源与Wh换算通过。
+
+热图只保留一个本地日的临时点，再输出原规则允许的完整日单元格或排除日原因，保留23/25h DST及重复小时、部分查询/截止、真实零和清洗质量。按原单小时LineFold而非直接复制tick.value；整日输出先准入再转移来源数组，state/output独立，失败不发布/不重试半成品，不接收带历史ticks的定义。初次语义对照发现全字符串Map被Fantom推为Str:Str，与旧Str:Obj?虽同内容但不相等，最小运行复现确认后显式指定类型；没有归一化掉此差异。
+
+本批精确源码完整93类730方法261166校验通过，217501ms（selective-output-full-fantom.log）；其中旧1800秒容量夹具不提升为原生30秒证明。专项4类40方法2149校验通过。真实捕获main离线summary三组等旧profile，峰11336；热图2328格/209排除日等旧time模块，峰36416；各385回调/12094捕获样本、unprepared0、关闭raw/temporary0、有限metadata35继续计账，无FIN I/O。默认整包8必需provenance与12报告60槽59实有组等旧结果，原缺省flow coverage保留，仅periodsCaptureId归一化。证据selective-output-evidence.json/native-parity.json/default-parity.json；冻结离线包selective-output-offline-test.pod SHAD27A9286F131669342FCD6D62F5489EA8D40584D7F85444B32FA085A0C96811A。
+
+所有权边界补记：当前consumer将调用方提供的dim.records视为借入输入；Dimension.make在Context.useOwner前的r.dup/variables复制及索引，尚不属于consumer计数。联合注册时必须共享并为每维度投影单独准入，模型owner覆盖输出借用期；不能将本批私有source/context/output峰外推成全模型、JVM heap或9模块联合证明。注册表、全包公平1000诊断、flow/COP/规则适配与最终候选实机年度尚待；当前安装/默认不切换，只读账号仍按用户暂缓。

@@ -102,6 +102,14 @@ class EnerCubixReportConsumerTest : Test
   {exerciseOutputGraph("own",100);exerciseOutputGraph("organization",24,true)}
   Void testWorkingOutputOwnsTwoBinsWithoutUnusedPeriodSeries()
   {exerciseOutputGraph("working")}
+  Void testSpaceFocusSummaryDoesNotMaterializeUnusedHourlyReport()
+  {exerciseOutputGraph("summary")}
+  Void testFocusSummaryKeepsOriginalOwnTotalsAndCoverage()
+  {
+    exercise(query,records,false,false,"kWh",true)
+    exercise(query,records,false,true,"kWh",true)
+    rs:=records;rs.last["pointId"]="pa";exercise(query,rs,false,false,"Wh",true)
+  }
 
   private Void exerciseOutputGraph(Str mode,Int hours := 24,Bool failFinish := false)
   {
@@ -110,11 +118,13 @@ class EnerCubixReportConsumerTest : Test
     for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","categoryId":"c","pointId":"p$i"])}
     dimension:="metering";kind:="daily";area:=false
     if(mode=="working") {kind="workingDays";rs.add(["id":"cal","kind":"calendar","workDays":[1,2,3,4,5]])}
-    if(mode=="space")
+    if(mode=="space" || mode=="summary")
     {
       dimension="space";ids.clear
-      for(i:=0;i<10;i++) {ids.add("s$i");rs.add(["id":"s$i","kind":"space","parentId":i==0 ? null : "s"+(i-1),"area":100f])}
-      rs.findAll |r| {r["kind"]=="meter"}.each |r| {r["spaceId"]="s9"}
+      spaces:=mode=="summary" ? 81 : 10
+      for(i:=0;i<spaces;i++) {ids.add("s$i");rs.add(["id":"s$i","kind":"space","parentId":i==0 ? null : "s"+(i-1),"area":100f])}
+      rs.findAll |r| {r["kind"]=="meter"}.each |r| {r["spaceId"]="s"+(spaces-1)}
+      if(mode=="summary") kind="profile"
     }
     if(mode=="organization")
     {
@@ -141,7 +151,7 @@ class EnerCubixReportConsumerTest : Test
     {
       dim:=EnerCubixDimension(dimension,rs)
       ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state);ctx.orderWarnings
-      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state)
+      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state,mode=="summary")
       EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
       consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,"hour",state,output)
       verify(budget.peak.val<200000)
@@ -167,6 +177,14 @@ class EnerCubixReportConsumerTest : Test
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
+      if(mode=="summary")
+      {
+        verify(!actual.containsKey("series"));verify(!actual.containsKey("rows"))
+        ["totals","knownTotals"].each |field|
+        {xs:=EnerCubixMath.maps(((Map)actual["summary"])[field]);verifyEq(xs.size,81);verify(xs.all |x| {x["value"]==432f && ((List)x["sourceIds"]).size==18})}
+        verify(((EnerCubixPeriodConsumer[])EnerCubixReportConsumer#.field("periods").get(consumer)).all |p| {p.periods.isEmpty})
+        verify(((Map)EnerCubixReportConsumer#.field("evidence").get(consumer)).isEmpty)
+      }
       if(hours==100) {known:=(Map)((Map)actual["extra"])["knownUsage"];verifyEq(((List)known["sourceUsage"]).size,1000);verifyEq(known["sourceUsageRowCount"],1800)}
       if(mode=="space") verifyEq(EnerCubixMath.maps(((Map)actual["extra"])["details"]).size,180)
       if(mode=="organization")
@@ -251,7 +269,7 @@ class EnerCubixReportConsumerTest : Test
     output.close;verify(actual.isEmpty);verifyEq(budget.state.temporary.val,0)
   }
 
-  private Void exercise(Str:Obj? q,[Str:Obj?][] rs,Bool failFinish := false,Bool empty := false,Str sourceUnit := "kWh")
+  private Void exercise(Str:Obj? q,[Str:Obj?][] rs,Bool failFinish := false,Bool empty := false,Str sourceUnit := "kWh",Bool summaryOnly := false)
   {
     inputBefore:=rs.toStr
     points:=Str:Dict[:]
@@ -270,7 +288,7 @@ class EnerCubixReportConsumerTest : Test
     dimension:=EnerCubixDimension("space",rs,true)
     ctx:=EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone.utc,dimension);ctx.useOwner(state);ctx.orderWarnings
     queryEnd:=DateTime.fromIso(q["to"].toStr)
-    report:=EnerCubixReport(ctx,q,at,queryEnd,q["kind"].toStr,"month",q["metric"].toStr,state)
+    report:=EnerCubixReport(ctx,q,at,queryEnd,q["kind"].toStr,"month",q["metric"].toStr,state,summaryOnly)
     cursors:=EnerCubixLineCursor[,]
     if(q["kind"]=="utility") EnerCubixEndUse.resolve(ctx,EnerCubixMath.strings(q["nodeIds"])).each |meter| {cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
     else EnerCubixMath.strings(q["nodeIds"]).each |id| {ctx.categories(id).each |category| {cursors.add(report.openLine(id,category))}}
@@ -294,18 +312,25 @@ class EnerCubixReportConsumerTest : Test
     }
     actual:=consumer.finish
     label:=q["kind"].toStr
-    ["summary","series","rows","warnings"].each |key| {verifyEq(actual[key],expected[key],"$label : $key")}
+    if(summaryOnly)
+    { ["totals","knownTotals"].each |key| {verifyEq(((Map)actual["summary"])[key],((Map)expected["summary"])[key],key)} }
+    else ["summary","series","rows","warnings"].each |key| {verifyEq(actual[key],expected[key],"$label : $key")}
     a:=(Map)actual["extra"];e:=(Map)expected["extra"]
-    e.keys.findAll |key| {key != "knownUsage"}.each |key| {verifyEq(a[key],e[key],"$label : extra/$key")}
-    actualKnown:=((Map)a["knownUsage"]).dup;expectedKnown:=((Map)e["knownUsage"]).dup
-    if(expectedKnown.containsKey("sourceUsageCaptureId"))
-    {verify(actualKnown["sourceUsageCaptureId"] is Str);actualKnown.remove("sourceUsageCaptureId");expectedKnown.remove("sourceUsageCaptureId")}
-    verifyEq(actualKnown,expectedKnown)
+    if(summaryOnly) {verifyEq(a["usageCoverage"],e["usageCoverage"]);verifyEq(a.keys.sort,["relationBasis","usageCoverage"])}
+    else
+    {
+      e.keys.findAll |key| {key != "knownUsage"}.each |key| {verifyEq(a[key],e[key],"$label : extra/$key")}
+      actualKnown:=((Map)a["knownUsage"]).dup;expectedKnown:=((Map)e["knownUsage"]).dup
+      if(expectedKnown.containsKey("sourceUsageCaptureId"))
+      {verify(actualKnown["sourceUsageCaptureId"] is Str);actualKnown.remove("sourceUsageCaptureId");expectedKnown.remove("sourceUsageCaptureId")}
+      verifyEq(actualKnown,expectedKnown)
+    }
     verifyEq(budget.state.unprepared.val,0)
     cursors.each |cursor| {verify(cursor.line.ticks.isEmpty)}
-    escapedRows:=(List)actual["rows"];escapedRow:=(Map)escapedRows.first;escapedArea:=cursors.first.line.normalizationArea
+    escapedRows:=(List)(summaryOnly ? ((Map)actual["summary"])["totals"] : actual["rows"]);escapedRow:=(Map)escapedRows.first;escapedArea:=cursors.first.line.normalizationArea
     sources.each |source| {source.close};state.close
-    verifyEq(actual["summary"],expected["summary"])
+    if(summaryOnly) verifyEq(((Map)actual["summary"])["totals"],((Map)expected["summary"])["totals"])
+    else verifyEq(actual["summary"],expected["summary"])
     verifyEq(budget.state.temporary.val,output.entries)
     output.close;verify(actual.isEmpty);verify(escapedRows.isEmpty);verify(escapedRow.isEmpty)
     verify(escapedArea.isEmpty)

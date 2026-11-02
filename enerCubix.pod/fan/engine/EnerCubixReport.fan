@@ -1,7 +1,9 @@
 internal class EnerCubixReport
 {
-  new make(EnerCubixContext ctx, Str:Obj? request, DateTime from, DateTime to, Str kind, Str period, Str metric,EnerCubixPreparedOwner? catalogOwner := null)
+  new make(EnerCubixContext ctx, Str:Obj? request, DateTime from, DateTime to, Str kind, Str period, Str metric,EnerCubixPreparedOwner? catalogOwner := null,Bool summaryFrames := false)
   {
+    if(summaryFrames && (catalogOwner == null || kind != "profile" || metric != "energy" || request["perArea"] == true)) throw ArgErr("summaryFramePlan")
+    this.summaryFrames=summaryFrames
     this.ctx=ctx; this.request=request; this.from=from; this.to=to; this.kind=kind; this.period=period; this.metric=metric
     if(catalogOwner != null)
     {
@@ -37,6 +39,7 @@ internal class EnerCubixReport
   private [Str:Obj?]? consumedEvidence
   private Str:[Str:Obj?] consumedDaily := [:]
   private Str:[Str:Obj?][] consumedWorking := [:]
+  internal const Bool summaryFrames
 
   internal Bool acceptsFrames()
   { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
@@ -54,6 +57,17 @@ internal class EnerCubixReport
   internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence,Str:[Str:Obj?] daily := [:],Str:[Str:Obj?][] working := [:])
   {
     consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence;consumedDaily=daily;consumedWorking=working
+    if(summaryFrames)
+    {
+      // Space focus reads these three groups only. Keep their original line
+      // folds and coverage; no period series, selection totals or details exist.
+      summary["totals"]=lines.map |l->[Str:Obj?]|
+      {v:=l.total;return ["id":l.id,"name":l.name,"categoryId":l.category,"value":v.value,"valueType":v.valueType,"quality":v.quality,"unit":l.unit,"sourceIds":v.sources]}
+      summary["knownTotals"]=lines.map |l->[Str:Obj?]|
+      {v:=l.knownTotal;return ["id":l.id,"name":l.name,"categoryId":l.category,"unit":l.unit,"value":v.value,"valueType":v.valueType,"quality":v.quality,"sourceIds":v.sources]}
+      extra["usageCoverage"]=lines.map |l->[Str:Obj?]| {this.coverage(l)}
+      return Str:Obj?["summary":summary,"extra":extra]
+    }
     return finish(lines)
   }
   internal Void clearFrames()
@@ -395,7 +409,7 @@ internal class EnerCubixReport
       lines.findAll |line| {!line.reference && !line.gauge && !line.ratio}.map |line->Str| {line.category}.unique.sort.each |Str category,Int categoryIndex|
       {order=categoryIndex*(ctx.byId.size+1);EnerCubixMath.maps(selectionGroup(lines,category)["meters"]).each |meter| {add(meter["id"].toStr,category,1)}}
     order=0
-    if(ctx.dimension != null && kind != "utility") lines.findAll |line| {!line.reference}.each |line|
+    if(!summaryFrames && ctx.dimension != null && kind != "utility") lines.findAll |line| {!line.reference}.each |line|
     {detailMembers(line).each |meter| {add(meter["id"].toStr,meter["categoryId"] as Str ?: "",3)}}
     return out
   }
@@ -404,13 +418,14 @@ internal class EnerCubixReport
   ** in several scope rows. Duplicate-category lines may over-reserve safely.
   internal Str:Int frameShape(EnerCubixLine[] lines)
   {
-    members:=0;details:=0
+    members:=0;details:=0;maxMembers:=0
     lines.findAll |line| {!line.reference}.each |line|
     {
-      members+=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).size
-      if(ctx.dimension != null && kind != "utility") details+=detailMembers(line).size
+      n:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).size
+      members+=n;maxMembers=maxMembers.max(n)
+      if(!summaryFrames && ctx.dimension != null && kind != "utility") details+=detailMembers(line).size
     }
-    return ["members":members,"details":details]
+    return ["members":members,"details":details,"maxMembers":maxMembers]
   }
 
   private EnerCubixValue meterTotal(Str id, Str category, Bool known := false)

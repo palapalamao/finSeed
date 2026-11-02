@@ -6,6 +6,7 @@ internal class EnerCubixReportConsumer
     DateTime from,DateTime to,Str gran,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output)
   {
     if(!report.acceptsFrames || !report.ownedFrameCatalog(state) || state === output || state.budget !== output.budget || !ctx.ownedCatalog(state.budget) || cursors.any |c| {c.watermark != from || !c.line.ticks.isEmpty}) throw ArgErr("reportConsumerPlan")
+    if(report.summaryFrames && cursors.any |c| {c.line.ratio || c.line.gauge || c.line.reference}) throw ArgErr("summaryFrameLine")
     this.ctx=ctx;this.report=report;this.cursors=cursors.dup;this.to=to;this.at=from;this.output=output
     state.watch |->Void| {closeState};state.hold(20+5*cursors.size)
     definitions:=EnerCubixLine[,]
@@ -19,7 +20,7 @@ internal class EnerCubixReportConsumer
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
     n:=report.dailyFrames ? 24 : (report.workingFrames ? 2 : 0);bucket:=EnerCubixMath.bucket(from,gran)
-    if(!report.dailyFrames && !report.workingFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
+    if(!report.summaryFrames && !report.dailyFrames && !report.workingFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
     shape:=report.frameShape(cursors.map |c->EnerCubixLine| {c.line})
     // 40 per period covers point+detail maps/links; 32 per membership covers
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
@@ -29,7 +30,9 @@ internal class EnerCubixReportConsumer
     // aliased lists/maps when another owner has filled the remaining budget.
     maxList:=(n*cursors.size).max(shape["details"]).max(shape["members"]).max(ctx.byId.size).max(1000)
     output.hold(128+2*maxList)
-    finishScratch=64*(ctx.byId.size+shape["members"]+shape["details"]+cursors.size+1)
+    // The summary finalizer creates only two line vectors and one coverage
+    // vector. It never creates selection/detail candidate or area unions.
+    finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(ctx.byId.size+shape["members"]+shape["details"]+cursors.size+1)
     ctx.byId.each |record| {protect(record)}
     // Area graphs were created under the calculation owner. They remain linked
     // from definitions (even perArea=false), so transfer their actual graph too.
@@ -37,7 +40,7 @@ internal class EnerCubixReportConsumer
     cursors.each |cursor| {output.hold(ownedMetadata(cursor.line.normalizationArea));cursor.line.outputOwnsArea=true}
     cursors.each |cursor|
     {
-      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.dailyFrames && !report.workingFrames))
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames))
       if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
       if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,state,output))
       points:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
@@ -101,7 +104,8 @@ internal class EnerCubixReportConsumer
   {
     // No borrowed header list survives into detail reads that replace cache slots.
     reads:=report.frameReads;covers.each |cover| {cover.addFrame(reads,frame)}
-    capture(reads);emptyOmitted=emptyOmitted || report.frameEmptyOmitted;unpreparedOmitted=unpreparedOmitted || report.frameUnpreparedOmitted
+    if(!report.summaryFrames)
+    {capture(reads);emptyOmitted=emptyOmitted || report.frameEmptyOmitted;unpreparedOmitted=unpreparedOmitted || report.frameUnpreparedOmitted}
   }
   private Void consumeMeters(Int phase,DateTime end)
   {
@@ -127,7 +131,8 @@ internal class EnerCubixReportConsumer
         consumer.finish;line:=cursors[i].finish;output.hold(4)
         line.consumedTotals=Str:EnerCubixValue[:]
         ["value","known","baseValue","baseKnown"].each |mode| {line.consumedTotals[mode]=consumer.total(mode)}
-        buckets[line.id]=["rows":consumer.periods];coverage[line.id]=report.frameCoverage(line,covers[i].finish)
+        if(!report.summaryFrames) buckets[line.id]=["rows":consumer.periods]
+        coverage[line.id]=report.frameCoverage(line,covers[i].finish)
         if(!daily.isEmpty) dailyData[line.id]=daily[i].finish
         if(!working.isEmpty) workingData[line.id]=working[i].finish
       }
