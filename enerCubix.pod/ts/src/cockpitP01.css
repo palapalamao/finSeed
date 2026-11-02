@@ -24,3 +24,6 @@
 .cockpit-reference .cockpit-budget-compact>h4{display:none}.cockpit-reference .cockpit-budget-more{margin-top:4px}
 
 .cockpit-reference .cockpit-budget-compact .cockpit-budget-values>div{padding:6px 0}.cockpit-reference .cockpit-budget-compact .cockpit-budget-progress progress{margin:4px 0 8px}
+
+.cockpit-kpi .cockpit-value{display:inline-block;max-width:100%;overflow-x:auto;white-space:nowrap;vertical-align:bottom}
+@media(max-width:390px){.cockpit-kpi .cockpit-number,.cockpit-kpi .cockpit-card-number{font-size:clamp(14px,5vw,20px)}.cockpit-kpi .cockpit-value,.cockpit-kpi small{display:block}}

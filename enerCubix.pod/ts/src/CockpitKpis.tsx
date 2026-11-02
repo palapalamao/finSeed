@@ -20,7 +20,7 @@ export function CockpitKpis({snapshot,name}:{snapshot:CockpitSnapshot;name:(id:s
    {metrics.map(metric=><section key={metric.id} className={'cockpit-kpi'+(metric.id==='energy'?' cockpit-energy':'')} data-metric={metric.id} aria-label={cockpitMetricTitle(metric.id)}>
     <h3>{cockpitMetricTitle(metric.id)}</h3>
     {metric.id==='auxiliaryEnergy'&&metric.categoryId&&<p className="cockpit-card-category">{name(metric.categoryId)}</p>}
-    <p className={metric.id==='energy'?'cockpit-number':'cockpit-card-number'}>{cockpitMetricValue(metric)} <small>{metric.unit==='count'?t('个'):metric.unit}</small></p>
+    <p className={metric.id==='energy'?'cockpit-number':'cockpit-card-number'}><span className="cockpit-value">{cockpitMetricValue(metric)}</span> <small>{metric.unit==='count'?t('个'):metric.unit}</small></p>
     <Tag className="cockpit-card-basis" color={['complete','currentState'].includes(metric.valueBasis)?'green':'gold'}>{basis(metric)}</Tag>
     {metric.id!=='activeAlarms'&&metric.comparison&&<p className="cockpit-card-comparison">{cockpitComparisonText(metric)}</p>}
     <details className="cockpit-card-details"><summary>{t('查看指标依据')}</summary>{metric.id==='activeAlarms'&&<p>{t('状态观察：{0}',metric.stateObservedAt?time(metric.stateObservedAt):t('暂无数据'))}</p>}{metric.id==='cost'&&<p>{t('按当前费率分析估算，非结算账单。')}</p>}{!!metric.reasonCodes?.length&&<p>{[...new Set(metric.reasonCodes.map(cockpitReasonText))].join(t('；'))}</p>}
