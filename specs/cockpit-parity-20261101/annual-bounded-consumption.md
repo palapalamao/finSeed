@@ -41,6 +41,13 @@
 - S2 单源内部 cursor：暂停原生分块和小时物化，保留未消费 raw/detail、清洗 previous 和跨小时闭合区间；Jan→Sep 闭合端只物化当前所需小时。共享 budget 仅允许一个 cursor，未实现跨源准入或 prepared 回收。关闭会实际清空未消费队列并释放其临时计账，已输出 prepared 状态仍保留/计账。8方法456校验覆盖清洗/NA/回绕、原始两种模式、密度拆分、缓冲所有权、真实EOF、失败及超时。45方法710校验、既有26方法233921校验通过；默认路径捕获main回放8个provenance/48业务组不变，峰值仍109425。新增入口未接全站，也未部署。证据：cursor-final-tests.log、cursor-legacy-stream-regression.log、cursor-seam-parity.json。
 - 后续 producer 增量：按所有活跃 cursor 共同计算 raw-held 和读块准入，逐源保留/释放未消费清洗详情与跨小时 interval；不再由各源独立声称200k。私有 withFrame 在消费者返回后使全部借用 reader 失效、清空自身 prepared/domain 引用，再仅释放自身条目；错误和超时也执行该清理。逃逸的旧 prefix 不允许切换释放模式；失效 reader 的 read/known/空域入口明确报错。拒绝的 owned reservation 不形成所有权，不重置其他源/消费者计数。消费者仍必须只保留另行计账的脱离源对象的 fold 或有界诊断，尚未实现 Context/全部业务出口所有权。
 - 受控82源各1000小时：原整批表示触发 PREPARED_READ_LIMIT；frame 路径完成82000对，scope82000、每源1000，含模拟外部状态和测试 scalar folds 后每轮保留1440、prepared+temporary峰值9876、raw峰值8391，902次读块回调/82082样本、unprepared0。此项测试 timeout 为30min，不是生产30s或真实FIN、9模块验收。5类32方法3225校验通过，既有3类26方法233921校验通过；默认真实捕获main回放8个provenance/48业务组不变、峰值109425。详见 cursor-owned-parity.json、cursor-owned-final-tests.log、cursor-frame-legacy-regression.log。默认加载路径仍未切换，安装仍0.14.1。
+- Report 内部 LineCursor 复用原叶级计算，每次仅产出一个原时间边界 tick；默认 line 仍完整收集原 ticks。LineFold 支持 value/known/baseValue/baseKnown，COP累计操作数后相除、传感器按原时长加权、首次不可靠来源和原浮点顺序，不保留输入 tick/来源数组。默认 Line 四个归约入口已复用；80类659方法241984校验通过，捕获main8个provenance/48业务组相等、峰值109425、unprepared0。证据：line-consumer-full-fantom.log、line-consumer-parity.json。全局消费者计划、Context与输出所有权尚未接入，不能将此当作全站修复。
+
+### 已确认的阶梯前序缓存污染（独立正确性修复，尚未实施）
+
+受控130个独立设备/主点、monthlyBlock恒定单价1、每小时cleaned完整用量1：先查主表00:13→01:00，再查01:00→02:00得到null/missingTariffBaseline；查询129个其他表使256基线缓存淘汰后，相同01:00→02:00变为1/cleaned。Context.cost代码未改；有效结果tier-cache-order-probe-ordered-unique.json。晚注入budget未启用ordered的初次探针不作为证据；非现场费率观察，zeda当前tariff0，所以不是年度422根因。
+
+架构已确认：缓存只能保存经canonical同设备周期前序证明的prefix，按原完整小时序及必要末段严格计算。不得将部分查询的baseline+raw直接当作整段前序；真实前序缺测仍必须使阶梯费用不可判。上述00:13→01仍null，01→02因真实00→01完整应冷/热/淘汰/倒序恒1。此项需单列独立oracle和业务差异白名单，不混入性能零差异声明，不放宽质量或用known小计建tier。
 - 当前离线结构盘点：82计划主点、边界18表、81个space焦点、18 own-profile、18 daily-own、79 balance-own，COP/calendar/tariff均0；focus多源有序energy集合去重1组。原词典序point扫描在该成员序有4处逆序。此盘点尚非完整消费者/峰值证明。
 
 ## 最小可执行分解（不是简单更换容器）

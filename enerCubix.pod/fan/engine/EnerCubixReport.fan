@@ -27,6 +27,13 @@ internal class EnerCubixReport
 
   EnerCubixLine line(Str id, Str category, Str? utility := null, DateTime start := from, DateTime end := to)
   {
+    cursor:=openLine(id,category,utility,start,end)
+    while(cursor.more) cursor.line.ticks.add(cursor.next)
+    return cursor.finish
+  }
+
+  internal EnerCubixLineCursor openLine(Str id,Str category,Str? utility := null,DateTime start := from,DateTime end := to)
+  {
     r:=ctx.byId[id]
     name:=r?.get("name")?.toStr ?: id
     if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定分项"))
@@ -45,11 +52,8 @@ internal class EnerCubixReport
     Str? directQuality:=null
     if (ctx.dimension != null && out.leak) directQuality=ctx.comparison == null ? ctx.dimension.leakQuality(id) : ctx.comparison.quality(id)
     else if (kind != "utility" && ctx.dimension?.dimension == "organization" && r != null && ["meter","totalMeter"].contains(r["kind"]?.toStr ?: "")) directQuality=ctx.dimension.quality([r])
-    cursor:=start
-    while (cursor < end)
+    read:=|DateTime cursor,DateTime next->EnerCubixTick|
     {
-      next:=kind == "comparison" && request["comparisonAlignment"] == "duration" ? cursor+1hr : EnerCubixMath.floorHour(cursor)+1hr
-      if (next > end) next=end
       EnerCubixValue value := EnerCubixValue()
       EnerCubixValue? numerator:=null; EnerCubixValue? denominator:=null
       EnerCubixValue? known:=null
@@ -109,11 +113,11 @@ internal class EnerCubixReport
       if (value.value == null) ctx.warn("${out.name}: ${value.quality}")
       tick:=EnerCubixTick(cursor,next,value,numerator,denominator); tick.known=known
       tick.baseValue=baseValue;tick.baseKnown=baseKnown;tick.baseNumerator=baseNumerator;tick.baseDenominator=baseDenominator
-      out.ticks.add(tick); cursor=next
+      return tick
     }
     if (request["perArea"] == true && !out.ratio) out.unit+="/m²"
-    if (activeKnown != null && activeKnown !== knownCtx) knownCtx.mergeKnown(activeKnown)
-    return out
+    return EnerCubixLineCursor(out,start,end,kind == "comparison" && request["comparisonAlignment"] == "duration",read,|->Void|
+    {if(activeKnown != null && activeKnown !== knownCtx) knownCtx.mergeKnown(activeKnown)})
   }
 
   Str:Obj? forecast(EnerCubixLine[] lines)

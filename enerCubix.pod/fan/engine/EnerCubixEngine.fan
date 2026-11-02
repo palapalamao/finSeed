@@ -178,24 +178,20 @@ internal class EnerCubixLine
   Str? utility
   EnerCubixTick[] ticks := [,]
 
-  EnerCubixValue baseTotal() { EnerCubixValue.sum(ticks.map |t->EnerCubixValue| {t.baseValue ?: t.value}) }
-  EnerCubixValue baseKnownTotal() { EnerCubixKnownUsage.combine(ticks.map |t->EnerCubixValue| {(t.baseKnown ?: t.known) ?: EnerCubixValue()}) }
+  EnerCubixValue baseTotal() { reduce(ticks,"baseValue") }
+  EnerCubixValue baseKnownTotal() { reduce(ticks,"baseKnown") }
 
   EnerCubixValue knownTotal(EnerCubixTick[] values := ticks)
-  { EnerCubixKnownUsage.combine(values.map |t->EnerCubixValue| { t.known ?: EnerCubixValue() }) }
+  { reduce(values,"known") }
 
   EnerCubixValue total(EnerCubixTick[] values := ticks)
+  { reduce(values,"value") }
+
+  private EnerCubixValue reduce(EnerCubixTick[] values,Str mode)
   {
-    if (ratio) return EnerCubixValue.divide(EnerCubixValue.sum(values.map |t->EnerCubixValue| { t.numerator ?: EnerCubixValue() }),EnerCubixValue.sum(values.map |t->EnerCubixValue| { t.denominator ?: EnerCubixValue() }))
-    if (gauge && !values.isEmpty)
-    {
-      incomplete:=values.find |t| { !t.value.reliable }
-      if (incomplete != null) return EnerCubixValue(null,incomplete.value.quality,incomplete.value.sources)
-      duration:=0f
-      weighted:=values.map |t->EnerCubixValue| { duration+=(t.end-t.ts).ticks.toFloat; return t.value.scale((t.end-t.ts).ticks.toFloat) }
-      return EnerCubixValue.sum(weighted).scale(1f/duration)
-    }
-    return EnerCubixValue.sum(values.map |t->EnerCubixValue| { t.value })
+    fold:=EnerCubixLineFold(this,mode)
+    values.each |tick| {fold.add(tick)}
+    return fold.finish
   }
 }
 
