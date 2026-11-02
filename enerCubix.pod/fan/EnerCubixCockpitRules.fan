@@ -77,8 +77,10 @@ internal class EnerCubixCockpitRules
             r:=ctx.byId[id];h:=ctx.byPoint[r?.get("pointId") as Str ?: ""]
             if(r == null || h == null || !EnerCubixBudgetScope.readable(r)) {reliable=false;return}
             value:=ctx.node(id,category,cursor,next)
-            evidence:=h.knownUsage(cursor,next,end);intervals:=EnerCubixMath.maps(evidence["intervals"])
-            if(value.value == null || !["ok","cleaned","corrected"].contains(value.quality) || evidence["detailsTruncated"] == true || EnerCubixMath.num(evidence["coveredSeconds"]) != 3600f || intervals.isEmpty || intervals.any |i| {DateTime.fromIso(i["intervalStart"].toStr) < cursor || DateTime.fromIso(i["intervalEnd"].toStr) > next || !["ok","cleaned","corrected"].contains(i["quality"])}) reliable=false
+            evidence:=h.knownUsage(cursor,next,end,true);intervals:=EnerCubixMath.maps(evidence["intervals"])
+            proven:=evidence["_closedOwnPrimaryHour"] == true
+            completeDetails:=evidence["detailsTruncated"] != true && !intervals.isEmpty && intervals.all |i| {DateTime.fromIso(i["intervalStart"].toStr) >= cursor && DateTime.fromIso(i["intervalEnd"].toStr) <= next && ["ok","cleaned","corrected"].contains(i["quality"])}
+            if(value.value == null || !["ok","cleaned","corrected"].contains(value.quality) || EnerCubixMath.num(evidence["coveredSeconds"]) != 3600f || (!proven && !completeDetails)) reliable=false
             values.add(value)
           }
           actual:=EnerCubixValue.sum(values).value

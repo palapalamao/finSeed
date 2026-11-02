@@ -73,10 +73,10 @@ internal class EnerCubixKnownUsage
   private EnerCubixHistoryData history
   private EnerCubixInterval[] rows := [,]
 
-  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd)
+  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
   {
     values:=EnerCubixValue[,]; details:=[Str:Obj?][,]; cursor:=start; covered:=0f; count:=0
-    DateTime? coverageStart:=null; DateTime? coverageEnd:=null
+    DateTime? coverageStart:=null; DateTime? coverageEnd:=null; closedHour:=true
     lo:=0; hi:=rows.size
     while (lo < hi) { mid:=(lo+hi)/2; if (rows[mid].start < start) lo=mid+1; else hi=mid }
     for (i:=lo;i<rows.size && rows[i].start < end;i++)
@@ -89,6 +89,7 @@ internal class EnerCubixKnownUsage
       if (row.start > cursor) values.add(EnerCubixValue(null,"missing",history.sources))
       q:=row.valueType == "na" ? "na" : row.quality
       if (row.value == null && ["ok","good","derived","estimated","cleaned","corrected"].contains(q)) q="missing"
+      if(includeRuleFacts && (row.value == null || row.end > end || !["ok","cleaned","corrected"].contains(q))) closedHour=false
       values.add(EnerCubixValue(row.value,q,history.sources)); cursor=row.end
       count++
       if (row.value != null)
@@ -101,7 +102,11 @@ internal class EnerCubixKnownUsage
     }
     if (cursor != end) values.add(EnerCubixValue(null,"incompleteInterval",history.sources))
     value:=combine(values)
-    return ["value":value,"knownValue":value.value,"knownValueType":value.valueType,"knownQuality":value.quality,"intervals":details,"coveredSeconds":covered,"intervalCount":count,"intervalStart":coverageStart?.toIso,"intervalEnd":coverageEnd?.toIso,"detailsTruncated":count > details.size]
+    out:=Str:Obj?["value":value,"knownValue":value.value,"knownValueType":value.valueType,"knownQuality":value.quality,"intervals":details,"coveredSeconds":covered,"intervalCount":count,"intervalStart":coverageStart?.toIso,"intervalEnd":coverageEnd?.toIso,"detailsTruncated":count > details.size]
+    // Business eligibility is proven over every source interval, before either
+    // the local or request-wide diagnostic capture can discard interval rows.
+    if(includeRuleFacts && closedHour && count > 0 && covered == 3600f && end-start == 1hr) out["_closedOwnPrimaryHour"]=true
+    return out
   }
 
   static EnerCubixValue combine(EnerCubixValue[] values)

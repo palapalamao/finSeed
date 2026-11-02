@@ -80,6 +80,7 @@ class EnerCubixCockpit
     // One union plan, frozen before reads; disjoint periods never imply a year-wide scan.
     request["_cockpitPointIds"]=boundary["sourcePointIds"]
     historyRequest:=request.dup
+    historyRequest["_cockpitNeedsRuleFacts"]=enabled.contains("issues") && EnerCubixMath.maps(ownedConfig["rules"]).any |r| {r["enabled"] == true && r["ruleType"] == "nonWorkingHighUsage" && r["categoryRef"] == category}
     effectiveEnd:=DateTime.fromIso(request["asOf"].toStr)
     if (DateTime.fromIso(request["to"].toStr) < effectiveEnd) effectiveEnd=DateTime.fromIso(request["to"].toStr)
     historyRequest["to"]=effectiveEnd.toIso

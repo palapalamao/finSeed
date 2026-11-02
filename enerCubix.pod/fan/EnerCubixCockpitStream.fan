@@ -95,6 +95,7 @@ internal class EnerCubixCockpitStream
   {
     this.point=point; this.config=config;this.budget=budget
     observedEnd=to
+    ruleEnd=request["_cockpitNeedsRuleFacts"] == true ? DateTime.fromIso(request["to"].toStr) : null
     this.from=EnerCubixMath.floorHour(from)
     this.to=EnerCubixMath.floorHour(to);if (this.to < to) this.to+=1hr
     hour=this.from
@@ -126,6 +127,7 @@ internal class EnerCubixCockpitStream
   private DateTime to
   private DateTime hour
   private DateTime observedEnd
+  private DateTime? ruleEnd
   private DateTime cutoff
   private DateTime[] queryEnds
   private [Str:Obj?][] queries
@@ -282,12 +284,13 @@ internal class EnerCubixCockpitStream
       known:=Str:Obj?[:]
       queryEnds.each |qEnd|
       {
-        row:=history.knownUsage(a,b,qEnd).dup;row.remove("value")
+        row:=history.knownUsage(a,b,qEnd,ruleEnd == qEnd).dup;row.remove("value")
         events:=EnerCubixMath.maps(row["intervals"])
         keep:=events.size.min((1000-budget.detailCount).max(0))
         row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
         row["detailsTruncated"]=(EnerCubixMath.num(row["intervalCount"]) ?: 0f) > keep.toFloat
         if(row["detailsTruncated"] == true) row["intervalsCaptureId"]=Uuid().toStr
+        else row.remove("_closedOwnPrimaryHour") // Complete diagnostics already prove the predicate.
         budget.detailCount+=keep
         known[qEnd.ticks.toStr]=row
       }
@@ -297,7 +300,11 @@ internal class EnerCubixCockpitStream
     // Keep its strict incompleteInterval state distinct from missing history.
     qualities:=values.vals.map |v->Str| {((Map)((Map)v)["strict"])["quality"].toStr}.unique
     if(qualities.size == 1 && values.vals.all |v| {emptyPair((Map)v)}) emptyUntil(end,qualities.first)
-    else values.each |v,k| {budget.cell(2+queryEnds.size);budget.materializedPairs++;reads[k]=v}
+    else values.each |v,k|
+    {
+      facts:=((Map)((Map)v)["known"]).vals.findAll |r| {((Map)r)["_closedOwnPrimaryHour"] == true}.size
+      budget.cell(2+queryEnds.size+facts);budget.materializedPairs++;reads[k]=v
+    }
     hour=end
     raw=raw.size > 2 ? raw[-2..-1] : raw
     intervals=intervals.findAll |row| {row.end > end}

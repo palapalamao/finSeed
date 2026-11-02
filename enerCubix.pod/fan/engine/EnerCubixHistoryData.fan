@@ -86,7 +86,7 @@ internal class EnerCubixHistoryData
   private Str:Obj? emptyKnown := [:]
   private EnerCubixKnownUsage? knownReader
 
-  Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd)
+  Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
   {
     if (prepared != null)
     {
@@ -100,11 +100,12 @@ internal class EnerCubixHistoryData
         preparedBudget?.unprepared?.increment
         return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
       }
-      out:=data.dup; out["value"]=EnerCubixValue(EnerCubixMath.num(data["knownValue"]),data["knownQuality"].toStr,sources)
+      out:=data.dup; if(!includeRuleFacts) out.remove("_closedOwnPrimaryHour")
+      out["value"]=EnerCubixValue(EnerCubixMath.num(data["knownValue"]),data["knownQuality"].toStr,sources)
       return out
     }
     if (knownReader == null) knownReader=EnerCubixKnownUsage(this)
-    return knownReader.read(start,end,queryEnd)
+    return knownReader.read(start,end,queryEnd,includeRuleFacts)
   }
 
   EnerCubixValue read(DateTime start, DateTime end, Bool raw := false)
