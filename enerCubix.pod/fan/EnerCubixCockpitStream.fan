@@ -551,7 +551,14 @@ internal class EnerCubixCockpitStream
     {
       a:=DateTime.fromIso(q["from"].toStr); b:=DateTime.fromIso(q["to"].toStr)
       if (a < hour) a=hour;if (b > end) b=end
-      if (b > a) pairs.add(["from":a,"to":b])
+      if (b > a)
+      {
+        pairs.add(["from":a,"to":b])
+        // Tier pricing also consumes the preceding part of this first hour.
+        // The native cycle range already includes it; prepare its exact pair.
+        if(a > hour && tariffs.any |t| {["monthlyBlock","yearlyBlock"].contains(t?.get("mode") as Str ?: "")})
+          pairs.add(["from":hour,"to":a])
+      }
     }
     pairs.dup.each |pair|
     {

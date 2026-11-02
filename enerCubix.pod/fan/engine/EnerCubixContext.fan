@@ -406,7 +406,10 @@ internal class EnerCubixContext
         saveBaseline(baselineKey,baseline)
       }
       nextKey:="$meterId|${cycle.ticks}|${to.ticks}"
-      saveBaseline(nextKey,EnerCubixValue.sum([baseline,raw]))
+      // Only one complete original hour extends the canonical prefix. A partial
+      // or multi-hour raw query is not the cycle's ordered hourly reduction.
+      if(from == EnerCubixMath.floorHour(from) && to == from+1hr)
+        saveBaseline(nextKey,EnerCubixValue.sum([baseline,raw]))
       if (!baseline.reliable || !raw.reliable) return EnerCubixValue(null,EnerCubixValue.worse(baseline.quality,raw.quality),raw.sources)
       if (baseline.value == null) return EnerCubixValue(null,"missingTariffBaseline",raw.sources)
       if (raw.value == null) return raw

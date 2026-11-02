@@ -43,11 +43,17 @@
 - 受控82源各1000小时：原整批表示触发 PREPARED_READ_LIMIT；frame 路径完成82000对，scope82000、每源1000，含模拟外部状态和测试 scalar folds 后每轮保留1440、prepared+temporary峰值9876、raw峰值8391，902次读块回调/82082样本、unprepared0。此项测试 timeout 为30min，不是生产30s或真实FIN、9模块验收。5类32方法3225校验通过，既有3类26方法233921校验通过；默认真实捕获main回放8个provenance/48业务组不变、峰值109425。详见 cursor-owned-parity.json、cursor-owned-final-tests.log、cursor-frame-legacy-regression.log。默认加载路径仍未切换，安装仍0.14.1。
 - Report 内部 LineCursor 复用原叶级计算，每次仅产出一个原时间边界 tick；默认 line 仍完整收集原 ticks。LineFold 支持 value/known/baseValue/baseKnown，COP累计操作数后相除、传感器按原时长加权、首次不可靠来源和原浮点顺序，不保留输入 tick/来源数组。默认 Line 四个归约入口已复用；80类659方法241984校验通过，捕获main8个provenance/48业务组相等、峰值109425、unprepared0。证据：line-consumer-full-fantom.log、line-consumer-parity.json。全局消费者计划、Context与输出所有权尚未接入，不能将此当作全站修复。
 
-### 已确认的阶梯前序缓存污染（独立正确性修复，尚未实施）
+### 已确认的阶梯前序缓存污染（独立正确性修复，源码通过，未部署）
 
 受控130个独立设备/主点、monthlyBlock恒定单价1、每小时cleaned完整用量1：先查主表00:13→01:00，再查01:00→02:00得到null/missingTariffBaseline；查询129个其他表使256基线缓存淘汰后，相同01:00→02:00变为1/cleaned。Context.cost代码未改；有效结果tier-cache-order-probe-ordered-unique.json。晚注入budget未启用ordered的初次探针不作为证据；非现场费率观察，zeda当前tariff0，所以不是年度422根因。
 
 架构已确认：缓存只能保存经canonical同设备周期前序证明的prefix，按原完整小时序及必要末段严格计算。不得将部分查询的baseline+raw直接当作整段前序；真实前序缺测仍必须使阶梯费用不可判。上述00:13→01仍null，01→02因真实00→01完整应冷/热/淘汰/倒序恒1。此项需单列独立oracle和业务差异白名单，不混入性能零差异声明，不放宽质量或用known小计建tier。
+
+专项已限制 next-prefix 仅由对齐整点、恰好一个原小时的步骤延伸；部分/多小时raw不写作canonical next。原prepared计划补齐阶梯起始小时的hour→queryFrom前缀pair，不扩大原生读域。6类77方法797校验覆盖普通/有budget Context、冷/热/倒序/淘汰、monthly/yearly、不同设备费率、阈值、跨年、真实缺测/NA/reset/negative/maximum及0、Float多小时分组和原分时费率。有效RED见tariff-prefix-red.log，结果tariff-prefix-extended-tests2.log；先前一次选错测试方法的执行不算完整通过。
+
+旧冻结0.14.1包与新隔离SDK的固定9模块对照：累计型135个、清洗型32个逐叶差异已分别列出，仅费用字段/费用资格/费用摘要、预算费用输入与预算规则输入及准备状态证据；未整体忽略任何模块。能耗/碳/强度、非费用报告/模块、来源、原始用量证据、覆盖秒数、币种、配置指纹及时间边界相等。每例同一读域、1次loader/1次原生读适配回调/3样本；unprepared从2变0。累计型恢复17.833333333333332已有费用，仍非完整费用，预算/规则仍不可判；清洗型第一段仍null、第二完整小时10，整个费用仍null。证据tariff-prefix-correctness-evidence.json及两份allowed-field-differences.json，离线包tariff-correctness-offline-test.pod SHA647EE5D38BB6E3DF1460165EFFF2156F0DD1F0F72F0BCB1ADB371D352A3EFDA6。捕获main8个provenance/48业务组不变。
+
+既有quality线索ID含随机query身份，旧冻结包重复执行即会改变等优先级Top3；对照只按业务键匹配全部事实，另存旧/新/旧重复的Top3顺序，不把该字段冒充已通过或归入费用白名单。此项既有排序限制仍未修复。
 - 当前离线结构盘点：82计划主点、边界18表、81个space焦点、18 own-profile、18 daily-own、79 balance-own，COP/calendar/tariff均0；focus多源有序energy集合去重1组。原词典序point扫描在该成员序有4处逆序。此盘点尚非完整消费者/峰值证明。
 
 ## 最小可执行分解（不是简单更换容器）
