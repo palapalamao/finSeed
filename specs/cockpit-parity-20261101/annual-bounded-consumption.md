@@ -38,6 +38,7 @@
 - ae96768a：单列修正规则的诊断配额依赖；同输入0/1/1000明细配额都为actual80、2个有效小时、触发1次。完整区间资格在裁剪前计算，未知/跨小时/NA/替代不因此可靠，私有事实仅实际启用的nonWorking消费者准备，新增保留事实逐条计账且默认不发布。差异白名单见 out/cockpit/parity-20261101/rule-diagnostic-correctness-evidence.json。
 - 39aa777d：4项19校验冻结原归约树、质量/来源顺序、coverage先每源sum再min、COP先sum操作数再divide。
 - 0d996c3a：增量严格/已有量标量fold，保留每原标量顺序，不接受合并块小计，不保留输入Value或可变sources引用，finish独立可继续。76类636方法238840校验通过；捕获main8个provenance/48业务组不变，峰值109425。未切批次扫描。
+- S2 单源内部 cursor：暂停原生分块和小时物化，保留未消费 raw/detail、清洗 previous 和跨小时闭合区间；Jan→Sep 闭合端只物化当前所需小时。共享 budget 仅允许一个 cursor，未实现跨源准入或 prepared 回收。关闭会实际清空未消费队列并释放其临时计账，已输出 prepared 状态仍保留/计账。8方法456校验覆盖清洗/NA/回绕、原始两种模式、密度拆分、缓冲所有权、真实EOF、失败及超时。45方法710校验、既有26方法233921校验通过；默认路径捕获main回放8个provenance/48业务组不变，峰值仍109425。新增入口未接全站，也未部署。证据：cursor-final-tests.log、cursor-legacy-stream-regression.log、cursor-seam-parity.json。
 - 当前离线结构盘点：82计划主点、边界18表、81个space焦点、18 own-profile、18 daily-own、79 balance-own，COP/calendar/tariff均0；focus多源有序energy集合去重1组。原词典序point扫描在该成员序有4处逆序。此盘点尚非完整消费者/峰值证明。
 
 ## 最小可执行分解（不是简单更换容器）

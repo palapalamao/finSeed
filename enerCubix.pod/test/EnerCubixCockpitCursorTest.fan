@@ -1,0 +1,166 @@
+using haystack
+using concurrent
+
+** Source-local scheduler seam only. No assertion of whole-request82-source
+** ownership/release or native FIN I/O is made by these controlled readers.
+class EnerCubixCockpitCursorTest : Test
+{
+  Void testLongGapClosesCurrentHourWithoutPreparingFutureYear()
+  {
+    end:=DateTime.fromIso("2026-11-02T00:00:00Z");september:=DateTime.fromIso("2026-09-01T00:00:00Z")
+    raw:=[HisItem(at,Number(0)),HisItem(september,Number(14))]
+    cfg:=config;q:=query(end);budget:=EnerCubixStreamBudget()
+    cursor:=open(q,raw,cfg,budget)
+    cursor.advance(at+1hr)
+    verifyEq(cursor.watermark,at+1hr);verifyEq(cursor.scanComplete,false)
+    h:=EnerCubixHistoryData(cursor.view)
+    verifyEq(h.read(at,at+1hr).quality,"incompleteInterval")
+    known:=h.knownUsage(at,at+1hr,end)
+    verifyEq(known["knownValue"],14f);verifyEq(known["coveredSeconds"],(september-at).ticks.toFloat/1sec.ticks.toFloat)
+    verifyEq(h.read(at+48hr,at+49hr).quality,"streamingReadNotPrepared")
+    verify(budget.materializedPairs <= 1);verify(budget.cells < 100)
+    cursor.close
+  }
+
+  Void testDirtyCursorHoursEqualExistingWholeSourceReader()
+  {
+    end:=at+8hr;q:=query(end)
+    raw:=[HisItem(at,Number(90)),HisItem(at+20min,NA.val),HisItem(at+30min,null),HisItem(at+40min,Number(1)),HisItem(at+50min,Number(8)),HisItem(at+90min,Number(9)),HisItem(at+4hr,Number(2)),HisItem(at+5hr,Number(3)),HisItem(end,Number(4))]
+    [config,Etc.makeDict(["defNull":Marker.val,"removeNA":Marker.val,"deltaMax":Number(5),"timeMax":Number.makeDuration(1hr)]),Etc.makeDict(["defVal":Number(2),"deltaMax":Number(5)]),Etc.makeDict(["hisTotalizedRollover":Number(100),"deltaMax":Number(5)])].each |cfg|
+    {
+      p:=point(cfg)
+      whole:=EnerCubixHistoryData(EnerCubixCockpitStream.prepare(q,records,["p":p],["p":cfg],reader(raw),EnerCubixStreamBudget()).first)
+      verifyEq(whole.quality,"cleaned")
+      cursor:=open(q,raw,cfg,EnerCubixStreamBudget())
+      (1..8).each |i|
+      {
+        finish:=at+Duration(i*1hr.ticks);start:=finish-1hr;cursor.advance(finish)
+        h:=EnerCubixHistoryData(cursor.view)
+        a:=h.read(start,finish);b:=whole.read(start,finish)
+        verifyEq(a.value,b.value);verifyEq(a.quality,b.quality);verifyEq(a.sources,b.sources)
+        x:=h.knownUsage(start,finish,end);y:=whole.knownUsage(start,finish,end)
+        ["knownValue","knownValueType","knownQuality","coveredSeconds","intervalCount","intervalStart","intervalEnd"].each |k| {verifyEq(x[k],y[k],k)}
+      }
+      verify(cursor.scanComplete);cursor.close
+    }
+  }
+
+  Void testOnlyRealPlannedEofCanFinalizeEmptyHour()
+  {
+    q:=query(at+2hr);budget:=EnerCubixStreamBudget()
+    cursor:=open(q,HisItem[,],config,budget);cursor.advance(at+1hr)
+    verify(cursor.scanComplete);verifyEq(cursor.watermark,at+1hr)
+    h:=EnerCubixHistoryData(cursor.view)
+    verifyEq(h.read(at,at+1hr).quality,"missing")
+    verifyEq(h.read(at-2hr,at-1hr).quality,"streamingReadNotPrepared")
+    cursor.close
+    point:=point(config);failed:=EnerCubixCockpitStream.openCursor(point,config,at,at+2hr,q,records,EnerCubixStreamBudget(),|Dict p,Span span,|HisItem| sink| {throw IOErr("controlled read failure")})
+    verifyErr(IOErr#) {failed.advance(at+1hr)}
+    verifyEq(failed.scanComplete,false);verifyErr(IOErr#) {failed.view}
+    failed.close
+  }
+
+  Void testSourceLocalSeamRejectsUnaccountedConcurrentCursor()
+  {
+    budget:=EnerCubixStreamBudget();q:=query(at+2hr)
+    first:=open(q,HisItem[,],config,budget)
+    verifyErr(ArgErr#) {open(q,HisItem[,],config,budget)}
+    first.close
+    second:=open(q,HisItem[,],config,budget);second.close
+    verifyEq(budget.nativeReads,0)
+  }
+
+  Void testBufferedDetailsRemainChargedUntilConsumedOrClosed()
+  {
+    end:=at+8hr;q:=query(end);raw:=HisItem[,]
+    for(i:=0;i<=480;i++) raw.add(HisItem(at+Duration(i*1min.ticks),Number(i)))
+    budget:=EnerCubixStreamBudget();cursor:=open(q,raw,config,budget)
+    cursor.advance(at+1hr)
+    h:=EnerCubixHistoryData(cursor.view)
+    verifyEq(h.read(at,at+1hr).value,60f)
+    verify(budget.state.temporary.val > 0)
+    verify(budget.state.peak.val > budget.cells)
+    charged:=budget.cells;cursor.close
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.cells,charged)
+    cursor.close;verifyEq(budget.cells,charged)
+    verifyErr(ArgErr#) {cursor.view}
+    verifyErr(ArgErr#) {budget.state.releaseTemporary(1)}
+    verifyErr(ArgErr#) {budget.state.releaseTemporary(-1)}
+  }
+
+  Void testFailedOpenDoesNotRetainAdmission()
+  {
+    budget:=EnerCubixStreamBudget();q:=query(at+2hr)
+    invalid:=Etc.makeDict(Etc.dictToMap(point(config)).set("tz","Not_A_Timezone"))
+    verifyErr(ParseErr#) {EnerCubixCockpitStream.openCursor(invalid,config,at,at+2hr,q,records,budget,reader(HisItem[,]))}
+    verifyEq(budget.cursorActive,false)
+    cursor:=open(q,HisItem[,],config,budget);cursor.close
+    verifyEq(budget.nativeReads,0)
+  }
+
+  Void testDeadlineAndCapacityFailuresCannotFinalizeEmptyHistory()
+  {
+    q:=query(at+2hr);clock:=AtomicInt()
+    deadline:=EnerCubixCockpitDeadline(30sec,|->Int| {clock.val})
+    budget:=EnerCubixStreamBudget(50000,200000,20000000,30sec,deadline)
+    cursor:=EnerCubixCockpitStream.openCursor(point(config),config,at,at+2hr,q,records,budget,|Dict p,Span span,|HisItem| sink|
+    {
+      clock.val=31sec.ticks
+      sink(HisItem(at,Number(0)));sink(HisItem(at+1hr,Number(1)))
+    })
+    failure(cursor,"QUERY_TIMEOUT");cursor.close
+    verifyEq(budget.state.temporary.val,0)
+    budget=EnerCubixStreamBudget(50000,2)
+    cursor=open(q,[HisItem(at,Number(0))],config,budget)
+    failure(cursor,"HISTORY_MEMORY_LIMIT");cursor.close
+    budget=EnerCubixStreamBudget();budget.cell(200000)
+    verifyEq(budget.state.remaining,0)
+    cursor=open(q,[HisItem(at,Number(0))],config,budget)
+    failure(cursor,"PREPARED_READ_LIMIT");cursor.close
+    verifyEq(budget.cells,200000)
+    budget=EnerCubixStreamBudget(50000,200000,1)
+    cursor=open(q,[HisItem(at,Number(0)),HisItem(at+1hr,Number(1))],config,budget)
+    failure(cursor,"HISTORY_SCAN_LIMIT");cursor.close
+  }
+
+  Void testRawModesAndDensitySplitsKeepHourlyOracle()
+  {
+    end:=at+4hr;q:=query(end);raw:=HisItem[,]
+    for(i:=0;i<=1100;i++) raw.add(HisItem(at-1hr+7sec+Duration(i*20sec.ticks),Number(i < 500 ? i : i-500)))
+    [Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"]),Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(20sec),"unit":"kWh","tz":"UTC"])].each |p|
+    {
+      whole:=EnerCubixHistoryData(EnerCubixCockpitStream.prepare(q,records,["p":p],Str:Dict[:],reader(raw),EnerCubixStreamBudget(31)).first)
+      budget:=EnerCubixStreamBudget(31)
+      cursor:=EnerCubixCockpitStream.openCursor(p,null,at,end,q,records,budget,reader(raw))
+      for(i:=1;i<=4;i++)
+      {
+        b:=at+Duration(i*1hr.ticks);a:=b-1hr;cursor.advance(b)
+        actual:=EnerCubixHistoryData(cursor.view)
+        x:=actual.read(a,b);y:=whole.read(a,b)
+        verifyEq(x.value,y.value);verifyEq(x.quality,y.quality);verifyEq(x.sources,y.sources)
+        known:=actual.knownUsage(a,b,end);expected:=whole.knownUsage(a,b,end)
+        ["knownValue","knownValueType","knownQuality","coveredSeconds","intervalCount","intervalStart","intervalEnd"].each |k| {verifyEq(known[k],expected[k],k)}
+      }
+      verify(budget.nativeReads > 1);verify(budget.peakBlock <= 31)
+      cursor.close
+    }
+  }
+
+  private Void failure(EnerCubixCockpitStream cursor,Str code)
+  {
+    try {cursor.advance(at+1hr);fail("Expected controlled failure")}
+    catch(EnerCubixHttpErr e) {verifyEq(e.code,code)}
+    verifyEq(cursor.scanComplete,false)
+    verifyErr(EnerCubixHttpErr#) {cursor.view}
+  }
+
+  private EnerCubixCockpitStream open(Str:Obj? q,HisItem[] raw,Dict cfg,EnerCubixStreamBudget budget)
+  {EnerCubixCockpitStream.openCursor(point(cfg),cfg,at,DateTime.fromIso(q["to"].toStr),q,records,budget,reader(raw))}
+  private |Dict,Span,|HisItem|->Void| reader(HisItem[] raw)
+  {|Dict p,Span span,|HisItem| sink| {raw.each |row| {if(row.ts >= span.start && row.ts < span.end) sink(row)}}}
+  private Dict point(Dict cfg) {Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])}
+  private Dict config() {Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"deltaMax":Number(10000)])}
+  private Str:Obj? query(DateTime end) {["from":at.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"UTC","_cockpitReadRanges":[["from":at.toIso,"to":end.toIso]]]}
+  private [Str:Obj?][] records() {[["id":"m","kind":"meter","categoryId":"c","pointId":"p"]]}
+  private DateTime at() {DateTime.fromIso("2026-01-01T00:00:00Z")}
+}

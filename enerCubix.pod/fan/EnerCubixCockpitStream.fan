@@ -20,6 +20,7 @@ internal class EnerCubixCockpitStream
   static [Str:Obj?][] prepare(Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs,
     |Dict,Span,|HisItem|->Void| read, EnerCubixStreamBudget budget)
   {
+    if(budget.cursorActive) throw ArgErr("cursorBudgetAlreadyActive")
     out:=[Str:Obj?][,]
     ranges:=EnerCubixMath.maps(request["_cockpitRanges"])
     if (ranges.isEmpty) ranges=[request.dup.set("pointIds",points.keys)]
@@ -60,6 +61,151 @@ internal class EnerCubixCockpitStream
     stats:=budget.evidence
     out.each |h| {h["streaming"]=stats;h["_preparedBudget"]=budget.state}
     return out
+  }
+
+  ** Source-local producer seam only. Its budget cannot yet host concurrent
+  ** cursors; request-wide admission, frame ownership and release remain separate.
+  internal static EnerCubixCockpitStream openCursor(Dict p,Dict? cfg,DateTime a,DateTime b,Str:Obj? q,[Str:Obj?][] records,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read)
+  {
+    if(budget.cursorActive) throw ArgErr("cursorBudgetAlreadyActive")
+    tz:=TimeZone.fromStr(q["tz"] as Str ?: a.tz.name)
+    stream:=EnerCubixCockpitStream(p,cfg,a.toTimeZone(tz),b.toTimeZone(tz),q,records,budget)
+    stream.cursorMode=true;stream.cursorReader=read
+    pointTz:=TimeZone.fromStr(p["tz"] as Str ?: tz.name)
+    stream.cursorReadAt=(stream.from-1day).toTimeZone(pointTz)
+    stream.cursorReadEnd=(stream.to+1day).toTimeZone(pointTz)
+    budget.cursorActive=true
+    return stream
+  }
+
+  internal Void advance(DateTime through)
+  {
+    cursorCheck
+    if(through < watermark || through > to || (through != to && (through-from).ticks % 1hr.ticks != 0)) throw ArgErr("cursorWatermark")
+    try
+    {
+      while(hour < through)
+      {
+        budget.check;flushCursor(through)
+        if(hour >= through) break
+        if(cursorIndex < cursorItems.size)
+        {
+          i:=cursorIndex++;item:=cursorItems[i];detail:=cursorDetails.isEmpty ? null : cursorDetails[i]
+          append(item,detail,through,cursorItems.size-i)
+          cursorItems[i]=null
+          if(!cursorDetails.isEmpty) {cursorDetails[i]=null;detail=null;budget.state.releaseTemporary(1);cursorDetailCharge--}
+          continue
+        }
+        clearCursorChunk
+        if(!nextCursorChunk)
+        {cursorEof=true;tailThrough(through);break}
+      }
+      if(cursorIndex >= cursorItems.size)
+      {
+        clearCursorChunk
+        if(cursorSpans.isEmpty && cursorReadAt >= cursorReadEnd) cursorEof=true
+      }
+    }
+    catch(Err e) {cursorFailure=e;throw e}
+  }
+
+  internal DateTime watermark() {hour < to ? hour : to}
+  internal Bool scanComplete() {cursorEof && cursorFailure == null}
+  ** Borrowed prefix view, not a frozen application snapshot or an eviction API.
+  internal Str:Obj? view()
+  {
+    cursorCheck
+    out:=capture;out["streaming"]=budget.evidence
+    return out
+  }
+  internal Void close()
+  {
+    if(!cursorMode || cursorClosed) return
+    clearCursorChunk;raw.clear;intervals.clear;cursorReader=null
+    budget.cursorActive=false;cursorClosed=true
+    // Prepared cells remain owned/charged: no frame eviction is claimed here.
+  }
+  private Void cursorCheck()
+  {
+    if(!cursorMode || cursorClosed) throw ArgErr("cursorClosed")
+    if(cursorFailure != null) throw cursorFailure
+  }
+  private Void clearCursorChunk()
+  {
+    cursorItems.clear;cursorDetails.clear;cursorIndex=0
+    if(cursorDetailCharge > 0) {budget.state.releaseTemporary(cursorDetailCharge);cursorDetailCharge=0}
+  }
+  private Bool nextCursorChunk()
+  {
+    while(true)
+    {
+      budget.check
+      Span? span
+      if(!cursorSpans.isEmpty) span=cursorSpans.removeAt(0)
+      else
+      {
+        if(cursorReadAt >= cursorReadEnd) return false
+        end:=cursorReadAt+4day;if(end > cursorReadEnd) end=cursorReadEnd
+        span=Span.makeAbs(cursorReadAt,end);cursorReadAt=end
+      }
+      items:=HisItem[,]
+      try {items=readBlock(span.start,span.end,cursorReader)}
+      catch(EnerCubixStreamBlockErr e)
+      {
+        ticks:=(span.end-span.start).ticks
+        if(ticks <= 1ms.ticks) throw EnerCubixHttpErr(422,"HISTORY_DENSITY_LIMIT","cockpitHistoryDensityLimit")
+        mid:=span.start+Duration(ticks/2)
+        cursorSpans.insert(0,Span.makeAbs(mid,span.end));cursorSpans.insert(0,Span.makeAbs(span.start,mid));continue
+      }
+      if(items.isEmpty) continue
+      charge:=cleaned ? 2*items.size : 0
+      if(charge > 0) budget.state.hold(charge)
+      EnerCubixCleanResult? result
+      try
+      {
+        result=cleaned ? EnerCubixCleaning.clean(point,items,config,previous,false,true) : null
+        cursorItems=items.map |item->HisItem?| {item}
+        if(result != null)
+        {
+          previous=result.previous;result.previous=null
+          cursorDetails=result.details.map |d->[Str:Obj?]?| {d}
+          result.details.clear;result.items.clear
+          cursorDetailCharge=cursorDetails.size
+        }
+        items.clear
+        if(charge > cursorDetailCharge) budget.state.releaseTemporary(charge-cursorDetailCharge)
+        return true
+      }
+      catch(Err e)
+      {
+        items.clear;cursorItems.clear;cursorDetails.clear
+        result?.details?.clear;result?.items?.clear;result=null
+        if(charge > 0) budget.state.releaseTemporary(charge)
+        cursorDetailCharge=0;throw e
+      }
+    }
+    return false
+  }
+  private Void flushCursor(DateTime limit)
+  {
+    if(cursorClosable == null) return
+    if(raw.size == 1 && intervals.isEmpty && raw.first.ts > hour)
+    {
+      end:=EnerCubixMath.floorHour(raw.first.ts)
+      if(end > limit) end=limit
+      if(end > to) end=to
+      emptyUntil(end)
+    }
+    while(hour < limit && cursorClosable >= hour+1hr) closeHour
+  }
+  private Void tailThrough(DateTime limit)
+  {
+    while(hour < limit)
+    {
+      budget.check
+      if((raw.isEmpty || raw.last.ts <= hour) && intervals.all |row| {row.end <= hour}) emptyUntil(limit)
+      else closeHour
+    }
   }
 
   ** Union only intersecting/adjacent windows of the same source, before scanning.
@@ -151,77 +297,105 @@ internal class EnerCubixCockpitStream
   private Int naCount := 0
   private Int validTicks := 0
   private DateTime? lastObserved
+  private Bool cursorMode := false
+  private Bool cursorClosed := false
+  private Bool cursorEof := false
+  private Err? cursorFailure
+  private |Dict,Span,|HisItem|->Void|? cursorReader
+  private DateTime? cursorReadAt
+  private DateTime? cursorReadEnd
+  private DateTime? cursorClosable
+  private Span[] cursorSpans := [,]
+  private HisItem?[] cursorItems := [,]
+  private [Str:Obj?]?[] cursorDetails := [,]
+  private Int cursorIndex := 0
+  private Int cursorDetailCharge := 0
+  private Bool captured := false
 
-  private Void block(DateTime a, DateTime b, |Dict,Span,|HisItem|->Void| read)
+  private Void block(DateTime a,DateTime b,|Dict,Span,|HisItem|->Void| read)
   {
-    budget.check; budget.nativeReads++
     items:=HisItem[,]
-    HisItem? leading:=null
+    try {items=readBlock(a,b,read)}
+    catch(EnerCubixStreamBlockErr e)
+    {
+      ticks:=(b-a).ticks
+      if(ticks <= 1ms.ticks) throw EnerCubixHttpErr(422,"HISTORY_DENSITY_LIMIT","cockpitHistoryDensityLimit")
+      mid:=a+Duration(ticks/2);block(a,mid,read);block(mid,b,read);return
+    }
+    result:=cleaned ? EnerCubixCleaning.clean(point,items,config,previous,false,true) : null
+    if(cleaned) previous=result.previous
+    items.each |item,i| {append(item,result == null ? null : result.details[i],to,items.size)}
+  }
+
+  private HisItem[] readBlock(DateTime a,DateTime b,|Dict,Span,|HisItem|->Void| read)
+  {
+    budget.check;budget.nativeReads++
+    items:=HisItem[,];HisItem? leading:=null;cap:=budget.blockLimit
+    if(cursorMode)
+    {
+      rawRoom:=((budget.heldLimit-raw.size-(previous == null ? 0 : 1))/3).max(0)
+      if(rawRoom == 0) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")
+      cap=cap.min(rawRoom)
+      if(cleaned)
+      {
+        prepRoom:=budget.state.remaining/2
+        if(prepRoom == 0) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")
+        cap=cap.min(prepRoom)
+      }
+    }
     try
     {
       read(point,Span.makeAbs(a,b)) |HisItem item|
       {
         budget.scan
-        // Leading/trailing native context is not owned by this block. Explicit
-        // margins above provide context once, independent of SDK extra samples.
-        if (item.ts < a) {if (last == null && (leading == null || item.ts > leading.ts)) leading=item;return}
-        if (item.ts >= b) return
-        if (items.size >= budget.blockLimit) throw EnerCubixStreamBlockErr()
-        items.add(item); budget.hold(items.size+raw.size)
+        if(item.ts < a) {if(last == null && (leading == null || item.ts > leading.ts)) leading=item;return}
+        if(item.ts >= b) return
+        if(items.size >= cap) throw EnerCubixStreamBlockErr()
+        items.add(item);budget.hold((cursorMode ? 3*items.size : items.size)+raw.size+(cursorMode && previous != null ? 1 : 0))
       }
-      if (leading != null && last == null && items.size >= budget.blockLimit) throw EnerCubixStreamBlockErr()
+      if(leading != null && last == null && items.size >= cap) throw EnerCubixStreamBlockErr()
     }
-    catch (EnerCubixStreamBlockErr e)
-    {
-      items.clear
-      ticks:=(b-a).ticks
-      if (ticks <= 1ms.ticks) throw EnerCubixHttpErr(422,"HISTORY_DENSITY_LIMIT","cockpitHistoryDensityLimit")
-      mid:=a+Duration(ticks/2)
-      block(a,mid,read);block(mid,b,read);return
-    }
-    if (leading != null && last == null) items.insert(0,leading)
-    // Native stored timestamps are unique. Keep the last repeated callback as
-    // normalize does, and never accept a backwards cross-block source sequence.
+    catch(Err e) {items.clear;throw e}
+    if(leading != null && last == null) items.insert(0,leading)
     byTime:=Int:HisItem[:];items.each |item| {byTime[item.ts.ticks]=item}
     items=byTime.vals.sort |x,y| {x.ts <=> y.ts}
+    if(cursorMode) budget.hold(3*items.size+raw.size+(previous == null ? 0 : 1))
     budget.peakBlock=budget.peakBlock.max(items.size)
-    if (!cleaned && mode == "interval" && !point.has("hisCollectInterval") && !point.has("hisInterval") && !items.isEmpty)
+    if(!cleaned && mode == "interval" && !point.has("hisCollectInterval") && !point.has("hisInterval") && !items.isEmpty)
     {
       inferredCadence=EnerCubixHistory.cadence(point,items)
-      if (inferredCadence == null) throw ArgErr("streamingCadenceRequired")
+      if(inferredCadence == null) throw ArgErr("streamingCadenceRequired")
       point=Etc.makeDict(Etc.dictToMap(point).set("hisInterval",Number.makeDuration(inferredCadence)))
       inferredInterval=true
     }
-    result:=cleaned ? EnerCubixCleaning.clean(point,items,config,previous,false,true) : null
-    if (cleaned) previous=result.previous
-    items.each |item,i|
+    return items
+  }
+
+  private Void append(HisItem item,Map? d,DateTime limit,Int heldItems)
+  {
+    if(last != null && item.ts <= last) throw ArgErr("nonMonotonicHistory")
+    if(inferredInterval && last != null && (item.ts-last).ticks % inferredCadence.ticks != 0) throw ArgErr("streamingCadenceChanged")
+    last=item.ts
+    if(item.ts <= cutoff && item.ts <= observedEnd) lastObserved=item.ts.toTimeZone(from.tz)
+    if(item.ts >= from && item.ts < to) increment("inputCount")
+    if(!cleaned || raw.isEmpty || item.val !== NA.val || !config.has("removeNA")) raw.add(item)
+    if(d != null)
     {
-      if (last != null && item.ts <= last) throw ArgErr("nonMonotonicHistory")
-      if (inferredInterval && last != null && (item.ts-last).ticks % inferredCadence.ticks != 0) throw ArgErr("streamingCadenceChanged")
-      last=item.ts
-      if (item.ts <= cutoff && item.ts <= observedEnd) lastObserved=item.ts.toTimeZone(from.tz)
-      if (item.ts >= from && item.ts < to) increment("inputCount")
-      if (!cleaned || raw.isEmpty || item.val !== NA.val || !config.has("removeNA")) raw.add(item)
-      d:=result == null ? null : result.details[i]
-      if (d != null)
+      observe(d,item.ts)
+      seconds:=EnerCubixMath.num(d["intervalSeconds"]) ?: 0f
+      if(d["emitted"] == true && seconds > 0f)
       {
-        observe(d,item.ts)
-        seconds:=EnerCubixMath.num(d["intervalSeconds"]) ?: 0f
-        if (d["emitted"] == true && seconds > 0f)
-        {
-          end:=item.ts.toTimeZone(from.tz)
-          intervals.add(EnerCubixInterval(end-Duration((seconds*1sec.ticks.toFloat).toInt),end,EnerCubixMath.num(d["value"]),EnerCubixHistory.detailQuality(d),d["valueType"].toStr))
-        }
+        end:=item.ts.toTimeZone(from.tz)
+        intervals.add(EnerCubixInterval(end-Duration((seconds*1sec.ticks.toFloat).toInt),end,EnerCubixMath.num(d["value"]),EnerCubixHistory.detailQuality(d),d["valueType"].toStr))
       }
-      budget.hold(items.size+raw.size)
-      // Removed NA does not close an interval: wait for the next accepted reading.
-      if (d != null && d["reason"] == "removedNA") return
-      // No left source exists before the first accepted sample. Reuse the empty
-      // reader there; the first sample's containing hour remains explicit.
-      firstHour:=EnerCubixMath.floorHour(item.ts)
-      if(raw.size == 1 && intervals.isEmpty && hour < firstHour) emptyUntil(firstHour < to ? firstHour : to)
-      while (hour < to && item.ts >= hour+1hr) closeHour
     }
+    budget.hold(heldItems+raw.size+(cursorMode && previous != null ? 1 : 0))
+    if(d != null && d["reason"] == "removedNA") return
+    cursorClosable=item.ts
+    firstHour:=EnerCubixMath.floorHour(item.ts)
+    if(firstHour > limit) firstHour=limit
+    if(raw.size == 1 && intervals.isEmpty && hour < firstHour) emptyUntil(firstHour < to ? firstHour : to)
+    while(hour < limit && item.ts >= hour+1hr) closeHour
   }
 
   private Void increment(Str k) {meta[k]=((Int)meta[k])+1}
@@ -251,6 +425,7 @@ internal class EnerCubixCockpitStream
       event:=EnerCubixHistory.nativeDetail(d).setAll(["pointId":point.id.id,"unit":point["unit"],"profileId":meta["profileId"],"profileVersion":meta["profileVersion"],"parameters":meta["parameters"]])
       reason:=d["reason"].toStr
       event["rule"]=reason == "rollover" || reason == "rolloverOutOfRange" ? "hisTotalizedRollover" : (["deltaMin","deltaMax","derivMin","derivMax","timeMax"].contains(reason) ? reason : null)
+      if(cursorMode) budget.cell(1)
       diagnostics.add(event)
     }
   }
@@ -358,15 +533,13 @@ internal class EnerCubixCockpitStream
 
   private Str:Obj? finish()
   {
-    while (hour < to)
-    {
-      budget.check
-      // All planned native blocks have completed. No later source/closed interval
-      // can close a pair in this tail; single-ended counters are not extrapolated.
-      if((raw.isEmpty || raw.last.ts <= hour) && intervals.all |r| {r.end <= hour}) emptyUntil(to)
-      else closeHour
-    }
-    budget.cell(4+queries.size+queryEnds.size+tariffs.size)
+    tailThrough(to)
+    return capture
+  }
+
+  private Str:Obj? capture()
+  {
+    if(!captured) {budget.cell(4+queries.size+queryEnds.size+tariffs.size);captured=true}
     out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":lastObserved?.toIso]
     if (cleaned)
     {
@@ -401,6 +574,7 @@ internal class EnerCubixStreamBudget
   Int originalWindows := 0
   Int normalizedWindows := 0
   Int detailCount := 0
+  Bool cursorActive := false
   private Int started := Duration.nowTicks
   Void check() {state.deadline.check}
   Void scan() {if (++scanned > scanLimit) throw EnerCubixHttpErr(422,"HISTORY_SCAN_LIMIT","cockpitHistoryScanLimit");if (scanned % 1024 == 0) check}

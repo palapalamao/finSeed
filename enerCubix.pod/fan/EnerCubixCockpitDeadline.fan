@@ -26,6 +26,12 @@ internal const class EnerCubixPreparedBudget
   const AtomicInt contextEmptyHits := AtomicInt()
   Void reserve(Int n := 1) {prepared.add(n);guard}
   Void hold(Int n) {temporary.add(n);peakTemporary.val=peakTemporary.val.max(temporary.val);guard}
+  Int remaining() {(200000-prepared.val-temporary.val).max(0)}
+  Void releaseTemporary(Int n)
+  {
+    if(n < 0 || n > temporary.val) throw ArgErr("preparedTemporaryOwnership")
+    temporary.add(-n)
+  }
   private Void guard()
   {
     total:=prepared.val+temporary.val;peak.val=peak.val.max(total)
