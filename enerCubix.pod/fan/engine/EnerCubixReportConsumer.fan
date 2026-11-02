@@ -34,7 +34,10 @@ internal class EnerCubixReportConsumer
     // Keep cleanup workspace until output expires, so dropGraph can still clear
     // aliased lists/maps when another owner has filled the remaining budget.
     maxList:=(n*cursors.size).max(shape["details"]).max(shape["members"]).max(ctx.byId.size).max(1000)
-    output.hold(128+2*maxList)
+    // Pooled DTOs are generated acyclic graphs. Clear their children in place;
+    // no 1000-row evidence or unrelated catalog cleanup copy is allocated.
+    // Keep the existing copy workspace for the independent legacy seam.
+    output.hold(diagnostics==null ? 128+2*maxList : 128)
     // The summary finalizer creates only two line vectors and one coverage
     // vector. It never creates selection/detail candidate or area unions.
     finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(ctx.byId.size+shape["members"]+shape["details"]+cursors.size+1)
@@ -211,6 +214,14 @@ internal class EnerCubixReportConsumer
     if(value isnot Map && value isnot List) return
     if(borrowed.any |item| {item === value}) return
     if(diagnostics?.protectedRoots?.any |item| {item===value} == true) return
+    if(diagnostics!=null)
+    {
+      // Report fields, owned area results and detached cleaning metadata are
+      // acyclic by construction. Shared pool/catalog graphs stopped above.
+      if(value is Map) {((Map)value).each |child| {dropGraph(child)};((Map)value).clear}
+      else {((List)value).each |child| {dropGraph(child)};((List)value).clear}
+      return
+    }
     // Clear before visiting children: repeated aliases and cycles terminate,
     // without mutating configuration containers borrowed from the catalog.
     if(value is Map) {children:=((Map)value).vals;((Map)value).clear;children.each |child| {dropGraph(child)}}

@@ -53,6 +53,7 @@ internal class EnerCubixCockpitCapture
   }
   [Str:Obj?][] rows(Str key) {check;return group(key).rows}
   Str captureId(Str key) {check;return group(key).captureId}
+  Str diagnosticId(Str key) {check;return "diagnostic-"+group(key).order}
   Void expect(Str key,Str kind)
   {check;g:=group(key);if(frozen || g.sealed || g.spec["kind"]!=kind) throw ArgErr("diagnosticGroupNotPlanned")}
   Bool canPutSimple(Str key)
@@ -155,6 +156,7 @@ internal class EnerCubixCockpitCapture
         if(e.output.entries==0 || e.target.isEmpty) throw ArgErr("diagnosticEnvelopeExpired")
         omitted:=e.count>e.group.rows.size || e.emptyOmitted || e.unpreparedOmitted
         e.target["detailsTruncated"]=omitted || e.group.rows.any |r| {r["detailsTruncated"]==true}
+        e.target["sourceUsageDiagnosticRef"]="diagnostic-"+e.group.order
         if(omitted) e.target.setAll(["sourceUsageCaptureId":e.group.captureId,"sourceUsageTruncated":true,"sourceUsageRowCount":e.emptyOmitted || e.unpreparedOmitted ? null : e.count,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":e.emptyOmitted,"omittedUnprepared":e.unpreparedOmitted])
         e.target.remove("_capturePending")
       }

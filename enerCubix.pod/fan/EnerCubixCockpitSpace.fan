@@ -2,14 +2,25 @@
 ** inferred child sum can replace a device's own primary history.
 internal class EnerCubixCockpitSpace
 {
-  static Str:Obj? project(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories, Str[] plannedPoints, Str:Obj? boundary)
+  static Str:Obj? project(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories, Str[] plannedPoints, Str:Obj? boundary, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
+  {
+    current:=EnerCubixCockpitMetrics.histories(q,histories)
+    prepared:=prepare(q,records,plannedPoints,current.map |h->Str| {h["pointId"].toStr})
+    query:=(Str:Obj?)prepared["query"]
+    report:=query.isEmpty ? Str:Obj?[:] : EnerCubixCockpitReports.read("space-summary",query,records,current,preparedReport)
+    return projectPrepared(prepared,report,boundary)
+  }
+
+  ** Resolve membership from frozen metadata and actual loaded/placeholder source
+  ** IDs. No history arithmetic is run while discovering the summary query.
+  static Str:Obj? prepare(Str:Obj? q,[Str:Obj?][] records,Str[] plannedPoints,Str[] loadedPoints,EnerCubixContext? sourceContext := null,EnerCubixContext? spaceContext := null,EnerCubixPreparedOwner? owner := null)
   {
     category:=EnerCubixMath.strings(q["categoryIds"]).first
-    dim:=EnerCubixDimension(q["dimension"].toStr,records,true)
+    dim:=sourceContext?.dimension ?: EnerCubixDimension(q["dimension"].toStr,records,true)
     selected:=EnerCubixMath.strings(q["nodeIds"]); candidates:=selected.dup
     selected.each |id| {candidates.addAll((dim.scope(id) ? dim.members(id) : dim.usageMembers(id)).map |r->Str| {r["id"].toStr})}
     records.findAll |r| {plannedPoints.contains(r["pointId"] as Str ?: "") && r["categoryId"] == category}.each |r| {candidates.add(r["id"].toStr)}
-    byId:=Str:[Str:Obj?][:];records.findAll |r| {readable(r)}.each |r| {byId[r["id"].toStr]=r}
+    byId:=Str:[Str:Obj?][:];records.findAll |r| {readable(r)}.each |r| {owner?.hold(1);byId[r["id"].toStr]=r}
     candidates=candidates.unique.findAll |id| {r:=byId[id];return r != null && (r["kind"] == "space" || (["meter","totalMeter"].contains(r["kind"]) && r["categoryId"] == category && r["canonicalId"] == null))}
     candidates.dup.each |id|
     {
@@ -21,10 +32,13 @@ internal class EnerCubixCockpitSpace
       }
     }
     candidates=candidates.unique.sort
-    space:=EnerCubixDimension("space",records,true)
-    ctx:=EnerCubixContext(space.records,[Str:Obj?][,],TimeZone(q["tz"].toStr),space)
+    ctx:=spaceContext
+    if(ctx==null)
+    {space:=EnerCubixDimension("space",records,true);ctx=EnerCubixContext(space.records,[Str:Obj?][,],TimeZone(q["tz"].toStr),space)}
     available:=Str[,];members:=Str:Str[][:];sources:=Str:Str[][:]
-    current:=EnerCubixCockpitMetrics.histories(q,histories)
+    units:=Str:Str[:]
+    owner?.hold(8)
+    owner?.watch |->Void| {byId.clear;candidates.clear;available.clear;members.each |v| {v.clear};members.clear;sources.each |v| {v.clear};sources.clear;units.clear}
     candidates.each |id|
     {
       record:=byId[id]
@@ -32,13 +46,26 @@ internal class EnerCubixCockpitSpace
       // Focus on equipment requires its own enrolled primary source.
       ms:=record["nativeSourceKind"] == "equip" && !["meter","totalMeter"].contains(record["kind"]) ? [Str:Obj?][,] : ctx.scopeMeters(id,category)
       readableMembers:=ms.findAll |m| {readable(m) && byId.containsKey(m["id"].toStr)}
+      owner?.hold(5+2*readableMembers.size)
+      units[id]=ctx.unit(id,category,"energy")
       members[id]=readableMembers.map |m->Str| {m["id"].toStr}.unique.sort
       sources[id]=readableMembers.map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str p->Bool| {!p.isEmpty}.unique.sort
       // A readable ancestor with an inaccessible member is not a loaded partial
       // aggregate. Keep its visible metadata without disclosing the hidden IDs.
-      if (!ms.isEmpty && readableMembers.size == ms.size && ms.all |m| {p:=m["pointId"] as Str;return p != null && plannedPoints.contains(p) && current.any |h| {h["pointId"] == p}}) available.add(id)
+      if (!ms.isEmpty && readableMembers.size == ms.size && ms.all |m| {p:=m["pointId"] as Str;return p != null && plannedPoints.contains(p) && loadedPoints.contains(p)}) available.add(id)
     }
-    report:=available.isEmpty ? Str:Obj?[:] : EnerCubixHistory.report(q.dup.setAll(["nodeIds":available,"dimension":"space","kind":"profile","perArea":false]),records,current)
+    query:=available.isEmpty ? Str:Obj?[:] : q.dup.setAll(["nodeIds":available,"dimension":"space","kind":"profile","perArea":false])
+    owner?.hold(14+query.size+candidates.size+available.size)
+    result:=Str:Obj?["category":category,"candidates":candidates,"byId":byId,"members":members,"sources":sources,"available":available,"units":units,"query":query,"plannedPoints":plannedPoints]
+    owner?.watch |->Void| {query.clear;result.clear}
+    return result
+  }
+
+  static Str:Obj? projectPrepared(Str:Obj? prepared,Str:Obj? report,Str:Obj? boundary)
+  {
+    category:=prepared["category"].toStr;candidates:=(Str[])prepared["candidates"]
+    byId:=(Str:[Str:Obj?])prepared["byId"];members:=(Str:Str[])prepared["members"];sources:=(Str:Str[])prepared["sources"]
+    available:=(Str[])prepared["available"];units:=(Str:Str)prepared["units"];plannedPoints:=(Str[])prepared["plannedPoints"]
     Map summary:=report["summary"] as Map ?: Str:Obj?[:];Map extra:=report["extra"] as Map ?: Str:Obj?[:]
     totals:=EnerCubixMath.maps(summary["totals"]);knowns:=EnerCubixMath.maps(summary["knownTotals"])
     [Str:Obj?][] nodes:=candidates.map |id->[Str:Obj?]|
@@ -53,7 +80,7 @@ internal class EnerCubixCockpitSpace
       local:=Str:Obj?["summary":["selectionTotals":row == null ? [Str:Obj?][,] : [row]],"extra":["usageCoverage":coverage]]
       metric:=EnerCubixCockpitMetrics.metric(local,"energy",category,basis)
       metric.remove("id");metric.remove("boundaryId")
-      if (!available.contains(id)) metric.setAll(["quality":"notLoaded","reasonCodes":["FOCUS_NOT_LOADED"],"unit":ctx.unit(id,category,"energy")])
+      if (!available.contains(id)) metric.setAll(["quality":"notLoaded","reasonCodes":["FOCUS_NOT_LOADED"],"unit":units[id]])
       p:=parent(r)
       metric.setAll(["id":id,"nativeId":r["nativeSourceId"] ?: id,"name":r["name"] ?: id,"parentId":p != null && candidates.contains(p) ? p : null,"nodeKind":r["nativeSourceKind"] ?: (own ? "equip" : "space"),"basis":own ? "ownPrimary" : "scopeAggregate","meterIds":members[id],"sourceIds":sources[id].findAll |point| {plannedPoints.contains(point)}])
       return metric

@@ -42,12 +42,11 @@ internal class EnerCubixCockpitBudget
   }
   ** A view's ownership warning is not a different physical expense boundary.
   ** Explicit overlap and all physical/source errors remain disqualifying.
-  static Str:Obj? canonical(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports)
+  static Str:Obj? canonical(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports,|Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
     own:=physicalBoundary(boundary)
-    request:=q.dup.setAll(["dimension":"metering","nodeIds":boundary["meterIds"],"metric":"cost","perArea":false])
-    if(DateTime.fromIso(request["to"].toStr) > DateTime.fromIso(request["asOf"].toStr)) request["to"]=request["asOf"]
-    report:=EnerCubixHistory.report(request,records,EnerCubixCockpitMetrics.histories(request,histories))
+    request:=EnerCubixCockpitReports.budgetQuery(q,boundary)
+    report:=EnerCubixCockpitReports.read("budget-canonical-cost",request,records,EnerCubixCockpitMetrics.histories(request,histories),preparedReport)
     category:=EnerCubixMath.strings(q["categoryIds"]).first
     cost:=EnerCubixCockpitMetrics.metric(report,"cost",category,own)
     tariffs:=EnerCubixMath.maps(((Map)report["extra"])["tariffSnapshot"])

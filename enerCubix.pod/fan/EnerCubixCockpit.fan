@@ -4,7 +4,7 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:])
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:], |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
     input=(Str:Obj?)input.toImmutable
     ownedConfig=(Str:Obj?)ownedConfig.toImmutable
@@ -106,7 +106,7 @@ class EnerCubixCockpit
     deadline?.check
     historyMeta:=EnerCubixCockpitHistoryMeta(pointIds.unique,effectiveEnd)
     histories.each |h| {historyMeta.observe(h)}
-    report:=EnerCubixHistory.report(request,frozen,EnerCubixCockpitMetrics.histories(request,histories))
+    report:=EnerCubixCockpitReports.read("profile-energy",request,frozen,EnerCubixCockpitMetrics.histories(request,histories),preparedReport)
     row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).find |r| {r["categoryId"] == category}
     boundaryQuality:=row?.get("scopeQuality") as Str
     if (boundaryQuality != null && !["topologyIncomplete","accountingIncomplete","duplicateSource"].contains(boundaryQuality)) boundaryQuality=null
@@ -124,13 +124,13 @@ class EnerCubixCockpit
     complete:=EnerCubixMath.num(metric["completeValue"])
     known:=EnerCubixMath.num(metric["knownValue"])
     reports:=Str:Obj?["profile-energy":report]
-    values:=kpis ? EnerCubixCockpitMetrics.values(request,frozen,histories,metric,boundary,auxiliary,reports,"",kpiReport) : [metric]
+    values:=kpis ? EnerCubixCockpitMetrics.values(request,frozen,histories,metric,boundary,auxiliary,reports,"",kpiReport,preparedReport) : [metric]
     if (kpis && comparison["mode"] != "none")
     {
       referenceRequest:=request.dup.setAll((Map)comparison["referenceRange"])
-      referenceReport:=EnerCubixHistory.report(referenceRequest,frozen,EnerCubixCockpitMetrics.histories(referenceRequest,histories))
+      referenceReport:=EnerCubixCockpitReports.read("reference-profile-energy",referenceRequest,frozen,EnerCubixCockpitMetrics.histories(referenceRequest,histories),preparedReport)
       referenceEnergy:=EnerCubixCockpitMetrics.metric(referenceReport,"energy",category,boundary)
-      referenceValues:=EnerCubixCockpitMetrics.values(referenceRequest,frozen,histories,referenceEnergy,boundary,auxiliary,reports,"reference-",kpiReport)
+      referenceValues:=EnerCubixCockpitMetrics.values(referenceRequest,frozen,histories,referenceEnergy,boundary,auxiliary,reports,"reference-",kpiReport,preparedReport)
       reports["reference-profile-energy"]=referenceReport
       values.each |v|
       {
@@ -142,7 +142,7 @@ class EnerCubixCockpit
     budgetBoundary:=EnerCubixCockpitBudget.physicalBoundary(boundary);budgetCost:=cost;canonical:=Str:Obj?[:]
     if((kpis || enabled.contains("issues")) && !EnerCubixMath.maps(ownedConfig["budgets"]).isEmpty)
     {
-      try {canonical=EnerCubixCockpitBudget.canonical(request,frozen,histories,boundary,reports);budgetBoundary=(Map)canonical["boundary"];budgetCost=(Map)canonical["cost"]}
+      try {canonical=EnerCubixCockpitBudget.canonical(request,frozen,histories,boundary,reports,preparedReport);budgetBoundary=(Map)canonical["boundary"];budgetCost=(Map)canonical["cost"]}
       catch(Err e) {if(!EnerCubixCockpitBudget.localError(e)) throw e;budgetCost=["value":null,"quality":"metricError"]}
     }
     Str:Obj? budgetResult:=[:]
@@ -160,11 +160,11 @@ class EnerCubixCockpit
     modules:=Str:Obj?[:]
     if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request),"budget":budgetResult]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
-    EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
+    EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx,preparedReport)
     deadline?.check
     if (enabled.contains("space"))
     {
-      try {modules["space"]=EnerCubixCockpitSpace.project(request,frozen,histories,pointIds.unique,boundary)}
+      try {modules["space"]=EnerCubixCockpitSpace.project(request,frozen,histories,pointIds.unique,boundary,preparedReport)}
       catch (EnerCubixHttpErr e) {throw e}
       catch (Err e) {modules["space"]=EnerCubixCockpitFlow.error}
     }

@@ -2,15 +2,14 @@
 internal class EnerCubixCockpitFaces
 {
   static Void attach(Str[] enabled, Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories,
-    Str:Obj? boundary, Str:Obj? reports, Str:Obj? modules, EnerCubixContext ctx)
+    Str:Obj? boundary, Str:Obj? reports, Str:Obj? modules, EnerCubixContext ctx, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
     faces:=["time","endUse","organization"].findAll |id| {enabled.contains(id)}
     if (faces.isEmpty) return
     ids:=EnerCubixMath.strings(boundary["meterIds"])
-    base:=q.dup.setAll(["nodeIds":ids,"dimension":"metering","metric":"energy","perArea":false])
-    base.remove("spaceSource")
+    base:=EnerCubixCockpitReports.faceQuery(q,boundary,"face-meter-profile")
     Str:Obj? own:=[:]
-    try {own=EnerCubixHistory.report(base.dup.set("kind","profile"),records,EnerCubixCockpitMetrics.histories(q,histories))}
+    try {own=EnerCubixCockpitReports.read("face-meter-profile",base,records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)}
     catch (EnerCubixHttpErr e) {throw e}
     catch (Err e) {faces.each |face| {modules[face]=["status":"error","error":["code":"COCKPIT_MODULE_ERROR"]]};return}
     reports["face-meter-profile"]=own
@@ -18,8 +17,8 @@ internal class EnerCubixCockpitFaces
     {
       try
       {
-        data:=face == "time" ? time(base,q,records,histories,reports,ctx) :
-          (face == "endUse" ? endUse(base,records,histories,reports,boundary) : organization(own,records,ids,boundary))
+        data:=face == "time" ? time(base,q,records,histories,reports,ctx,preparedReport) :
+          (face == "endUse" ? endUse(base,records,histories,reports,boundary,preparedReport) : organization(own,records,ids,boundary))
         modules[face]=data
       }
       catch (EnerCubixHttpErr e) {throw e}
@@ -27,17 +26,17 @@ internal class EnerCubixCockpitFaces
     }
   }
 
-  private static Str:Obj? time(Str:Obj? base, Str:Obj? scopeQuery, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, EnerCubixContext ctx)
+  private static Str:Obj? time(Str:Obj? base, Str:Obj? scopeQuery, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, EnerCubixContext ctx, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
     deadline:=base["_cockpitDeadline"] as EnerCubixCockpitDeadline
     visited:=0
     q:=base.dup.set("period","hour")
-    daily:=EnerCubixHistory.report(q.dup.set("kind","daily"),records,EnerCubixCockpitMetrics.histories(q,histories))
+    daily:=EnerCubixCockpitReports.read("face-daily",q.dup.set("kind","daily"),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
     reports["face-daily"]=daily
     data:=Str:Obj?["dailyReportRef":"face-daily"]
     // Heatmap evidence is sufficient for the view; don't ship a duplicate annual
     // hourly report. Preserve independent selected objects without adding them.
-    hourly:=EnerCubixHistory.report(scopeQuery.dup.set("period","hour"),records,EnerCubixCockpitMetrics.histories(q,histories))
+    hourly:=EnerCubixCockpitReports.read("face-heatmap",EnerCubixCockpitReports.faceQuery(scopeQuery,[:],"face-heatmap"),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
     reasons:=Str[,]
     ["workingHours","workingDays"].each |kind|
     {
@@ -45,7 +44,7 @@ internal class EnerCubixCockpitFaces
       if (ctx.calendar?.get(field) is List)
       {
         key:="face-"+kind
-        reports[key]=EnerCubixHistory.report(q.dup.set("kind",kind),records,EnerCubixCockpitMetrics.histories(q,histories))
+        reports[key]=EnerCubixCockpitReports.read(key,q.dup.set("kind",kind),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
         data[kind == "workingHours" ? "workingReportRef" : "workingDaysReportRef"]=key
       }
     }
@@ -54,7 +53,9 @@ internal class EnerCubixCockpitFaces
     from:=DateTime.fromIso(q["from"].toStr); to:=DateTime.fromIso(q["to"].toStr)
     cutoff:=DateTime.fromIso(q["asOf"].toStr); tz:=TimeZone(q["tz"].toStr)
     cells:=[Str:Obj?][,]; excluded:=[Str:Obj?][,]
-    EnerCubixMath.maps(hourly["series"]).each |series|
+    if(hourly["_cockpitHeatmapData"] is Map)
+    {ready:=(Map)hourly["_cockpitHeatmapData"];cells=EnerCubixMath.maps(ready["heatmap"]);excluded=EnerCubixMath.maps(ready["excludedDays"])}
+    else EnerCubixMath.maps(hourly["series"]).each |series|
     {
       points:=EnerCubixMath.maps(series["points"])
       byDay:=Date:[Str:Obj?][][:]
@@ -83,9 +84,9 @@ internal class EnerCubixCockpitFaces
     return ["status":reasons.isEmpty ? "ok" : "partial","data":data,"reasonCodes":reasons]
   }
 
-  private static Str:Obj? endUse(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, Str:Obj? boundary)
+  private static Str:Obj? endUse(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, Str:Obj? boundary, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
-    report:=EnerCubixHistory.report(q.dup.set("kind","utility"),records,EnerCubixCockpitMetrics.histories(q,histories))
+    report:=EnerCubixCockpitReports.read("face-endUse",q.dup.set("kind","utility"),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
     shares:=EnerCubixMath.maps(((Map)report["extra"])["utilityShares"])
     additive:=boundary["aggregateAllowed"] == true && shares.all |s| {!["overlappingScopes","areaNormalized","negativeConsumption"].contains(s["percentageBasis"])}
     complete:=shares.all |s| {s["value"] != null && ["ok","good","estimated","derived","cleaned","corrected"].contains(s["quality"])}

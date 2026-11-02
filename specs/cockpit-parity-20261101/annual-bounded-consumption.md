@@ -177,3 +177,18 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 捕获真实main的私有单profile+五源清洗离线回放（非FIN IO）：9必需顶层+5extra业务组等冻结旧值，诊断总1000=897来源读数+98区间+5清洗；联合峰140113/raw691、385回调/12094捕获样本、unprepared0，关闭temp/raw0，有限30源元数据仍计账（旧5条单独清洗采样改由池owner持有）。默认整包8必需provenance+12报告60槽59实有组仍等原结果，原缺省能流coverage保留，仅periodsCaptureId归一化。证据diagnostic-pool-evidence.json/native-parity.json/default-parity.json；冻结离线包diagnostic-pool-offline-test.pod SHA9D1D794290F3B0DAC582E01FCF0618A6FBB2047EA6876C227FFFF9D3E189EB4A。
 
 剩余：实际全模块metadata-driven注册及完整客户端诊断描述、flow periods/COP/规则适配、最终输出/codec同时存活准入及现场82源年度；不得用空历史演算来伪造计划。当前原默认/安装不变，FIN site年度422尚未以新候选解决；只读账号按用户暂缓，浏览器/PDF仍保留既定验证边界。
+
+
+六模块的真实 metadata-first 注册缝已接入私有路径：KPI、趋势、空间、时间、用途、组织统一登记稳定报告键，复用主报告、指标、预算和视图的实际 query builder，不执行空历史来反推查询。额外 preparedReport 边界不扩大原 KPI fault callback 的作用范围；未登记或条件改变的报告拒绝读取，无整段历史回退。空间拆分 prepare/projectPrepared，以当前计划内实际已加载或已确认失败的源 ID 确定 available，仅消费 totals/knownTotals/coverage；热图在该边界接收既有单日消费者数据，不重造年度小时报告。调用方当前源 ID 向量在保留前复制并准入。当前私有缝明确拒绝 balance/efficiency/issues 以及 to>asOf，尚未切默认 API。
+
+各报告按自己的真实起止消费同一来源帧；前一时段结束后，在帧过期时完成并释放 state，output 继续存活。最终阶段先完成 state 较大的消费者。阶梯游标共享真实单设备周期前序，先执行本小时的所有报告再推进原完整小时；非相邻窗口只允许在新周期起点重新对齐，不能跨过周期内缺失前序。受控独立预期两周期各查询两小时均为 6，而两小时计费前序不作为报告行返回。源清洗计数与配置在全局 pool.freeze 后从真实 borrowed metadata 回调深度脱离；诊断行借用同一 pool，已登记清洗窗口全部接入后才允许报告读取，拒绝重复和伪造样本引用。sourceUsageDiagnosticRef/detailsDiagnosticRef 可定位到该池的实际条目；区间聚合条目不冒充某一源行的局部明细引用。
+
+联合捕获回放先复现 PREPARED_READ_LIMIT：尝试准入峰 219197，提前完成前一时段后仍为 218604。进一步检查确认 pooled 输出清理仍预留并复制不再拥有的 1000 行样本和无关目录数组。现在仅该路径对生成的无环 DTO 逐子清理，不创建 vals/dup 数组，继续保护共享目录与池根；原独立无池缝的复制清理保留。未降低 prepared 的四格权重、200000、原始块、30秒或8MiB上限。已在 peer 占满准入时关闭报告，核对逃逸子表格真实清空、共享样本保留、peer 额度不变；池/目录仍覆盖借用期。新索引与 DTO 图计数不作为 JVM heap 或所有分配峰的证明。
+
+本批首次完整回归的三项热图失败属于旧反射调用 6 参数与新增第 7 参数不兼容，已恢复尾参数默认值，未修改原预期；原失败记录 registry-first-full-fantom.log。修正后热图及注册专项 2 类11方法381校验通过，registry-legacy-heatmap-regression.log。最终精确源码完整99类757方法266292校验通过，247247ms（registry-full-fantom.log）。默认路径回放的8项必需provenance值、12报告60槽59实有业务组相等，原缺省flow coverage保留，仅归一化periodsCaptureId（registry-default-parity.json）。旧显式1800秒容量夹具仍不作为原生30秒证明。
+
+捕获 zeda main 的六模块联合离线回放，11份对应报告99组必需顶层、90组附加业务数据、完整清洗计数/配置、空间投影、2328热图格和209排除日均等原结果。诊断样本及诊断 ID 不作逐样本相等声明，但引用必须存在且返回数对应实际数组。读取/目录/消费者/诊断的准入峰198602、raw691、462回调12094捕获样本、unprepared0，关闭 temporary/raw0，有限 prepared48元数据继续计账。Currency/空间最终投影复用原类；这些投影和序列化同时存活的准入尚未完成，故该峰不是完整最终响应证明，也未比较新路径整体 provenance。证据 registry-main-parity.json 与 registry-main.stats.json，均非 FIN I/O。
+
+剩余为真正原生 source 工厂与元数据计划接线、flow 的独立全期用量/逐期诊断、COP 逐小时操作数单位处理、规则消费者、最终投影/codec准入及82源完整实机。flow/efficiency 的特殊记录投影必须先证明兼容或单独拥有，不能静默复用基础目录。只读账号继续按用户暂缓；没有部署、服务重启、历史/配置写入或浏览器操作。
+
+本批冻结私有 SDK 测试包 registry-offline-test.pod，SHA256 C3A377BF390CCBD8AB7C82B0B1BECA58E353A5A5B07A64FD0F806BBCCD71A5B3；仍为0.14.1元数据，仅离线复核，不是可部署候选。完整回执 registry-evidence.json。

@@ -21,6 +21,16 @@ internal class EnerCubixTariffCursor
   private Str period
   private DateTime watermark
 
+  ** A disjoint planned window can start a new billing cycle. A gap inside a
+  ** cycle cannot establish its prefix and must never be silently skipped.
+  internal Void align(DateTime at)
+  {
+    if(ctx == null) throw ArgErr("tariffCursorClosed")
+    if(at == watermark) return
+    if(at < watermark || at != EnerCubixMath.bucket(at,period)) throw ArgErr("tariffCursorWindow")
+    fold=EnerCubixValueFold.strict;fold.add(EnerCubixValue(0f,"ok"));watermark=at
+  }
+
   EnerCubixValue baseline(DateTime from,DateTime to,Str[] path)
   {
     if(ctx == null) throw ArgErr("tariffCursorClosed")

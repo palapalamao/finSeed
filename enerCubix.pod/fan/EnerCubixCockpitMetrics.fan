@@ -158,7 +158,7 @@ internal class EnerCubixCockpitMetrics
     return ctx.byId.vals.findAll |r| {selected.contains(r["id"] as Str ?: "") && ["meter","totalMeter","space","organization","category","subcategory","utility","expression","tariff","calendar","cleaningProfile"].contains(r["kind"])}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
   }
 
-  static [Str:Obj?][] values(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] all, Str:Obj? energy, Str:Obj? boundary, Str? auxiliary, Str:Obj? reports, Str prefix := "", |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? reporter := null)
+  static [Str:Obj?][] values(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] all, Str:Obj? energy, Str:Obj? boundary, Str? auxiliary, Str:Obj? reports, Str prefix := "", |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? reporter := null, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
     project:=reporter ?: |Str:Obj? rq,[Str:Obj?][] rs,[Str:Obj?][] hs->Str:Obj?| {EnerCubixHistory.report(rq,rs,hs)}
     category:=EnerCubixMath.strings(q["categoryIds"]).first
@@ -168,8 +168,8 @@ internal class EnerCubixCockpitMetrics
     {
       try
       {
-      rq:=q.dup.set("metric",id)
-      report:=project(rq,records,selected)
+      rq:=EnerCubixCockpitReports.metricQuery(q,id,auxiliary)
+      report:=preparedReport == null ? project(rq,records,selected) : preparedReport(prefix+"profile-"+id,rq)
       value:=metric(report,id,category,boundary)
       if (id == "cost")
       {
@@ -202,8 +202,8 @@ internal class EnerCubixCockpitMetrics
     {
     if (auxiliary != null)
     {
-      rq:=q.dup.set("categoryIds",[auxiliary]).set("_cockpitCategoryId",auxiliary)
-      report:=project(rq,records,selected)
+      rq:=EnerCubixCockpitReports.metricQuery(q,"auxiliary",auxiliary)
+      report:=preparedReport == null ? project(rq,records,selected) : preparedReport(prefix+"profile-auxiliary",rq)
       third=metric(report,"auxiliaryEnergy",auxiliary,boundary)
       dimension:=EnerCubixDimension(q["dimension"].toStr,records,q["spaceSource"] == "fin")
       ctx:=EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone(q["tz"].toStr),dimension)
@@ -227,7 +227,8 @@ internal class EnerCubixCockpitMetrics
     }
     else
     {
-      report:=project(q.dup.set("perArea",true),records,selected)
+      rq:=EnerCubixCockpitReports.metricQuery(q,"area",null)
+      report:=preparedReport == null ? project(rq,records,selected) : preparedReport(prefix+"profile-area",rq)
       third=metric(report,"areaIntensity",category,boundary)
       extra:=(Map)report["extra"]
       selection:=EnerCubixMath.maps(extra["areaBasis"]).find |r| {r["nodeId"] == "__selection__" && r["categoryId"] == category}

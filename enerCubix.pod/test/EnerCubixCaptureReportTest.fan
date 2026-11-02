@@ -57,9 +57,13 @@ class EnerCubixCaptureReportTest : Test
       verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<200000)
       saved:=pool.rows("profile").size
       sources.each |source| {source.close};state.close;dailyState.close
+      escapedRows:=(List)actual["rows"];escapedRow:=(Map)escapedRows.first
+      peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining);peerEntries:=peer.entries
       output.close;verifyEq(pool.rows("profile").size,saved,"closing a report cannot clear shared diagnostic roots")
+      verify(actual.isEmpty);verify(escapedRows.isEmpty);verify(escapedRow.isEmpty)
+      verifyEq(peer.entries,peerEntries,"cleanup at full admission cannot reset another owner")
       verifyErr(ArgErr#) {diagnosticOwner.close}
-      dailyOutput.close;diagnosticOwner.close;model.close
+      dailyOutput.close;diagnosticOwner.close;model.close;peer.close
       verify(metadata.isEmpty);verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
       echo("POOLED_REPORTS "+budget.evidence)
     }
