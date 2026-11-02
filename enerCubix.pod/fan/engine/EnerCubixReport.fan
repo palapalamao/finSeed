@@ -406,6 +406,7 @@ internal class EnerCubixReport
     Str[] points:=meters.map |m->Str| {m["pointId"] as Str ?: ""}
     points=points.findAll |id| {!id.isEmpty}.unique
     reads:=knownCtx.knownReads.vals.findAll |r| {points.contains(r["pointId"]) && DateTime.fromIso(r["from"].toStr) >= start && DateTime.fromIso(r["to"].toStr) <= finish}
+    reads=EnerCubixKnownUsage.coverageOrder(reads)
     seconds:=(finish-start).ticks.toFloat/1sec.ticks.toFloat
     covered:=points.map |point->Float|
     {

@@ -35,6 +35,22 @@ internal class EnerCubixKnownUsage
   static Str:Obj? fields(EnerCubixValue value)
   { ["knownValue":value.value,"knownValueType":value.valueType,"knownQuality":value.quality] }
 
+  ** Same contribution set, original hourly time order, stable alias/subpair ties.
+  ** Compare instants rather than ISO text across a repeated local DST hour.
+  internal static [Str:Obj?][] coverageOrder([Str:Obj?][] reads)
+  {
+    return reads.sort |a,b->Int| {coverageCompare(a,b)}
+  }
+  internal static Int coverageCompare(Str:Obj? a,Str:Obj? b)
+  {
+    c:=DateTime.fromIso(a["from"].toStr) <=> DateTime.fromIso(b["from"].toStr)
+    if(c != 0) return c
+    c=DateTime.fromIso(a["to"].toStr) <=> DateTime.fromIso(b["to"].toStr)
+    if(c != 0) return c
+    c=(a["nodeId"] as Str ?: "") <=> (b["nodeId"] as Str ?: "")
+    return c != 0 ? c : ((a["pointId"] as Str ?: "") <=> (b["pointId"] as Str ?: ""))
+  }
+
   static [Str:Obj?][] evidence([Str:Obj?][] reads)
   {
     count:=0

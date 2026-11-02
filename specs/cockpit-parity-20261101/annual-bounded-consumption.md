@@ -62,6 +62,8 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 阶梯前序私有 cursor 在当前小时消费者结束后，按原完整小时追加本设备主点用量；只保留严格累计标量，必要非整点前缀仍读取当前帧，跨账期重置。真实缺测、NA/reset/量程保留；已有量不能建立阶梯。先复现释放后第二小时应15却null，再以整段oracle验证月／年、不同设备费率、Wh换算、原Float顺序、746小时跨月及未准备步骤不污染状态。长期owner条目不随帧累计增长。完整84类676方法253232校验、专项5类35方法11364校验通过；捕获main8 provenance/48业务组不变，峰值109425/unprepared0，详见tariff-cursor-parity.json。仅内部入口，默认路径和安装包仍0.14.1，尚未接完整消费者。
 
+覆盖秒数专项已按架构确认固定为每唯一point内from/to时间顺序、同边界按nodeId/pointId裁决，比较真实时刻以覆盖DST重复小时；不改变贡献行、别名、过滤、每行秒数、sum后min或complete比较器。原无序Hash与增量时间序的亚秒Float尾差已有独立RED；8个完整闭合源区间端点例旧新对照仅3个coveredSeconds叶值变化，complete无翻转，其余字段逐项相等。已保留一个既有纳秒端点局限：fixture0实际完整、strict有值，但旧新exact Float比较均使complete=false；没有用epsilon或隐藏字段放行，不宣称该完整性问题已修正。私有CoverageFold按同一顺序分帧累计，不保留历史/贡献行；1/7/50/744帧宽逐位相等、长期额度固定、别名/长区间/缺失point/25h DST均覆盖。5类17方法12900校验通过，捕获main8 provenance/48业务组（含coverage）保持相等。证据coverage-order-correctness-evidence.json、coverage-fold-parity.json；仍未接全局业务消费者。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。
