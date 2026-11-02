@@ -111,20 +111,9 @@ internal class EnerCubixKnownUsage
 
   static EnerCubixValue combine(EnerCubixValue[] values)
   {
-    sources:=Str[,]; total:=0f; numeric:=0; missing:=false; allNA:=!values.isEmpty; quality:="ok"
-    values.each |v|
-    {
-      sources.addAll(v.sources)
-      if (v.value != null) { total+=v.value; numeric++; allNA=false; quality=EnerCubixValue.worse(quality,v.quality) }
-      else
-      {
-        missing=true
-        if (v.quality != "na") allNA=false
-      }
-    }
-    invalid:=values.find |v| { v.value == null && !["missing","incompleteInterval","filtered","substituted","na","reset","negative","maximum"].contains(v.quality) }
-    if (invalid != null) return EnerCubixValue(null,invalid.quality,sources.unique)
-    if (numeric == 0) return EnerCubixValue(null,allNA ? "na" : "missing",sources.unique)
-    return EnerCubixValue(total,missing ? EnerCubixValue.worse(quality,"filtered") : quality,sources.unique)
+    fold:=EnerCubixValueFold.known()
+    values.each |v| {fold.add(v)}
+    return fold.finish
   }
+
 }

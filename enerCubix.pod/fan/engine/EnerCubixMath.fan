@@ -28,16 +28,9 @@ internal class EnerCubixValue
 
   static EnerCubixValue sum(EnerCubixValue[] values)
   {
-    if (values.isEmpty) return EnerCubixValue()
-    total := 0f; quality := "ok"; sources := Str[,]; missing := false; valid := false
-    values.each |v|
-    {
-      if (v.value == null && v.quality != "filtered") missing = true
-      else if (v.value != null) { total += v.value; valid=true }
-      quality = worse(quality, v.quality)
-      sources.addAll(v.sources)
-    }
-    return EnerCubixValue(missing || !valid ? null : total, quality, sources.unique)
+    fold:=EnerCubixValueFold.strict()
+    values.each |v| {fold.add(v)}
+    return fold.finish
   }
 
   static EnerCubixValue divide(EnerCubixValue a, EnerCubixValue b)
