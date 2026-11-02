@@ -44,7 +44,8 @@ class EnerCubixCockpitGroupFrameTest : Test
     q:=query(1000);rs:=records(82);end:=at+1000hr;budget:=EnerCubixStreamBudget()
     owner:=EnerCubixPreparedOwner(budget.state);ctx:=EnerCubixContext(rs,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
     report:=EnerCubixReport(ctx,q,at,end,"profile","day","energy");line:=report.openLine("g","c")
-    scope:=EnerCubixLineFold(line.line,"value",owner);meters:=EnerCubixValueFold[,]
+    output:=EnerCubixPreparedOwner(budget.state)
+    scope:=EnerCubixPeriodConsumer(line.line,at,end,"month",owner,output);meters:=EnerCubixValueFold[,]
     cursors:=EnerCubixCockpitStream[,]
     read:=|Dict p,Span span,|HisItem| sink|
     {
@@ -69,12 +70,57 @@ class EnerCubixCockpitGroupFrameTest : Test
       else verifyEq(owner.entries,retained)
       verify(ctx.byPoint.isEmpty)
     }
-    verify(line.finish.ticks.isEmpty);verifyEq(scope.finish.value,82000f)
+    scope.finish
+    verify(line.finish.ticks.isEmpty);verifyEq(scope.total("value").value,82000f)
+    verifyEq(scope.periods.size,2)
+    verifyEq(((EnerCubixValue)scope.periods.first["value"]).value,61008f)
+    verifyEq(((EnerCubixValue)scope.periods.last["value"]).value,20992f)
     meters.each |fold| {verifyEq(fold.finish.value,1000f)}
     verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<200000)
+    verifyEq(budget.logicalHours,82000)
     echo("GROUP_FRAME_82 "+budget.evidence.toStr+" state="+budget.state.evidence.toStr)
     cursors.each |cursor| {cursor.close};owner.close
-    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+    verifyEq(scope.total("value").value,82000f)
+    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,output.entries)
+    output.close;verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testCleanedNaPeriodsAndCoverageMatchWholeReportWithoutPromotion()
+  {
+    q:=query(4);rs:=records(2);end:=at+4hr;cfg:=Etc.makeDict(["defNull":Marker.val])
+    points:=Str:Dict[:]
+    (0..1).each |i| {points["p$i"]=Etc.makeDict(["id":Ref("p$i"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])}
+    read:=|Dict p,Span span,|HisItem| sink|
+    {
+      values:=p.id.id == "p0" ? Obj?[0,10,NA.val,30,40] : Obj?[0,20,40,60,80]
+      values.each |value,i| {ts:=at+Duration(i*1hr.ticks);if(ts>=span.start && ts<span.end) sink(HisItem(ts,value is Int ? Number((Int)value) : value))}
+    }
+    oracle:=EnerCubixEngine.report(q,rs,EnerCubixCockpitStream.prepare(q,rs,points,["p0":cfg,"p1":cfg],read,EnerCubixStreamBudget()))
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(rs,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    report:=EnerCubixReport(ctx,q,at,end,"profile","day","energy");cursor:=report.openLine("g","c")
+    consumer:=EnerCubixPeriodConsumer(cursor.line,at,end,"day",owner,output)
+    coverage:=EnerCubixCoverageFold(["p0","p1"],at,end,owner)
+    known:=(EnerCubixContext)EnerCubixReport#.field("knownCtx").get(report)
+    streams:=EnerCubixCockpitStream[,]
+    points.keys.sort.each |id| {streams.add(EnerCubixCockpitStream.openCursor(points[id],cfg,at,end,q,rs,budget,read,ctx))}
+    for(i:=0;i<4;i++)
+    {
+      finish:=at+Duration((i+1)*1hr.ticks);streams.each |source| {source.advance(finish)}
+      EnerCubixCockpitStream.withFrames(streams,budget.state) |histories,frame|
+      {report.beginFrame(frame,histories);consumer.add(cursor.next);coverage.addFrame(known.knownReads.vals,frame)}
+    }
+    consumer.finish;cursor.finish
+    expected:=EnerCubixMath.maps(EnerCubixMath.maps(oracle["series"]).first["points"]).first
+    strict:=(EnerCubixValue)consumer.periods.first["value"];observed:=(EnerCubixValue)consumer.periods.first["known"]
+    verifyEq(strict.value,expected["value"]);verifyEq(strict.quality,expected["quality"]);verifyEq(strict.sources,expected["sourceIds"])
+    verifyEq(observed.value,expected["knownValue"]);verifyEq(observed.quality,expected["knownQuality"])
+    verifyNull(consumer.total("value").value);verifyEq(consumer.total("known").value,100f)
+    expectedCoverage:=EnerCubixMath.maps(((Map)oracle["extra"])["usageCoverage"]).first
+    coverage.finish.each |value,key| {verifyEq(value,expectedCoverage[key])}
+    verifyEq(budget.nativeReads,2);verifyEq(budget.scanned,10);verifyEq(budget.state.unprepared.val,0)
+    streams.each |source| {source.close};owner.close
+    verifyEq(consumer.total("known").value,100f);output.close;verifyEq(budget.state.temporary.val,0)
   }
 
   Void testGroupFailureDropsContextsBeforeReleasingSourcesAndPreservesPeer()

@@ -83,6 +83,7 @@ internal class EnerCubixCockpitStream
       stream.cursorReadAt=(stream.from-1day).toTimeZone(pointTz)
       stream.cursorReadEnd=(stream.to+1day).toTimeZone(pointTz)
       budget.openCursor(stream.cursorId)
+      budget.logicalHours+=(stream.to-stream.from).ticks/1hr.ticks
       return (EnerCubixCockpitStream)stream
     }
     catch(Err e)

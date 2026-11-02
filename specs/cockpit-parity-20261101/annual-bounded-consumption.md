@@ -66,6 +66,10 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 多源帧已接真实Report.openLine叶计算和带所有权的Line/Value folds：同预算、唯一主点与相同消费水位先校验；Context动态根先清除，再退出各源prepared frame。各源可共享已计账的冻结规划目录，独立cursor则在open前为自身目录索引保守准入，清空后释放；满额时更早拒绝且不启动原生读取。6类35方法5306校验、当前精确源码完整87类688方法257148校验通过。受控82源×1000小时为scope82000、每表1000，902读块回调/82082样本、unprepared0、prepared+Context峰值3253、raw峰值8309，在默认30秒内约2.8秒；有限元数据492仍真实计账，不假归零。两源大数例分别保持scope的1e16+4和selection的1e16+2；首次测试错误是原生区间值按结束时刻标记，已补合法前边界样本并修正fixture，未改业务读数算法。捕获main8 provenance/48业务组保持相等，默认峰值109425。证据group-frame-evidence.json与group-frame-full-fantom.log。不是FIN时延、完整9模块报告/输出所有权或zeda site年度完成证据；默认加载仍未切换。
 
+分期消费者保存独立全区间fold及一个当前期fold；输出预留自身Value/来源数组与完成时临时空间后，才复制已脱离tick的结果。输出owner和计算owner分开，前者在后者关闭后仍可读，关闭自身后清根；已有一期输出时最终准入失败也不允许发布或重试半成品。Scope真实82源×1000小时已接两期月输出：61008、20992，总量82000、每表1000；含保留输出后峰值4758、raw8309、902回调/82082样本、unprepared0，默认30秒内约4.5秒。清洗型NA的实际叶计算、分期及覆盖与整段报告相等（严格空、已有量100），2回调/10样本；另覆盖COP、传感器权重、25h DST及跨月Float归约。5类29方法2947校验通过；此增量未重跑完整套件，上述87类完整结果对应前一提交，不混用。私有cursor逻辑小时数0→82000统计缺口已通过功能RED修正；默认prepare统计不变。证据period-consumer-evidence.json；仍未接完整报告DTO、全局诊断及9模块默认路径。
+
+校验脚本纠正：此前新增回放辅助脚本误从根读取provenance字段，已对四组历史回放在正确的provenance容器内要求8个键存在并比较实际值，32项全部一致；缺键即失败。业务报告另要求12个report键相同，比较48槽位中的47个实有组，energy-flow/extra/usageCoverage原本缺省的一槽仍缺省。旧新证据已补入严格复核信息，见strict-provenance-verification.json及strict-business-verification.json。本增量最终回放也使用同一严格规则，不再依赖可选根字段读取。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

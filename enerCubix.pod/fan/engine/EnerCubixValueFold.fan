@@ -20,6 +20,7 @@ internal class EnerCubixValueFold
   {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(12)}
   private Void close()
   {sources.clear;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
+  internal Int sourceCount() {if(closed) throw ArgErr("valueFoldClosed");return sources.size}
 
   Void add(EnerCubixValue value)
   {

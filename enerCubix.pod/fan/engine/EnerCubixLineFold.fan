@@ -22,6 +22,18 @@ internal class EnerCubixLineFold
   private Bool closed := false
   private Void close() {incomplete=null;total=null;numerator=null;denominator=null;owner=null;closed=true}
 
+  internal Int outputEntries()
+  {
+    if(closed) throw ArgErr("lineFoldClosed")
+    if(ratio) return 4+numerator.sourceCount+denominator.sourceCount
+    return 4+(gauge && incomplete != null ? incomplete.sources.size : total.sourceCount)
+  }
+  internal Int outputScratchEntries()
+  {
+    if(closed) throw ArgErr("lineFoldClosed")
+    return ratio ? 10+3*(numerator.sourceCount+denominator.sourceCount) : 4+total.sourceCount
+  }
+
   Void add(EnerCubixTick tick)
   {
     if(closed) throw ArgErr("lineFoldClosed")
