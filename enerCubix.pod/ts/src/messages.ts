@@ -2002,6 +2002,6 @@ Object.assign(englishMessages,{"月度预算配置":"Monthly budget configuratio
 
 Object.assign(englishMessages,{"实际减期间预算":"Actual minus period budget","费用报告引用":"Cost report reference","预算版本与依据":"Budget versions and evidence","规则评估":"Rule evaluations","规则配置与输入":"Rule configuration and inputs","期间费用高于期间预算 {0}%，请核对用量、费率和预算安排。":"Period cost is {0}% above period budget. Check usage, tariffs and budget allocation."});
 
-Object.assign(englishMessages,{"查看费用依据":"View cost evidence"});
+Object.assign(englishMessages,{"查看费用依据":"View cost evidence","已停用":"Disabled","已返回区间":"Returned range"});
 
 Object.assign(englishMessages,{"费用币种无法确认":"Cost currency cannot be confirmed"});
