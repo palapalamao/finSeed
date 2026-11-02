@@ -49,6 +49,9 @@ class EnerCubixReportConsumerTest : Test
   Void testCompatibleSourceUnitConversionMatchesOriginalLeafOrder()
   {exercise(query,records,false,false,"Wh")}
 
+  Void testBorrowedNativeAreaMetadataSurvivesOutputExpiry()
+  {rs:=records;rs.find |r| {r["id"]=="a"}["nativeArea"]=["value":10f,"unit":"m²"];exercise(query,rs)}
+
   Void testDailyHourAndTimeBandRowsMatchOriginalReport()
   {
     exercise(query.set("kind","daily"),records)
@@ -73,6 +76,114 @@ class EnerCubixReportConsumerTest : Test
     rs.find |r| {r["id"]=="b"}["utilityId"]="ac"
     exercise(query.set("kind","utility"),rs)
     exercise(query.set("kind","utility").set("perArea",true),rs)
+  }
+
+  Void testOwnDailyObjectsDoNotCopyUnrelatedCatalogIntoEachOutput()
+  {exerciseOutputGraph("own")}
+  Void testEveryOverlappingScopeDetailPairRemainsAdmitted()
+  {exerciseOutputGraph("space")}
+  Void testOrganizationAreasRetainAndExpireGeneratedOverlapGraphs()
+  {exerciseOutputGraph("organization")}
+  Void testUtilitySharedSourcesAndCompatibilityAliasesRemainOwned()
+  {exerciseOutputGraph("utility");exerciseOutputGraph("alias")}
+  Void testDiagnosticLimitAndNearFullFailureDoNotLoseOwnership()
+  {exerciseOutputGraph("own",100);exerciseOutputGraph("organization",24,true)}
+
+  private Void exerciseOutputGraph(Str mode,Int hours := 24,Bool failFinish := false)
+  {
+    start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+Duration(hours*1hr.ticks)
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];ids:=Str[,]
+    for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","categoryId":"c","pointId":"p$i"])}
+    dimension:="metering";kind:="daily";area:=false
+    if(mode=="space")
+    {
+      dimension="space";ids.clear
+      for(i:=0;i<10;i++) {ids.add("s$i");rs.add(["id":"s$i","kind":"space","parentId":i==0 ? null : "s"+(i-1),"area":100f])}
+      rs.findAll |r| {r["kind"]=="meter"}.each |r| {r["spaceId"]="s9"}
+    }
+    if(mode=="organization")
+    {
+      dimension="organization";ids=["o","child"];area=true
+      rs.add(["id":"o","kind":"organization"]);rs.add(["id":"child","kind":"organization","parentId":"o"])
+      rs.add(["id":"building","kind":"space","area":100f,"nativeArea":["value":100f,"unit":"m²"]]);rs.add(["id":"floor","kind":"space","parentId":"building","area":40f])
+      rs.findAll |r| {r["kind"]=="meter"}.each |r,i|
+      {r["organizationId"]="child";r["areaSource"]="space";r["areaSpaceId"]=i%2==0 ? "building" : "floor";r["nativeArea"]=["value":10f,"unit":"m²"]}
+    }
+    if(mode=="utility" || mode=="alias")
+    {
+      kind="utility"
+      rs.add(["id":"u","kind":"utility","categoryId":"c"]);rs.add(["id":"v","kind":"utility","categoryId":"c"])
+      rs.findAll |r| {r["kind"]=="meter"}.each |r,i| {r["utilityId"]=i%2==0 ? "u" : "v"}
+      rs.find |r| {r["id"]=="m1"}["pointId"]="p0"
+      if(mode=="alias") rs.find |r| {r["id"]=="m1"}["canonicalId"]="m0"
+    }
+    for(i:=0;i<1000;i++) rs.add(["id":"unused$i","kind":"nativePoint","name":"Unselected point $i","nativeSourceId":"point$i","nativeSourceKind":"point","nativeTreeParentId":"folder","nativeHis":true,"unit":"kWh","siteRef":"site","equipRef":"unselected","nativeMod":"frozen","nativeDis":"Original point $i","writable":false,"nativePoint":true])
+    q:=Str:Obj?["kind":kind,"nodeIds":ids,"dimension":dimension,"from":start.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"UTC","period":"hour","metric":"energy","perArea":area]
+    original:=rs.toStr
+    streamBudget:=EnerCubixStreamBudget();budget:=streamBudget.state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    sources:=EnerCubixCockpitStream[,]
+    try
+    {
+      dim:=EnerCubixDimension(dimension,rs)
+      ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state);ctx.orderWarnings
+      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state)
+      EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
+      consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,"hour",state,output)
+      verify(budget.peak.val<200000)
+      verify(cursors.all |cursor| {cursor.watermark==start})
+      verifyEq(budget.unprepared.val,0)
+      read:=|Dict point,Span span,|HisItem| sink|
+      {(0..hours).each |i| {ts:=start+Duration(i*1hr.ticks);if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(1)))}}
+      rs.findAll |r| {r["kind"]=="meter"}.map |r->Str| {r["pointId"].toStr}.unique.each |Str pointId|
+      {
+        point:=Etc.makeDict(["id":Ref(pointId),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"kWh","tz":"UTC"])
+        sources.add(EnerCubixCockpitStream.openCursor(point,null,start,end,q,rs,streamBudget,read,ctx))
+      }
+      for(i:=0;i<hours;i++)
+      {
+        next:=start+Duration((i+1)*1hr.ticks);sources.each |source| {source.advance(next)}
+        EnerCubixCockpitStream.withFrames(sources,budget) |hs,frame| {consumer.addFrame(hs,frame)}
+      }
+      if(failFinish)
+      {
+        peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+        verifyErr(EnerCubixHttpErr#) {consumer.finish};verifyErr(EnerCubixHttpErr#) {consumer.finish}
+        sources.each |source| {source.close};state.close;output.close;verifyEq(budget.temporary.val,held)
+        peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
+      }
+      actual:=consumer.finish
+      if(hours==100) {known:=(Map)((Map)actual["extra"])["knownUsage"];verifyEq(((List)known["sourceUsage"]).size,1000);verifyEq(known["sourceUsageRowCount"],1800)}
+      if(mode=="space") verifyEq(EnerCubixMath.maps(((Map)actual["extra"])["details"]).size,180)
+      if(mode=="organization")
+      {verify(!((List)cursors.first.line.normalizationArea["excludedOverlaps"]).isEmpty);verifyEq(cursors.first.line.normalizationArea["value"],100f)}
+      // Count retained data containers once by identity, excluding only input
+      // catalog graphs. Include capture and frozen rows, not just the JSON root.
+      seen:=Obj[,];borrowed:=(Obj[])EnerCubixReportConsumer#.field("borrowed").get(consumer)
+      roots:=Obj?[actual,borrowed]
+      ["consumedPeriods","consumedMeters","consumedCoverage","consumedEvidence","consumedDaily"].each |field| {roots.add(EnerCubixReport#.field(field).get(report))}
+      ["evidence","frozenMeters"].each |field| {roots.add(EnerCubixReportConsumer#.field(field).get(consumer))}
+      cursors.each |cursor| {roots.add(cursor.line.consumedTotals);roots.add(cursor.line.normalizationArea)}
+      ((EnerCubixPeriodConsumer[])EnerCubixReportConsumer#.field("periods").get(consumer)).each |period| {roots.add(EnerCubixPeriodConsumer#.field("totals").get(period))}
+      sources.each |source| {source.close};state.close
+      owned:=roots.reduce(0) |Int n,root->Int| {n+outputEntries(root,borrowed,seen)}
+      verify(output.entries>=owned,"output admission must cover every retained data entry")
+      verify(budget.peak.val<200000);verifyEq(budget.temporary.val,output.entries)
+      echo("DAILY_OUTPUT_GRAPH mode="+mode+" hours="+hours+" retained="+owned+" admitted="+output.entries+" peak="+budget.peak.val)
+    }
+    finally {sources.each |source| {source.close};state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+    verifyEq(rs.toStr,original)
+  }
+
+  private Int outputEntries(Obj? value,Obj[] borrowed,Obj[] seen)
+  {
+    if(value isnot Map && value isnot List && value isnot EnerCubixValue) return 0
+    if(borrowed.any |v| {v === value}) return 0
+    if(seen.any |v| {v === value}) return 0
+    seen.add(value)
+    if(value is EnerCubixValue) return 3+outputEntries(((EnerCubixValue)value).sources,borrowed,seen)
+    if(value is Map) return ((Map)value).vals.reduce(1+((Map)value).size) |Int n,v->Int| {n+outputEntries(v,borrowed,seen)}
+    return ((List)value).reduce(1+((List)value).size) |Int n,v->Int| {n+outputEntries(v,borrowed,seen)}
   }
 
   Void test82SourcesRetainFullMonthlyReportAndBoundedEvidence()
@@ -177,11 +288,12 @@ class EnerCubixReportConsumerTest : Test
     verifyEq(actualKnown,expectedKnown)
     verifyEq(budget.state.unprepared.val,0)
     cursors.each |cursor| {verify(cursor.line.ticks.isEmpty)}
-    escapedRows:=(List)actual["rows"];escapedRow:=(Map)escapedRows.first
+    escapedRows:=(List)actual["rows"];escapedRow:=(Map)escapedRows.first;escapedArea:=cursors.first.line.normalizationArea
     sources.each |source| {source.close};state.close
     verifyEq(actual["summary"],expected["summary"])
     verifyEq(budget.state.temporary.val,output.entries)
     output.close;verify(actual.isEmpty);verify(escapedRows.isEmpty);verify(escapedRow.isEmpty)
+    verify(escapedArea.isEmpty)
     verifyEq(rs.toStr,inputBefore);verifyEq(budget.state.temporary.val,0)
     verifyErr(ArgErr#) {consumer.finish}
   }

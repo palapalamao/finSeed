@@ -178,6 +178,7 @@ internal class EnerCubixLine
   Str? utility
   EnerCubixTick[] ticks := [,]
   internal [Str:EnerCubixValue]? consumedTotals
+  internal Bool outputOwnsArea := false
 
   EnerCubixValue baseTotal() { reduce(ticks,"baseValue") }
   EnerCubixValue baseKnownTotal() { reduce(ticks,"baseKnown") }

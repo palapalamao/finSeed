@@ -84,6 +84,14 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 未部署或切默认：工作时段、空间仅摘要、热图、flow/COP/规则、消费者注册表及全包诊断仍待；当前每报告保守预留完整配置元数据，不能把单个main私有回放外推为81个空间焦点/全9模块共同满足200k。下一步须按实际共享关系和真实新建输出容器建立联合所有权，继续保留全部现有保护，而不是降低小时数据的计账单位。
 
+元数据与输出准入续批：18个own daily对象加1000个无关catalog点已先复现构造阶段PREPARED_READ_LIMIT。去掉未发生的深catalog克隆预留，改为保护向量每新引用先准入、每个line/membership/detail输出对及可变来源/面积/费率容器求界；line.normalizationArea生成图逐项转移到output（包括perArea=false不进DTO的图），没转移则由state清除，只清生成Map不改nativeArea借用值。finish临时来源并集/面积scratch先准入，dropGraph的vals/dup清理空间一直保留至输出关闭；最终保留数据图按identity遍历是下界验证，不冒充临时峰值证明。capture已经限制子区间，最终证据共享其独立行而不再浅clone第二图，诊断内容/配额不变；这仍不是全包1000方案。
+
+新增帧内header RED证实原retain(2)不足覆盖复制的18条header字段。仅owned-frame路径按每slot最大header/裁剪引用和可复用copy scratch准入，保留原重复读取/诊断裁剪顺序，不缓存数值；借用header只在下次node前消费，freezeEvidence独立方法返回后再做detail替换。framed无输出owner的knownEvidence快照明确拒绝，mergeKnown须同frame/budget；legacy计数与prepared小时单位不改。
+
+本批精确源码完整91类718方法260672校验通过（283285ms，旧显式1800秒容量夹具仍不作为生产30秒证明）。专项5类35方法14586校验通过：own保留图37408/输出准入54266/联合峰161726；10个重叠scope保留180对details，为38508/58892/182822；组织服务范围含排除图18594/27411/110783；utility同源40566/51338/128393、兼容alias38376/48775/125359；100小时1000诊断边界50318/66602/174062，near-full拒绝后peer及原catalog不变。state先关后输出仍可读，关闭输出后逃逸行/面积图均清空。82源1000小时完整profile仍与原整段相等，峰59543/raw8309、902回调/82082样本、unprepared0。
+
+捕获main私有profile/daily/utility各9个必需顶层字段及5/8/8个必需extra组零差异，峰91280/93796/91007；各385回调/12094捕获样本、关闭后raw/temporary0，有限元数据35仍计账；默认8必需provenance/12报告60槽59实有组保持相等，仅periodsCaptureId归一化。数据图、scratch及header准入均只覆盖当前七类，不能外推后续flow/COP/working。证据owned-admission-full-fantom.log、owned-admission-final-tests.log、owned-admission-native-parity.json、owned-admission-default-parity.json；离线包owned-admission-offline-test.pod SHA2E1E0069EDA39FF658C7BEDDEE68A28DEE40CA0C150DC4D0E4D64160397B1877。FIN Expert通用连接器离线契约未通过/目标版本仍未验证，与SDK执行证据分开记录。安装/默认路径不切换，完整9模块/全包诊断/联合源注册/实机年度仍未完成。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

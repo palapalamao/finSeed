@@ -7,7 +7,7 @@ internal class EnerCubixContext
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
     preparedBudget=strict.preparedBudget;deadline=strict.deadline
     inheritOwners(strict,false)
-    retain(4,true);if(preparedBudget != null) tariffBaseline.ordered=true
+    retain(strict.persistentOwner == null ? 4 : 7,true);if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new bound(EnerCubixContext source, Str id, Str:Obj? record)
   {
@@ -15,7 +15,7 @@ internal class EnerCubixContext
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
     preparedBudget=source.preparedBudget;deadline=source.deadline
     inheritOwners(source,true)
-    retain(4+(persistentOwner == null ? 0 : byId.size));if(preparedBudget != null) tariffBaseline.ordered=true
+    retain(4+(persistentOwner == null ? 0 : byId.size+3));if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new make([Str:Obj?][] records, [Str:Obj?][] histories, TimeZone tz, EnerCubixDimension? dimension := null)
   {
@@ -57,9 +57,13 @@ internal class EnerCubixContext
   private Str:[Str:Obj?] dimensionPlans := [:]
   private EnerCubixContext? strictContext
   private DateTime? knownEnd
+  ** In owned frames this is a borrowed cache view: consume rows before another
+  ** node evaluation can replace them. Retained evidence needs its output owner.
   Str:[Str:Obj?] knownReads := [:]
   Str:[Str:Obj?] usedTariffs := [:]
   private Int knownDetailCount := 0
+  private Str:Int knownCharges := [:]
+  private Int knownScratch := 0
   EnerCubixPreparedBudget? preparedBudget
   EnerCubixCockpitDeadline? deadline
   private Int nodeCalls := 0
@@ -86,7 +90,7 @@ internal class EnerCubixContext
     framed=true
     index:=1+byId.size+children.size
     children.each |rows| {index+=rows.size}
-    owner.watch |->Void| {dropPersistent};owner.hold(index)
+    owner.watch |->Void| {dropPersistent};owner.hold(index+3)
     persistentOwner=owner;preparedBudget=owner.budget;deadline=owner.budget.deadline;tariffBaseline.ordered=true
   }
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
@@ -120,7 +124,7 @@ internal class EnerCubixContext
   private Void frameCheck() {if(framed && frameOwner == null) throw ArgErr("preparedContextInactive")}
   private Void dropFrame()
   {
-    cache.clear;knownReads.clear;byPoint=Str:EnerCubixHistoryData[:]
+    cache.clear;knownReads.clear;knownCharges.clear;knownScratch=0;byPoint=Str:EnerCubixHistoryData[:]
     knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null
     if(transientContext)
     {
@@ -149,6 +153,7 @@ internal class EnerCubixContext
   Str:Obj? knownEvidence(Bool includeDetails := true)
   {
     frameCheck
+    if(framed) throw ArgErr("preparedEvidenceNeedsOutputOwner")
     reads:=EnerCubixKnownUsage.evidence(knownReads.vals)
     out:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":reads]
     if(includeDetails || omittedEmptyEvidence || omittedUnpreparedEvidence) out["detailsTruncated"]=omittedEmptyEvidence || omittedUnpreparedEvidence || reads.any |r| {r["detailsTruncated"] == true}
@@ -158,6 +163,7 @@ internal class EnerCubixContext
   Void mergeKnown(EnerCubixContext other)
   {
     frameCheck;other.frameCheck
+    if((framed || other.framed) && (frameOwner !== other.frameOwner || preparedBudget !== other.preparedBudget)) throw ArgErr("knownMergeOwner")
     omittedEmptyEvidence=omittedEmptyEvidence || other.omittedEmptyEvidence
     omittedUnpreparedEvidence=omittedUnpreparedEvidence || other.omittedUnpreparedEvidence
     other.knownReads.each |v,k| {if(!knownReads.containsKey(k)) retain(1);knownReads[k]=v}
@@ -209,6 +215,22 @@ internal class EnerCubixContext
     return warningSequence<previous[3]
   }
   private Void clearWarnings() {warnings.clear;warningRanks?.clear;warningRanks=null}
+
+  ** Each active frame keeps one maximum charge per header slot and one reusable
+  ** copy workspace. Duplicate visits still replace evidence in the original
+  ** order; they do not accumulate charges for maps no longer retained.
+  private Void knownWorkspace(Int entries)
+  {
+    if(frameOwner == null || entries<=knownScratch) return
+    frameOwner.hold(entries-knownScratch);knownScratch=entries
+  }
+  private Void knownHeader(Str key,Int entries)
+  {
+    if(frameOwner == null) return
+    if(!knownCharges.containsKey(key)) {frameOwner.hold(1);knownCharges[key]=0}
+    previous:=knownCharges[key]
+    if(entries>previous) {frameOwner.hold(entries-previous);knownCharges[key]=entries}
+  }
 
   Str displayName(Str id)
   {
@@ -467,6 +489,9 @@ internal class EnerCubixContext
       {
         data:=his.knownUsage(from,to,knownEnd); raw=(EnerCubixValue)data["value"]
         durationFactor=(EnerCubixMath.num(data["coveredSeconds"]) ?: 0f)/3600f
+        detailBound:=(data["intervals"] as List)?.size ?: 0
+        // maps() may simultaneously hold its filtered and mapped reference lists.
+        knownWorkspace(2+2*detailBound)
         details:=EnerCubixMath.maps(data["intervals"])
         empty:=preparedBudget != null && data["knownValue"] == null && data["knownQuality"] == "missing" && data["coveredSeconds"] == 0f && data["intervalCount"] == 0 && data["intervalStart"] == null && data["intervalEnd"] == null && details.isEmpty
         unprepared:=preparedBudget != null && raw.quality == "streamingReadNotPrepared" && data.size == 1
@@ -474,8 +499,17 @@ internal class EnerCubixContext
         else if(unprepared) omittedUnpreparedEvidence=true
         else
         {
-          evidence:=data.dup; evidence.remove("value")
           remaining:=1000-knownDetailCount
+          recordId:=r["id"].toStr
+          key:="$recordId|$point|${from.ticks}|${to.ticks}"
+          trim:=details.size>remaining ? 1+remaining : 0
+          header:=2+data.size+8+trim
+          // Header fields, six source/boundary fields, possible trim flags/list,
+          // and the slot index are admitted before copying the borrowed map.
+          // The first details list remains live while the counter's maps()
+          // creates its own filtered+mapped lists (at most three lists total).
+          knownWorkspace(header+3+3*detailBound);knownHeader(key,header)
+          evidence:=data.dup; evidence.remove("value")
           if (details.size > remaining)
           {
             evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
@@ -484,9 +518,7 @@ internal class EnerCubixContext
           }
           knownDetailCount+=EnerCubixMath.maps(evidence["intervals"]).size
           evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":from.toIso,"to":to.toIso])
-          recordId:=r["id"].toStr
-          key:="$recordId|$point|${from.ticks}|${to.ticks}"
-          if(!knownReads.containsKey(key)) retain(2)
+          if(frameOwner == null && !knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }
       }

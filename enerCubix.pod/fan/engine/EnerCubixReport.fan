@@ -83,6 +83,7 @@ internal class EnerCubixReport
     out.normalizationArea=areas.node(id)
     if (ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id))
       out.normalizationArea=areas.selection([id],ctx.dimension,ctx.selectionMeters(ctx.scopeMeters(id,category)).map |m->Str| {m["id"].toStr})
+    catalogOwner?.watch |->Void| {if(!out.outputOwnsArea) EnerCubixArea.clearResult(out.normalizationArea)}
     activeKnown:=knownCtx
     if (knownCtx != null && end != to) activeKnown=EnerCubixContext.known(ctx,end < dataCutoff ? end : dataCutoff)
     out.gauge=r?.get("kind") == "sensor"
@@ -394,6 +395,19 @@ internal class EnerCubixReport
     if(ctx.dimension != null && kind != "utility") lines.findAll |line| {!line.reference}.each |line|
     {detailMembers(line).each |meter| {add(meter["id"].toStr,meter["categoryId"] as Str ?: "",3)}}
     return out
+  }
+
+  ** Bounds count occurrences, not globally unique meters: one member can occur
+  ** in several scope rows. Duplicate-category lines may over-reserve safely.
+  internal Str:Int frameShape(EnerCubixLine[] lines)
+  {
+    members:=0;details:=0
+    lines.findAll |line| {!line.reference}.each |line|
+    {
+      members+=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).size
+      if(ctx.dimension != null && kind != "utility") details+=detailMembers(line).size
+    }
+    return ["members":members,"details":details]
   }
 
   private EnerCubixValue meterTotal(Str id, Str category, Bool known := false)

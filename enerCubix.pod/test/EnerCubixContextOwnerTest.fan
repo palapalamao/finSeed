@@ -3,6 +3,41 @@ using haystack
 ** Actual private producer frames; no FIN data or project mutation.
 class EnerCubixContextOwnerTest : Test
 {
+  Void testFrameAdmissionIncludesCopiedKnownHeaderFields()
+  {
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];ids:=Str[,]
+    for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","pointId":"p$i","categoryId":"c"])}
+    q:=Str:Obj?["kind":"profile","nodeIds":ids,"from":at.toIso,"to":(at+1hr).toIso,"asOf":(at+1hr).toIso,"tz":"UTC","period":"hour","metric":"energy"]
+    budget:=EnerCubixStreamBudget();state:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(rs,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(state);known:=EnerCubixContext.known(ctx,at+1hr)
+    streams:=EnerCubixCockpitStream[,]
+    read:=|Dict p,Span span,|HisItem| sink| {(0..1).each |i| {ts:=at+Duration(i*1hr.ticks);if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(1)))}}
+    for(i:=0;i<18;i++)
+    {
+      p:=Etc.makeDict(["id":Ref("p$i"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"kWh","tz":"UTC"])
+      stream:=EnerCubixCockpitStream.openCursor(p,null,at,at+1hr,q,rs,budget,read,ctx);stream.advance(at+1hr);streams.add(stream)
+    }
+    try
+    {
+      EnerCubixCockpitStream.withFrames(streams,budget.state) |histories,frame|
+      {
+        ctx.beginFrame(frame,histories);known.beginFrame(frame,histories)
+        ids.each |id| {known.node(id,"c",at,at+1hr)}
+        verifyEq(known.knownReads.size,18)
+        verifyErr(ArgErr#) {known.knownEvidence}
+        headers:=known.knownReads.vals.reduce(1+known.knownReads.size) |Int n,row->Int| {n+1+row.size}
+        verify(frame.entries>=headers,"copied header map fields must be admitted")
+        first:=frame.entries
+        // Replacing equal-sized headers uses one reusable scratch allocation,
+        // not an ever-growing charge for every duplicate source visit.
+        ids.each |id| {known.node(id,"c",at,at+1hr)}
+        verifyEq(frame.entries,first)
+      }
+    }
+    finally {streams.each |stream| {stream.close};state.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testKnownAndStrictRootsClearBeforeTheirOwnerReleases()
   {
     budget:=EnerCubixStreamBudget();peer:=EnerCubixPreparedOwner(budget.state);peer.hold(13)

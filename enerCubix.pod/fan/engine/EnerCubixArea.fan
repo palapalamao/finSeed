@@ -12,6 +12,18 @@ internal class EnerCubixArea
   private Str:[Str:Obj?] byId := [:]
   private Str:Str nativeIds := [:]
   internal Void clear() {byId.clear;nativeIds.clear}
+  ** Only generated containers are owned. Native area values inside source maps
+  ** remain borrowed from the frozen catalog and must never be recursively cleared.
+  internal static Void clearResult(Str:Obj? area)
+  {
+    ["sources","excludedOverlaps"].each |key|
+    {
+      rows:=area[key] as List
+      rows?.each |row| {if(row is Map) ((Map)row).clear}
+      rows?.clear
+    }
+    area.clear
+  }
 
   Str:Obj? node(Str id)
   {
