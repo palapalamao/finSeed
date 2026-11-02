@@ -14,8 +14,9 @@ internal class EnerCubixReportConsumer
     {
       closeOutput;report.clearFrames
       definitions.each |EnerCubixLine line| {if(line.outputOwnsArea) EnerCubixArea.clearResult(line.normalizationArea);line.consumedTotals?.clear;line.consumedTotals=null}
-      definitions.clear;borrowed.clear
+      definitions.clear;if(!sharedBorrowed) borrowed.clear
     }
+    if(ctx.sharedCatalog!=null) {ctx.sharedCatalog.bind(output);borrowed=ctx.sharedCatalog.protectedRoots;sharedBorrowed=true}
     ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
@@ -33,7 +34,7 @@ internal class EnerCubixReportConsumer
     // The summary finalizer creates only two line vectors and one coverage
     // vector. It never creates selection/detail candidate or area unions.
     finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(ctx.byId.size+shape["members"]+shape["details"]+cursors.size+1)
-    ctx.byId.each |record| {protect(record)}
+    if(!sharedBorrowed) ctx.byId.each |record| {protect(record)}
     // Area graphs were created under the calculation owner. They remain linked
     // from definitions (even perArea=false), so transfer their actual graph too.
     definitions.addAll(cursors.map |c->EnerCubixLine| {c.line})
@@ -67,6 +68,7 @@ internal class EnerCubixReportConsumer
   private EnerCubixPreparedOwner output
   private Str:Obj? result := [:]
   private Obj[] borrowed := [,]
+  private Bool sharedBorrowed := false
   private EnerCubixValue[] frozenMeters := [,]
   private Int finishScratch := 0
   private Int readCount := 0

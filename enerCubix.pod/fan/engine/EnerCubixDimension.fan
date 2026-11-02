@@ -2,26 +2,64 @@
 class EnerCubixDimension
 {
   new make(Str dimension, [Str:Obj?][] source, Bool nativeSpace := false)
+  {this.dimension=dimension;initialize(dimension,source,nativeSpace,null)}
+
+  ** Private request-owned projection; the ordinary report constructor is unchanged.
+  internal new owned(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner owner)
+  {
+    this.dimension=dimension
+    if(!source.isImmutable) throw ArgErr("catalogSourceNotFrozen")
+    initialize(dimension,source,nativeSpace,owner)
+  }
+  internal new projected(Str dimension,EnerCubixDimension source,Bool nativeSpace)
+  {
+    if(!["space","metering","organization"].contains(dimension)) throw ArgErr("Invalid report dimension")
+    this.dimension=dimension;this.nativeSpace=dimension=="space" && nativeSpace
+    records=source.records;byId=source.byId;originals=source.originals
+  }
+  private Void initialize(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner? owner)
   {
     if (!["space","metering","organization"].contains(dimension)) throw ArgErr("Invalid report dimension")
-    this.dimension=dimension
     this.nativeSpace=dimension == "space" && nativeSpace
-    source.each |r| { id:=r["id"]?.toStr; if (id != null) originals[id]=r }
+    copies:=owner==null ? null : [Str:Obj?][,];variables:=owner==null ? null : Map[,]
+    if(owner!=null)
+    {
+      owner.watch |->Void|
+      {
+        variables.each |Map v| {v.clear};copies.each |Map r| {r.clear}
+        variables.clear;copies.clear;records.clear;byId.clear;originals.clear
+      }
+      owner.hold(8)
+    }
+    scratch:=owner==null ? null : EnerCubixPreparedOwner(owner.budget)
+    try
+    {
+    // Canonical traversal has at most one reference per source record. This
+    // scratch lease covers temporary seen paths, independently of retained maps.
+    scratch?.hold(4+source.size)
+    source.each |r| { id:=r["id"]?.toStr; if (id != null) {owner?.hold(1);originals[id]=r} }
     source.each |r|
     {
       id:=r["id"]?.toStr
       if (id == null || canonical(id) != id) return
+      owner?.hold(2+r.size)
       copy:=r.dup
+      copies?.add(copy)
       ["meterParentId","numeratorId","denominatorId"].each |key|
       { ref:=copy[key]?.toStr; if (ref != null) copy[key]=canonical(ref) }
       if (copy["variables"] is Map)
       {
+        raw:=(Map)copy["variables"];owner?.hold(2+raw.size)
         vars:=Str:Obj?[:]
-        ((Map)copy["variables"]).each |Obj? ref, Obj key| { vars[key.toStr]=ref == null ? null : canonical(ref.toStr) }
         copy["variables"]=vars
+        variables?.add(vars)
+        raw.each |Obj? ref, Obj key| { vars[key.toStr]=ref == null ? null : canonical(ref.toStr) }
       }
+      owner?.hold(2)
       records.add(copy); byId[id]=copy
     }
+    }
+    finally {scratch?.close}
   }
 
   Str dimension

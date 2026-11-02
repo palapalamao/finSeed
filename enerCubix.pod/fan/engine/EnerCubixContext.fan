@@ -8,6 +8,7 @@ internal class EnerCubixContext
     preparedBudget=strict.preparedBudget;deadline=strict.deadline
     inheritOwners(strict,false)
     retain(strict.persistentOwner == null ? 4 : 7,true);if(preparedBudget != null) tariffBaseline.ordered=true
+    sharedModel=strict.sharedModel;if(sharedModel!=null) retain(1,true)
   }
   new bound(EnerCubixContext source, Str id, Str:Obj? record)
   {
@@ -16,6 +17,7 @@ internal class EnerCubixContext
     preparedBudget=source.preparedBudget;deadline=source.deadline
     inheritOwners(source,true)
     retain(4+(persistentOwner == null ? 0 : byId.size+3));if(preparedBudget != null) tariffBaseline.ordered=true
+    sharedModel=source.sharedModel;if(sharedModel!=null) retain(1)
   }
   new make([Str:Obj?][] records, [Str:Obj?][] histories, TimeZone tz, EnerCubixDimension? dimension := null)
   {
@@ -42,6 +44,18 @@ internal class EnerCubixContext
     if (defaults.size == 1) calendar=defaults.first
     else if (defaults.isEmpty && calendars.size == 1) calendar=calendars.first
   }
+  internal new shared(EnerCubixCockpitCatalog catalog,Str dimension,Bool nativeSpace,EnerCubixPreparedOwner state)
+  {
+    if(state===catalog.owner || state.budget!==catalog.owner.budget) throw ArgErr("catalogBorrower")
+    tz=catalog.tz
+    state.watch |->Void| {dropPersistent};state.hold(24)
+    catalog.bind(state);sharedModel=catalog
+    framed=true;persistentOwner=state;preparedBudget=state.budget;deadline=state.budget.deadline;tariffBaseline.ordered=true
+    this.dimension=catalog.view(dimension,nativeSpace)
+    byId=catalog.byId;children=catalog.children;calendar=catalog.calendar
+  }
+  private EnerCubixCockpitCatalog? sharedModel
+  internal EnerCubixCockpitCatalog? sharedCatalog() {sharedModel}
   TimeZone tz
   EnerCubixDimension? dimension
   EnerCubixComparisonScope? comparison
@@ -130,6 +144,7 @@ internal class EnerCubixContext
     {
       tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
       byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
+      if(sharedModel!=null) {dimension=null;sharedModel=null}
     }
   }
   private Void dropPersistent()
@@ -137,6 +152,7 @@ internal class EnerCubixContext
     if(frameOwner != null) throw ArgErr("preparedFrameActive")
     dropFrame;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
     byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
+    if(sharedModel!=null) {dimension=null;sharedModel=null}
   }
 
   internal Void bindTariffCursor(Str id,EnerCubixTariffCursor cursor,EnerCubixPreparedOwner owner)
@@ -749,7 +765,8 @@ internal class EnerCubixContext
     }
     own:=r?.get("unit")?.toStr
     if (own != null) return own
-    return byPoint[r?.get("pointId")?.toStr ?: ""]?.unit ?: ""
+    point:=r?.get("pointId")?.toStr ?: ""
+    return byPoint[point]?.unit ?: (sharedModel?.primaryUnit(point) ?: "")
   }
 
   private Str categoryUnit(Str category)

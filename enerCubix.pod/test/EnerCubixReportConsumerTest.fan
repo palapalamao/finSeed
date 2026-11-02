@@ -110,6 +110,17 @@ class EnerCubixReportConsumerTest : Test
     exercise(query,records,false,true,"kWh",true)
     rs:=records;rs.last["pointId"]="pa";exercise(query,rs,false,false,"Wh",true)
   }
+  Void testSharedModelReportsKeepMetadataAliveUntilOutputExpiry()
+  {
+    exercise(query,records,false,false,"kWh",false,true)
+    exercise(query,records,false,false,"kWh",true,true)
+    rs:=records
+    rs.add(["id":"tariff","kind":"tariff","categoryId":"c","isDefault":true,"mode":"flat","rate":0.735f,"rules":[["startHour":0,"endHour":1,"rate":1f]]])
+    exercise(query.set("metric","cost"),rs,false,false,"kWh",false,true)
+    exercise(query,records,true,false,"kWh",false,true)
+  }
+  Void test81FocusSummariesIncludeOwnedCanonicalCatalogInJointPeak()
+  {exerciseOutputGraph("summaryShared")}
 
   private Void exerciseOutputGraph(Str mode,Int hours := 24,Bool failFinish := false)
   {
@@ -118,13 +129,14 @@ class EnerCubixReportConsumerTest : Test
     for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","categoryId":"c","pointId":"p$i"])}
     dimension:="metering";kind:="daily";area:=false
     if(mode=="working") {kind="workingDays";rs.add(["id":"cal","kind":"calendar","workDays":[1,2,3,4,5]])}
-    if(mode=="space" || mode=="summary")
+    summaryOnly:=mode.startsWith("summary")
+    if(mode=="space" || summaryOnly)
     {
       dimension="space";ids.clear
-      spaces:=mode=="summary" ? 81 : 10
+      spaces:=summaryOnly ? 81 : 10
       for(i:=0;i<spaces;i++) {ids.add("s$i");rs.add(["id":"s$i","kind":"space","parentId":i==0 ? null : "s"+(i-1),"area":100f])}
       rs.findAll |r| {r["kind"]=="meter"}.each |r| {r["spaceId"]="s"+(spaces-1)}
-      if(mode=="summary") kind="profile"
+      if(summaryOnly) kind="profile"
     }
     if(mode=="organization")
     {
@@ -147,11 +159,15 @@ class EnerCubixReportConsumerTest : Test
     original:=rs.toStr
     streamBudget:=EnerCubixStreamBudget();budget:=streamBudget.state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
     sources:=EnerCubixCockpitStream[,]
+    model:=mode=="summaryShared" ? EnerCubixPreparedOwner(budget) : null
     try
     {
-      dim:=EnerCubixDimension(dimension,rs)
-      ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state);ctx.orderWarnings
-      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state,mode=="summary")
+      catalog:=model==null ? null : EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+      dim:=catalog==null ? EnerCubixDimension(dimension,rs) : null
+      ctx:=catalog==null ? EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim) : EnerCubixContext.shared(catalog,dimension,false,state)
+      if(catalog==null) ctx.useOwner(state)
+      ctx.orderWarnings
+      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state,summaryOnly)
       EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
       consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,"hour",state,output)
       verify(budget.peak.val<200000)
@@ -173,11 +189,11 @@ class EnerCubixReportConsumerTest : Test
       {
         peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
         verifyErr(EnerCubixHttpErr#) {consumer.finish};verifyErr(EnerCubixHttpErr#) {consumer.finish}
-        sources.each |source| {source.close};state.close;output.close;verifyEq(budget.temporary.val,held)
+        sources.each |source| {source.close};state.close;output.close;model?.close;verifyEq(budget.temporary.val,held)
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
-      if(mode=="summary")
+      if(summaryOnly)
       {
         verify(!actual.containsKey("series"));verify(!actual.containsKey("rows"))
         ["totals","knownTotals"].each |field|
@@ -200,10 +216,10 @@ class EnerCubixReportConsumerTest : Test
       sources.each |source| {source.close};state.close
       owned:=roots.reduce(0) |Int n,root->Int| {n+outputEntries(root,borrowed,seen)}
       verify(output.entries>=owned,"output admission must cover every retained data entry")
-      verify(budget.peak.val<200000);verifyEq(budget.temporary.val,output.entries)
-      echo("DAILY_OUTPUT_GRAPH mode="+mode+" hours="+hours+" retained="+owned+" admitted="+output.entries+" peak="+budget.peak.val)
+      verify(budget.peak.val<200000);verifyEq(budget.temporary.val,output.entries+(model?.entries ?: 0))
+      echo("DAILY_OUTPUT_GRAPH mode="+mode+" hours="+hours+" retained="+owned+" admitted="+output.entries+" model="+(model?.entries ?: 0)+" peak="+budget.peak.val)
     }
-    finally {sources.each |source| {source.close};state.close;output.close}
+    finally {sources.each |source| {source.close};state.close;output.close;model?.close}
     verifyEq(budget.temporary.val,0)
     verifyEq(rs.toStr,original)
   }
@@ -269,7 +285,7 @@ class EnerCubixReportConsumerTest : Test
     output.close;verify(actual.isEmpty);verifyEq(budget.state.temporary.val,0)
   }
 
-  private Void exercise(Str:Obj? q,[Str:Obj?][] rs,Bool failFinish := false,Bool empty := false,Str sourceUnit := "kWh",Bool summaryOnly := false)
+  private Void exercise(Str:Obj? q,[Str:Obj?][] rs,Bool failFinish := false,Bool empty := false,Str sourceUnit := "kWh",Bool summaryOnly := false,Bool sharedCatalog := false)
   {
     inputBefore:=rs.toStr
     points:=Str:Dict[:]
@@ -285,14 +301,19 @@ class EnerCubixReportConsumerTest : Test
     whole:=EnerCubixCockpitStream.prepare(q,rs,points,configs,read,EnerCubixStreamBudget())
     expected:=EnerCubixEngine.report(q,rs,whole)
     budget:=EnerCubixStreamBudget();state:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state)
-    dimension:=EnerCubixDimension("space",rs,true)
-    ctx:=EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone.utc,dimension);ctx.useOwner(state);ctx.orderWarnings
+    model:=sharedCatalog ? EnerCubixPreparedOwner(budget.state) : null
+    catalog:=model==null ? null : EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    dimension:=catalog==null ? EnerCubixDimension("space",rs,true) : null
+    ctx:=catalog==null ? EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone.utc,dimension) : EnerCubixContext.shared(catalog,"space",true,state)
+    if(catalog==null) ctx.useOwner(state)
+    ctx.orderWarnings
     queryEnd:=DateTime.fromIso(q["to"].toStr)
     report:=EnerCubixReport(ctx,q,at,queryEnd,q["kind"].toStr,"month",q["metric"].toStr,state,summaryOnly)
     cursors:=EnerCubixLineCursor[,]
     if(q["kind"]=="utility") EnerCubixEndUse.resolve(ctx,EnerCubixMath.strings(q["nodeIds"])).each |meter| {cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
     else EnerCubixMath.strings(q["nodeIds"]).each |id| {ctx.categories(id).each |category| {cursors.add(report.openLine(id,category))}}
     consumer:=EnerCubixReportConsumer(ctx,report,cursors,at,queryEnd,"month",state,output)
+    if(catalog!=null) verify(EnerCubixReportConsumer#.field("borrowed").get(consumer)===catalog.protectedRoots)
     sources:=EnerCubixCockpitStream[,]
     points.keys.sort.each |id| {sources.add(EnerCubixCockpitStream.openCursor(points[id],configs[id],at,queryEnd,q,rs,budget,read,ctx))}
     for(i:=0;i<4;i++)
@@ -306,7 +327,7 @@ class EnerCubixReportConsumerTest : Test
       peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining);held:=peer.entries
       verifyErr(EnerCubixHttpErr#) {consumer.finish}
       verifyErr(EnerCubixHttpErr#) {consumer.finish}
-      sources.each |source| {source.close};state.close;output.close
+      sources.each |source| {source.close};state.close;output.close;model?.close
       verifyEq(budget.state.temporary.val,held);peer.close;verifyEq(budget.state.temporary.val,0)
       verifyEq(rs.toStr,inputBefore);return
     }
@@ -331,9 +352,11 @@ class EnerCubixReportConsumerTest : Test
     sources.each |source| {source.close};state.close
     if(summaryOnly) verifyEq(((Map)actual["summary"])["totals"],((Map)expected["summary"])["totals"])
     else verifyEq(actual["summary"],expected["summary"])
-    verifyEq(budget.state.temporary.val,output.entries)
+    verifyEq(budget.state.temporary.val,output.entries+(model?.entries ?: 0))
+    if(model!=null) verifyErr(ArgErr#) {model.close}
     output.close;verify(actual.isEmpty);verify(escapedRows.isEmpty);verify(escapedRow.isEmpty)
     verify(escapedArea.isEmpty)
+    model?.close
     verifyEq(rs.toStr,inputBefore);verifyEq(budget.state.temporary.val,0)
     verifyErr(ArgErr#) {consumer.finish}
   }

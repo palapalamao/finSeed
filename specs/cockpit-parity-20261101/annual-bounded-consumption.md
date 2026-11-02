@@ -159,3 +159,11 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 本批精确源码完整93类730方法261166校验通过，217501ms（selective-output-full-fantom.log）；其中旧1800秒容量夹具不提升为原生30秒证明。专项4类40方法2149校验通过。真实捕获main离线summary三组等旧profile，峰11336；热图2328格/209排除日等旧time模块，峰36416；各385回调/12094捕获样本、unprepared0、关闭raw/temporary0、有限metadata35继续计账，无FIN I/O。默认整包8必需provenance与12报告60槽59实有组等旧结果，原缺省flow coverage保留，仅periodsCaptureId归一化。证据selective-output-evidence.json/native-parity.json/default-parity.json；冻结离线包selective-output-offline-test.pod SHAD27A9286F131669342FCD6D62F5489EA8D40584D7F85444B32FA085A0C96811A。
 
 所有权边界补记：当前consumer将调用方提供的dim.records视为借入输入；Dimension.make在Context.useOwner前的r.dup/variables复制及索引，尚不属于consumer计数。联合注册时必须共享并为每维度投影单独准入，模型owner覆盖输出借用期；不能将本批私有source/context/output峰外推成全模型、JVM heap或9模块联合证明。注册表、全包公平1000诊断、flow/COP/规则适配与最终候选实机年度尚待；当前安装/默认不切换，只读账号仍按用户暂缓。
+
+共享目录私有所有权已接。功能RED确认canonical记录/variables复制未准入；新增owned投影在复制前准入原始索引、r.dup、变量Map、record/byId引用及有限canonical路径scratch。一个规范化投影的records/byId/originals真实共享给三种维度，只建轻量view，Context共享children，Report共享Area，所有输出共用一个保护向量。原普通Dimension构造沿同一初始化逻辑，不启用owner；默认路径不切换。模型没有历史或持久化缓存。
+
+模型owner覆盖计算和输出借用期：记录绑定owner并在任何owner.entries非0时拒绝释放，包括部分close失败；不依赖早先callback执行便提前减引用。先关fold-state仍可读输出，输出关后才允许清规范化副本；只清新建Map头/variables/索引，不清原冻结配置的子Map。失败、foreign/closed owner、活动frame阻止state关闭、near-limit半构造与别名失败均通过。另功能RED发现metadata-only定义在首帧前丢主点单位，现仅借原主点metadata的单位字符串冻结索引，保持category/record/history优先级，known/bound继承并在过期后断根；无额外点或历史读取。
+
+专项5类88方法2455校验通过，24255ms（shared-catalog-final-tests.log）。1000无关点+三view的新容器图下界21061，model准入23122，峰24102；81焦点+18主点+1000catalog+24h含真实新model后的私有联合峰144530，输出图下界15228、输出准入74087、model23513，非之前借入目录峰。实际捕获main的profile9顶层+5extra/summary三组/热图2328格209排除日均等冻结旧结果；含model峰109365/29421/55882，385回调/12094捕获样本、raw691、unprepared0、关闭raw/temporary0，有限35源元数据仍计账，model关闭前23838/23838/23832。无FIN I/O。默认8必需provenance与12报告59实有组仍相等，原缺省flow coverage保留，仅periodsCaptureId归一化。
+
+证据shared-catalog-evidence.json/native-parity.json/default-parity.json，冻结离线包shared-catalog-offline-test.pod SHAF19946408CA33078A11591679C36F7C9951AC21E32D572333FED31FA816C4934。本增量未重复完整套件，最近完整93类730方法261166校验明确对应d9f40154。原冻结请求目录作为明确借入输入，图遍历仍只是新容器下界，不作JVM heap证明。尚未将全九模块注册及公平1000诊断接通；flow/COP的特殊记录集不能未经兼容性证明便套用同一规范化目录。仍无部署/默认切换，原保护不放宽，只读账号继续暂缓。

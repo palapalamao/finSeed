@@ -5,13 +5,15 @@ internal class EnerCubixReport
     if(summaryFrames && (catalogOwner == null || kind != "profile" || metric != "energy" || request["perArea"] == true)) throw ArgErr("summaryFramePlan")
     this.summaryFrames=summaryFrames
     this.ctx=ctx; this.request=request; this.from=from; this.to=to; this.kind=kind; this.period=period; this.metric=metric
+    sharedAreas=ctx.sharedCatalog!=null
+    if(sharedAreas && catalogOwner==null) throw ArgErr("sharedReportNeedsOwner")
     if(catalogOwner != null)
     {
       if(!ctx.ownedCatalog(catalogOwner.budget)) throw ArgErr("reportCatalogOwner")
-      catalogOwner.hold(30+3*ctx.byId.size);this.catalogOwner=catalogOwner
-      catalogOwner.watch |->Void| {areas.clear;this.catalogOwner=null}
+      catalogOwner.hold(sharedAreas ? 30 : 30+3*ctx.byId.size);this.catalogOwner=catalogOwner
+      catalogOwner.watch |->Void| {if(!sharedAreas) areas.clear;this.catalogOwner=null}
     }
-    areas=EnerCubixArea(ctx.byId.vals)
+    areas=ctx.sharedCatalog?.areas ?: EnerCubixArea(ctx.byId.vals)
     dataCutoff=EnerCubixKnownUsage.cutoff(request)
     if (EnerCubixKnownUsage.supported(kind,metric))
     {
@@ -19,6 +21,7 @@ internal class EnerCubixReport
     }
   }
   private EnerCubixArea areas
+  private Bool sharedAreas := false
   private EnerCubixPreparedOwner? catalogOwner
   private EnerCubixContext ctx
   private EnerCubixContext? knownCtx
@@ -71,7 +74,7 @@ internal class EnerCubixReport
     return finish(lines)
   }
   internal Void clearFrames()
-  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
+  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;if(!sharedAreas) areas.clear}
 
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
   {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
