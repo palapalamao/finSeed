@@ -4,18 +4,19 @@
 internal class EnerCubixPeriodConsumer
 {
   new make(EnerCubixLine definition,DateTime from,DateTime to,Str gran,
-    EnerCubixPreparedOwner state,EnerCubixPreparedOwner output)
+    EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,Bool emitPeriods := true)
   {
     if(state.budget !== output.budget || to<=from || !definition.ticks.isEmpty || !["hour","day","week","month","year"].contains(gran)) throw ArgErr("periodConsumerPlan")
-    this.definition=definition;this.to=to;this.gran=gran;at=from;stateOwner=state;outputOwner=output
+    this.definition=definition;this.to=to;this.gran=gran;at=from;stateOwner=state;outputOwner=output;this.emitPeriods=emitPeriods
     state.watch |->Void| {closeState};output.watch |->Void| {closeOutput}
-    state.hold(25);output.hold(2)
+    state.hold(26);output.hold(2)
     modes.each |mode| {all[mode]=EnerCubixLineFold(definition,mode,state)}
   }
   private static const Str[] modes := ["value","known","baseValue","baseKnown"].toImmutable
   private EnerCubixLine? definition
   private const DateTime to
   private const Str gran
+  private const Bool emitPeriods
   private EnerCubixPreparedOwner stateOwner
   private EnerCubixPreparedOwner outputOwner
   private DateTime at
@@ -40,17 +41,20 @@ internal class EnerCubixPeriodConsumer
     if(tick.ts != at || tick.end<=tick.ts || tick.end>to) throw ArgErr("periodConsumerTick")
     try
     {
-      next:=EnerCubixMath.bucket(tick.ts,gran)
-      if(bucket != null && next != bucket) seal
-      if(bucket == null)
+      if(emitPeriods)
       {
-        periodOwner=EnerCubixPreparedOwner(stateOwner.budget);periodOwner.hold(4)
-        modes.each |mode| {active[mode]=EnerCubixLineFold(definition,mode,periodOwner)}
-        bucket=next;firstAt=tick.ts;samples=0;knownSamples=0
+        next:=EnerCubixMath.bucket(tick.ts,gran)
+        if(bucket != null && next != bucket) seal
+        if(bucket == null)
+        {
+          periodOwner=EnerCubixPreparedOwner(stateOwner.budget);periodOwner.hold(4)
+          modes.each |mode| {active[mode]=EnerCubixLineFold(definition,mode,periodOwner)}
+          bucket=next;firstAt=tick.ts;samples=0;knownSamples=0
+        }
       }
-      modes.each |mode| {all[mode].add(tick);active[mode].add(tick)}
-      samples++;if(tick.known?.value != null) knownSamples++
-      lastAt=tick.end;at=tick.end
+      modes.each |mode| {all[mode].add(tick);if(emitPeriods) active[mode].add(tick)}
+      if(emitPeriods) {samples++;if(tick.known?.value != null) knownSamples++;lastAt=tick.end}
+      at=tick.end
     }
     catch(Err e) {failure=e;throw e}
   }

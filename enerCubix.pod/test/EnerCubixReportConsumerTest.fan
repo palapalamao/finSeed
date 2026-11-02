@@ -49,6 +49,32 @@ class EnerCubixReportConsumerTest : Test
   Void testCompatibleSourceUnitConversionMatchesOriginalLeafOrder()
   {exercise(query,records,false,false,"Wh")}
 
+  Void testDailyHourAndTimeBandRowsMatchOriginalReport()
+  {
+    exercise(query.set("kind","daily"),records)
+    rs:=records
+    rs.add(["id":"cal","kind":"calendar","workHours":[0,1],"peakHours":[0],"valleyHours":[1]])
+    exercise(query.set("kind","daily").set("perArea",true),rs)
+  }
+
+  Void testExactPartialFinalHourStillUsesOriginalPreparedSubrange()
+  {
+    q:=query.set("to",(at+200min).toIso).set("asOf",(at+200min).toIso)
+    exercise(q,records);exercise(q.set("kind","daily"),records)
+  }
+
+  Void testUtilityKeepsConfiguredEndUseAndExplicitMeterFrontier()
+  {
+    rs:=records
+    rs.add(["id":"u","kind":"utility","name":"Lighting","categoryId":"c"])
+    rs.add(["id":"ac","kind":"utility","name":"AC","categoryId":"c"])
+    rs.find |r| {r["id"]=="t"}["utilityId"]="u"
+    rs.find |r| {r["id"]=="a"}["utilityId"]="u"
+    rs.find |r| {r["id"]=="b"}["utilityId"]="ac"
+    exercise(query.set("kind","utility"),rs)
+    exercise(query.set("kind","utility").set("perArea",true),rs)
+  }
+
   Void test82SourcesRetainFullMonthlyReportAndBoundedEvidence()
   {
     start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+1000hr
@@ -117,12 +143,14 @@ class EnerCubixReportConsumerTest : Test
     budget:=EnerCubixStreamBudget();state:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state)
     dimension:=EnerCubixDimension("space",rs,true)
     ctx:=EnerCubixContext(dimension.records,[Str:Obj?][,],TimeZone.utc,dimension);ctx.useOwner(state);ctx.orderWarnings
-    report:=EnerCubixReport(ctx,q,at,at+4hr,q["kind"].toStr,"month",q["metric"].toStr,state)
+    queryEnd:=DateTime.fromIso(q["to"].toStr)
+    report:=EnerCubixReport(ctx,q,at,queryEnd,q["kind"].toStr,"month",q["metric"].toStr,state)
     cursors:=EnerCubixLineCursor[,]
-    EnerCubixMath.strings(q["nodeIds"]).each |id| {ctx.categories(id).each |category| {cursors.add(report.openLine(id,category))}}
-    consumer:=EnerCubixReportConsumer(ctx,report,cursors,at,at+4hr,"month",state,output)
+    if(q["kind"]=="utility") EnerCubixEndUse.resolve(ctx,EnerCubixMath.strings(q["nodeIds"])).each |meter| {cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
+    else EnerCubixMath.strings(q["nodeIds"]).each |id| {ctx.categories(id).each |category| {cursors.add(report.openLine(id,category))}}
+    consumer:=EnerCubixReportConsumer(ctx,report,cursors,at,queryEnd,"month",state,output)
     sources:=EnerCubixCockpitStream[,]
-    points.keys.sort.each |id| {sources.add(EnerCubixCockpitStream.openCursor(points[id],configs[id],at,at+4hr,q,rs,budget,read,ctx))}
+    points.keys.sort.each |id| {sources.add(EnerCubixCockpitStream.openCursor(points[id],configs[id],at,queryEnd,q,rs,budget,read,ctx))}
     for(i:=0;i<4;i++)
     {
       end:=at+Duration((i+1)*1hr.ticks);sources.each |source| {source.advance(end)}

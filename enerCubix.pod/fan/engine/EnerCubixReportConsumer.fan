@@ -11,8 +11,8 @@ internal class EnerCubixReportConsumer
     ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
     // Reserve final DTO containers before any report output is assembled. Values
     // and their source arrays are admitted separately by the period/meter folds.
-    n:=0;bucket:=EnerCubixMath.bucket(from,gran)
-    while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
+    n:=report.dailyFrames ? 24 : 0;bucket:=EnerCubixMath.bucket(from,gran)
+    if(!report.dailyFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
     metadata:=0;ctx.byId.each |r| {metadata+=entries(r)}
     output.hold(2048+128*ledger.size+40*n*cursors.size+metadata*(cursors.size+4))
     ctx.byId.each |record| {protect(record)}
@@ -24,7 +24,8 @@ internal class EnerCubixReportConsumer
     }
     cursors.each |cursor|
     {
-      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output))
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.dailyFrames))
+      if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
       points:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
       covers.add(EnerCubixCoverageFold(points,from,to,state))
     }
@@ -39,6 +40,7 @@ internal class EnerCubixReportConsumer
   private EnerCubixLineCursor[] cursors := [,]
   private EnerCubixPeriodConsumer[] periods := [,]
   private EnerCubixCoverageFold[] covers := [,]
+  private EnerCubixDailyConsumer[] daily := [,]
   private [Str:Obj?][] ledger := [,]
   private Str:EnerCubixValueFold meters := [:]
   private Str:[Str:Obj?] evidence := [:]
@@ -66,7 +68,7 @@ internal class EnerCubixReportConsumer
       report.beginFrame(frame,histories)
       end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
       cursors.each |cursor,i|
-      {ctx.warningScope(0,i,at.ticks);periods[i].add(cursor.next)}
+      {ctx.warningScope(0,i,at.ticks);tick:=cursor.next;periods[i].add(tick);if(!daily.isEmpty) daily[i].add(tick,report.frameBand(cursor.line,tick))}
       consumeMeters(1,end)
       reads:=report.frameReads;covers.each |cover| {cover.addFrame(reads,frame)}
       // Normal finish freezes coverage/evidence before dimensionDetails reads.
@@ -94,19 +96,20 @@ internal class EnerCubixReportConsumer
     if(at!=to) throw ArgErr("reportConsumerIncomplete")
     try
     {
-      totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:]
+      totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:];dailyData:=Str:[Str:Obj?][:]
       periods.each |consumer,i|
       {
         consumer.finish;line:=cursors[i].finish;output.hold(4)
         line.consumedTotals=Str:EnerCubixValue[:]
         ["value","known","baseValue","baseKnown"].each |mode| {line.consumedTotals[mode]=consumer.total(mode)}
         buckets[line.id]=["rows":consumer.periods];coverage[line.id]=report.frameCoverage(line,covers[i].finish)
+        if(!daily.isEmpty) dailyData[line.id]=daily[i].finish
       }
       meters.each |fold,key| {output.hold(6+fold.sourceCount);value:=fold.finish;totals[key]=value;frozenMeters.add(value)}
       omitted:=readCount>evidence.size || emptyOmitted || unpreparedOmitted
       known:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":EnerCubixKnownUsage.evidence(evidence.vals),"detailsTruncated":omitted || evidence.vals.any |r| {r["detailsTruncated"] == true}]
       if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
-      result=report.finishFrames(cursors.map |c->EnerCubixLine| {c.line},buckets,totals,coverage,known)
+      result=report.finishFrames(cursors.map |c->EnerCubixLine| {c.line},buckets,totals,coverage,known,dailyData)
       ((Map)result["extra"])["relationBasis"]="current"
       done=true;return result
     }
@@ -155,7 +158,7 @@ internal class EnerCubixReportConsumer
   private Void check()
   {if(closed) throw ArgErr("reportConsumerClosed");if(failure!=null) throw failure;if(stateClosed && !done) throw ArgErr("reportConsumerClosed")}
   private Void closeState()
-  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;stateClosed=true}
+  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;daily.clear;stateClosed=true}
   private Void closeOutput()
   {
     dropGraph(result);dropGraph(evidence)

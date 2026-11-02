@@ -78,6 +78,12 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 此时仍没有完整消费者注册表；日报/时段/用途、空间仅摘要输出、热图、flow/COP/规则与全包公平1000诊断尚未统一接入。当前私有profile的最多1000来源行及1000子区间不等于全包1000配额，未宣称全部输出/全9模块年度通过。普通路径和安装包不切换，版本仍0.14.1；只读账号按用户暂缓。安装包hash本轮复核仍ED905...51A4，但观察到FIN已由其他操作变为PID34644；原PID44028的30分钟观察不能套用于新进程，本开发聊天未执行该重启。
 
+日均负荷与用途已接同一私有消费缝：固定24个本地小时和最多6个峰谷平桶，独立累计小时LineFold与分时ValueFold；严格日均除原样本数、已有量日均除真实数值样本数，COP先累计操作数，传感器保持原时长权重，分时仍为区间总量。全区间四种fold独立保存，daily不再保留根本不输出的逐小时period数组。用途继续使用原EndUse.resolve和原聚合/重叠校验，不借子表补主点。原daily输出仅增加读取已冻结桶的分支，普通报告仍按原ticks计算。
+
+专项5类63方法3795校验通过；用途新增后另2类4方法80校验通过，覆盖缺测/NA、跨日大数、25h DST、部分小时、面积、峰谷平、显式总分混选与用途。当前增量没有再跑完整套件，前述90类完整结果明确对应9191b1e7。真实捕获main的daily和utility私有离线回放，各9个顶层字段及8个extra组与原face-daily/face-endUse零差异；峰值119452/117291、raw691、各385回调/12094样本、unprepared0，关闭后raw/temporary均0，有限元数据35继续计账。末段保持原截至时刻，未将小时均值与分时总量混用。默认整包回放8必需provenance、12报告60槽59实有组再次相等，仅periodsCaptureId归一化。证据daily-consumer-tests.log、utility-consumer-tests.log、daily/utility-consumer-native-main.parity.json及daily-utility-default-parity.json；离线冻结包daily-utility-consumer-offline-test.pod SHA4C19DFE0EE22BC286F4D4F8ECB59D2D3A3C2CCA5518CB6C7641F466F9F2664F9。连接器通用离线契约仍未通过/版本未验证，不替代实际SDK编译与回放。
+
+未部署或切默认：工作时段、空间仅摘要、热图、flow/COP/规则、消费者注册表及全包诊断仍待；当前每报告保守预留完整配置元数据，不能把单个main私有回放外推为81个空间焦点/全9模块共同满足200k。下一步须按实际共享关系和真实新建输出容器建立联合所有权，继续保留全部现有保护，而不是降低小时数据的计账单位。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

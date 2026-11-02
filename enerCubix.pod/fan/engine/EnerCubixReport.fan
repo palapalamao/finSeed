@@ -35,22 +35,26 @@ internal class EnerCubixReport
   private [Str:EnerCubixValue]? consumedMeters
   private [Str:[Str:Obj?]]? consumedCoverage
   private [Str:Obj?]? consumedEvidence
+  private Str:[Str:Obj?] consumedDaily := [:]
 
   internal Bool acceptsFrames()
-  { ["profile","primary","ranking","proportion","dashboard"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
+  { ["profile","primary","ranking","proportion","dashboard","daily","utility"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
+  internal Bool dailyFrames() {kind == "daily"}
+  internal Str frameBand(EnerCubixLine line,EnerCubixTick tick)
+  {ctx.timeBand(line.nodeId,line.category,tick.ts,tick.end,line.utility)}
   internal Bool ownedFrameCatalog(EnerCubixPreparedOwner owner) {catalogOwner === owner}
   internal [Str:Obj?][] frameReads() {knownCtx?.knownReads?.vals ?: [Str:Obj?][,]}
   internal Bool frameEmptyOmitted() {knownCtx?.emptyEvidenceOmitted ?: false}
   internal Bool frameUnpreparedOmitted() {knownCtx?.unpreparedEvidenceOmitted ?: false}
   internal EnerCubixValue frameMeter(Str id,Str category,DateTime start,DateTime end,Bool known)
   { (known ? knownCtx : ctx).node(id,category,start,end,metric) }
-  internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence)
+  internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence,Str:[Str:Obj?] daily := [:])
   {
-    consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence
+    consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence;consumedDaily=daily
     return finish(lines)
   }
   internal Void clearFrames()
-  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
+  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
 
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
   {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
@@ -709,8 +713,10 @@ internal class EnerCubixReport
   private Void daily(EnerCubixLine[] lines)
   {
     loadBands:=[Str:Obj?][,]
-    lines.each |l|
+    lines.each |l,i|
     {
+      if(consumedMeters != null) ctx.warningScope(2,i,0)
+      frozen:=consumedDaily[l.id]
       bandOf:=|EnerCubixTick tick->Str| {ctx.timeBand(l.nodeId,l.category,tick.ts,tick.end,l.utility)}
       grouped:=Int:EnerCubixTick[][:]
       l.ticks.each |t| { if (!grouped.containsKey(t.ts.hour)) grouped[t.ts.hour]=EnerCubixTick[,]; grouped[t.ts.hour].add(t) }
@@ -718,39 +724,43 @@ internal class EnerCubixReport
       (0..23).each |hour|
       {
         ticks:=grouped[hour] ?: EnerCubixTick[,]
-        v:=l.total(ticks)
+        data:=frozen == null ? null : EnerCubixMath.maps(frozen["hours"])[hour]
+        count:=data == null ? ticks.size : (Int)data["samples"]
+        v:=data == null ? l.total(ticks) : (EnerCubixValue)data["value"]
         if (!v.reliable) v=EnerCubixValue(null,v.quality,v.sources)
-        if (!l.ratio && !l.gauge && !ticks.isEmpty) v=v.scale(1f/ticks.size.toFloat)
+        if (!l.ratio && !l.gauge && count>0) v=v.scale(1f/count.toFloat)
         at:=from.date.toDateTime(Time(hour,0),ctx.tz)
         distinct:=ticks.map |tick->Str| {bandOf(tick)}.unique
-        band:=distinct.size == 1 ? distinct.first : (distinct.isEmpty ? "unknown" : "mixed")
+        band:=data != null ? data["band"].toStr : (distinct.size == 1 ? distinct.first : (distinct.isEmpty ? "unknown" : "mixed"))
         point:=v.point(at); point["band"]=band; points.add(point)
-        row:=baseRow(l,"hour:$hour",v); row["hour"]=hour; row["ts"]=at.toIso; row["samples"]=ticks.size; row["band"]=band
+        row:=baseRow(l,"hour:$hour",v); row["hour"]=hour; row["ts"]=at.toIso; row["samples"]=count; row["band"]=band
         if (displaysKnown(l))
         {
-          count:=ticks.findAll |tick| {tick.known?.value != null}.size
-          known:=l.knownTotal(ticks)
-          if (count > 0) known=known.scale(1f/count.toFloat)
-          fields:=EnerCubixKnownUsage.fields(known).set("knownSamples",count)
+          knownCount:=data == null ? ticks.findAll |tick| {tick.known?.value != null}.size : (Int)data["knownSamples"]
+          known:=data == null ? l.knownTotal(ticks) : (EnerCubixValue)data["known"]
+          if (knownCount > 0) known=known.scale(1f/knownCount.toFloat)
+          fields:=EnerCubixKnownUsage.fields(known).set("knownSamples",knownCount)
           row.setAll(fields); point.setAll(fields)
         }
         rows.add(row)
       }
       series.add(seriesMap(l,points))
-      classified:=l.ticks.map |tick->Str| {bandOf(tick)}.unique
+      classified:=frozen == null ? l.ticks.map |tick->Str| {bandOf(tick)}.unique : EnerCubixMath.strings(frozen["classified"])
       bands:=classified == ["unknown"] ? ["unknown"] : ["sharp","peak","flat","valley","mixed","unknown"]
       if (classified.contains("unknown")) ctx.warn("部分时段未配置尖峰谷平分类，保留为未分类")
       bands.each |band|
       {
         ticks:=l.ticks.findAll |t| { bandOf(t) == band }
-        total:=ticks.isEmpty ? EnerCubixValue(0f,"ok") : EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.value })
-        if (!ticks.isEmpty && (l.gauge || l.ratio))
+        data:=frozen == null ? null : ((Map)frozen["bands"])[band] as Map
+        count:=data == null ? ticks.size : (Int)data["samples"]
+        total:=count == 0 ? EnerCubixValue(0f,"ok") : (data == null ? EnerCubixValue.sum(ticks.map |t->EnerCubixValue| { t.value }) : (EnerCubixValue)data["value"])
+        if (count>0 && (l.gauge || l.ratio))
         {
           total=EnerCubixValue(null,"invalidMetric",total.sources)
           ctx.warn("${l.name}: 尖峰谷平区间总量需要能耗计量数据")
         }
         row:=baseRow(l,"band:$band",total); row["band"]=band
-        if (displaysKnown(l)) row.setAll(EnerCubixKnownUsage.fields(ticks.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(ticks)))
+        if (displaysKnown(l)) row.setAll(EnerCubixKnownUsage.fields(count == 0 ? EnerCubixValue(0f,"ok") : (data == null ? l.knownTotal(ticks) : (EnerCubixValue)data["known"])))
         loadBands.add(row)
       }
     }
