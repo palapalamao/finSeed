@@ -14,8 +14,8 @@ internal class EnerCubixFlowConsumer
     {
       state.watch |->Void| {calc.close;devices.clear;this.periodKeys.clear;stateClosed=true}
       state.hold(18+periodKeys.size);this.periodKeys=periodKeys.dup
-      output.watch |->Void| {drop(overviewData);strictValues.each |v| {expire(v)};knownValues.each |v| {expire(v)};maskedValues.each |v| {expire(v)};strictValues.clear;knownValues.clear;maskedValues.clear;warningValues.each |v| {v.clear};warningValues.clear;borrowed=Obj[,];outputClosed=true}
-      output.hold(13);borrowed=catalog.protectedRoots;catalog.bind(output);pool.bind(output)
+      output.watch |->Void| {if(bindings.any |owner| {owner.entries!=0}) throw ArgErr("flowValuesStillBorrowed");drop(overviewData);strictValues.each |v| {expire(v)};knownValues.each |v| {expire(v)};maskedValues.each |v| {expire(v)};strictValues.clear;knownValues.clear;maskedValues.clear;warningValues.each |v| {v.clear};warningValues.clear;bindings.clear;borrowed=Obj[,];outputClosed=true}
+      output.hold(14);borrowed=catalog.protectedRoots;catalog.bind(output);pool.bind(output)
       pool.expect(usageKey,"sourceUsage")
       scratch:=EnerCubixPreparedOwner(state.budget)
       try
@@ -52,6 +52,7 @@ internal class EnerCubixFlowConsumer
   private Str:Str[] warningValues := [:]
   private Str:Obj? overviewData := [:]
   private Obj[] borrowed := [,]
+  private EnerCubixPreparedOwner[] bindings := [,]
   private Int reads := 0
   private Int periods := 0
   private Bool emptyOmitted := false
@@ -129,6 +130,13 @@ internal class EnerCubixFlowConsumer
     catch(Err e) {failure=e;throw e}
   }
   Str:Obj? overview() {check;if(!done || !pool.finalized) throw ArgErr("flowConsumerIncomplete");return overviewData}
+  Void bind(EnerCubixPreparedOwner borrower)
+  {
+    check
+    if(!done || !pool.finalized || borrower===output || borrower.budget!==output.budget || borrower.entries==0) throw ArgErr("flowValuesBorrower")
+    if(bindings.any |owner| {owner===borrower}) return
+    output.hold(6);bindings.add(borrower)
+  }
   EnerCubixValue value(Str id,Bool known,EnerCubixContext projection)
   {
     check

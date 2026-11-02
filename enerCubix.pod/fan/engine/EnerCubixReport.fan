@@ -10,7 +10,7 @@ internal class EnerCubixReport
     if(catalogOwner != null)
     {
       if(!ctx.ownedCatalog(catalogOwner.budget)) throw ArgErr("reportCatalogOwner")
-      catalogOwner.hold(sharedAreas ? 30 : 30+3*ctx.byId.size);this.catalogOwner=catalogOwner
+      catalogOwner.hold(sharedAreas ? 40 : 40+3*ctx.byId.size);this.catalogOwner=catalogOwner
       catalogOwner.watch |->Void| {if(!sharedAreas) areas.clear;this.catalogOwner=null}
     }
     areas=ctx.sharedCatalog?.areas ?: EnerCubixArea(ctx.byId.vals)
@@ -42,7 +42,80 @@ internal class EnerCubixReport
   private [Str:Obj?]? consumedEvidence
   private Str:[Str:Obj?] consumedDaily := [:]
   private Str:[Str:Obj?][] consumedWorking := [:]
+  private Str:[Str:Obj?][] finalScopes := [:]
+  private Str:[Str:Obj?][] finalDetails := [:]
+  private Str:Str[] finalCounted := [:]
+  private Str:Str:Obj? finalSelections := [:]
+  private Bool finalMetadataFrozen := false
+  private Int finalDepth := 0
   internal const Bool summaryFrames
+
+  ** Membership, topology quality and service area depend only on the frozen
+  ** catalog. Resolve them before consuming history, rather than rebuilding
+  ** whole-catalog candidate/area graphs at the simultaneous output peak.
+  internal Str:Int freezeFrameMetadata(EnerCubixLine[] lines,EnerCubixPreparedOwner output)
+  {
+    if(catalogOwner==null || finalMetadataFrozen || output.budget!==catalogOwner.budget) throw ArgErr("frameMetadataPlan")
+    scratch:=EnerCubixPreparedOwner(output.budget)
+    try
+    {
+      ctx.deadline?.check
+      scratch.hold(64*(ctx.byId.size+lines.size+1))
+      shape:=frameShape(lines)
+      if(summaryFrames) return shape
+      scratch.hold(64*(shape["members"]+shape["details"]+lines.size+1))
+      output.hold(8)
+      lines.each |line|
+      {
+        ctx.deadline?.check
+        scope:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
+        output.hold(2+scope.size);finalScopes[line.id]=scope.dup
+        if(ctx.dimension!=null && kind!="utility")
+        {
+          details:=detailMembers(line)
+          counted:=kind=="leak" ? details : ctx.dimension.frontier(details)
+          output.hold(4+details.size+counted.size)
+          finalDetails[line.id]=details.dup;finalCounted[line.id]=counted.map |r->Str| {r["id"].toStr}
+        }
+        ids:=[line.nodeId];scope.each |r| {ids.add(r["id"].toStr)}
+        finalDetails[line.id]?.each |r| {ids.add(r["id"].toStr)}
+        ids.each |id|
+        {
+          seen:=Str[,];Str? cursor:=id
+          while(cursor!=null && !seen.contains(cursor)) {ctx.deadline?.check;seen.add(cursor);cursor=ctx.byId[cursor]?.get("meterParentId") as Str}
+          finalDepth=finalDepth.max(seen.size)
+        }
+      }
+      if(!["cop","leak","utility"].contains(kind)) lines.findAll |l| {!l.reference && !l.gauge && !l.ratio}.map |l->Str| {l.category}.unique.sort.each |Str category|
+      {
+        ctx.deadline?.check
+        raw:=selectionGroup(lines,category);selected:=(EnerCubixLine[])raw["selected"];candidates:=([Str:Obj?][])raw["candidates"];meters:=([Str:Obj?][])raw["meters"]
+        quality:=ctx.dimension?.quality(metric=="cost" ? candidates.unique : candidates)
+        Map? area
+        if(request["perArea"]==true) {area=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension,meters.map |m->Str| {m["id"].toStr});output.hold(metadataCells(area))}
+        output.hold(16+selected.size+candidates.size+meters.size)
+        finalSelections[category]=["selected":selected.dup,"candidates":candidates.dup,"meters":meters.dup,"quality":quality,"area":area]
+      }
+      ctx.deadline?.check;finalMetadataFrozen=true;return shape
+    }
+    finally {scratch.close}
+  }
+  internal Int frameFinalDepth() {finalMetadataFrozen ? finalDepth : ctx.byId.size}
+  internal [Str:Obj?][] frameScope(EnerCubixLine line)
+  {finalMetadataFrozen ? finalScopes[line.id] : ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)}
+  private Int metadataCells(Obj? value)
+  {
+    if(value isnot Map && value isnot List) return 0
+    cells:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(value is Map) ((Map)value).each |child| {cells+=metadataCells(child)}
+    else ((List)value).each |child| {cells+=metadataCells(child)}
+    return cells
+  }
+  private Void clearFrameMetadata()
+  {
+    finalScopes.each |rows| {rows.clear};finalScopes.clear;finalDetails.each |rows| {rows.clear};finalDetails.clear;finalCounted.each |ids| {ids.clear};finalCounted.clear
+    finalSelections.each |g| {((List)g["selected"]).clear;((List)g["candidates"]).clear;((List)g["meters"]).clear;area:=g["area"] as Map;if(area!=null) EnerCubixArea.clearResult(area);g.clear};finalSelections.clear;finalMetadataFrozen=false;finalDepth=0
+  }
 
   internal Bool acceptsFrames()
   { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
@@ -74,7 +147,7 @@ internal class EnerCubixReport
     return finish(lines)
   }
   internal Void clearFrames()
-  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;if(!sharedAreas) areas.clear}
+  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;clearFrameMetadata;if(!sharedAreas) areas.clear}
 
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
   {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
@@ -359,9 +432,9 @@ internal class EnerCubixReport
     {
       if (l.reference) return
       members:=detailMembers(l)
-      countedMembers:=members
-      if (kind != "leak") countedMembers=kind == "utility" ? ctx.dimension.usageFrontier(members) : ctx.dimension.frontier(members)
-      counted:=countedMembers.map |m->Str| { m["id"].toStr }
+      Str[] counted:=Str[,]
+      if(finalMetadataFrozen) counted=finalCounted[l.id]
+      else {countedMembers:=members;if(kind!="leak") countedMembers=kind=="utility" ? ctx.dimension.usageFrontier(members) : ctx.dimension.frontier(members);counted=countedMembers.map |m->Str| {m["id"].toStr}}
       members.each |m|
       {
         id:=m["id"].toStr; key:="${l.nodeId}|$id"
@@ -379,6 +452,7 @@ internal class EnerCubixReport
 
   private [Str:Obj?][] detailMembers(EnerCubixLine line)
   {
+    if(finalMetadataFrozen) return finalDetails[line.id]
     members:=kind == "utility" ? ctx.dimension.usageMembers(line.nodeId) : ctx.dimension.members(line.nodeId)
     own:=ctx.byId[line.nodeId]
     if(members.isEmpty && own != null && ["meter","totalMeter"].contains(own["kind"]?.toStr ?: "")) members=[own]
@@ -392,8 +466,9 @@ internal class EnerCubixReport
 
   private Str:Obj? selectionGroup(EnerCubixLine[] lines,Str category)
   {
+    if(finalMetadataFrozen) return finalSelections[category]
     selected:=lines.findAll |line| {!line.reference && line.category == category}
-    candidates:=selected.map |line->[Str:Obj?][]| {ctx.scopeMeters(line.nodeId,category,Str[,],line.utility)}.flatten
+    candidates:=selected.map |line->[Str:Obj?][]| {frameScope(line)}.flatten
     return ["selected":selected,"candidates":candidates,"meters":ctx.selectionMeters(candidates)]
   }
 
@@ -424,7 +499,7 @@ internal class EnerCubixReport
     members:=0;details:=0;maxMembers:=0
     lines.findAll |line| {!line.reference}.each |line|
     {
-      n:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).size
+      n:=frameScope(line).size
       members+=n;maxMembers=maxMembers.max(n)
       if(!summaryFrames && ctx.dimension != null && kind != "utility") details+=detailMembers(line).size
     }
@@ -464,7 +539,7 @@ internal class EnerCubixReport
       meters:=([Str:Obj?][])group["meters"]
       strict:=EnerCubixValue.sum(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category)})
       known:=knownCtx == null ? null : EnerCubixKnownUsage.combine(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category,true)})
-      quality:=ctx.dimension?.quality(request["metric"] == "cost" ? candidates.unique : candidates)
+      quality:=finalMetadataFrozen ? (group["quality"] as Str) : ctx.dimension?.quality(request["metric"] == "cost" ? candidates.unique : candidates)
       invalid:=selected.find |l| {available(l).value == null && !["missing","incompleteInterval","filtered","substituted","na","reset","negative","maximum","missingArea"].contains(available(l).quality)}
       if (quality == null && invalid != null) quality=available(invalid).quality
       if (quality != null)
@@ -475,7 +550,7 @@ internal class EnerCubixReport
       unit:=selected.first?.unit ?: ""
       if (request["perArea"] == true)
       {
-        area:=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension,meters.map |m->Str| {m["id"].toStr})
+        area:=finalMetadataFrozen ? ((Str:Obj?)group["area"]) : areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension,meters.map |m->Str| {m["id"].toStr})
         if (lines.findAll |l| {!l.reference}.map |l->Str| {l.category}.unique.size == 1) extra["normalizationArea"]=area
         if (area["value"] == null)
         {
@@ -499,7 +574,7 @@ internal class EnerCubixReport
     seen:=Str[,]; members:=[Str:Obj?][,]
     lines.each |l|
     {
-      own:=ctx.scopeMeters(l.nodeId,l.category,Str[,],l.utility)
+      own:=frameScope(l)
       members.addAll(own)
       own.each |m| {seen.add(m["id"].toStr)}
     }
@@ -518,7 +593,7 @@ internal class EnerCubixReport
   {
     if(consumedCoverage != null) return consumedCoverage[line.id] ?: throw ArgErr("consumedCoverageNotPlanned")
     start:=line.ticks.first?.ts ?: from; finish:=line.ticks.last?.end ?: to
-    meters:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
+    meters:=frameScope(line)
     Str[] points:=meters.map |m->Str| {m["pointId"] as Str ?: ""}
     points=points.findAll |id| {!id.isEmpty}.unique
     reads:=knownCtx.knownReads.vals.findAll |r| {points.contains(r["pointId"]) && DateTime.fromIso(r["from"].toStr) >= start && DateTime.fromIso(r["to"].toStr) <= finish}
@@ -537,7 +612,7 @@ internal class EnerCubixReport
   internal Str:Obj? frameCoverage(EnerCubixLine line,Str:Obj? stats)
   {
     value:=line.knownTotal
-    meters:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
+    meters:=frameScope(line)
     return Str:Obj?["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"knownValue":value.value,"knownQuality":value.quality,"complete":line.total.value != null && line.total.reliable && (Float)stats["coveredSeconds"] >= (Float)stats["expectedSeconds"],"meterIds":meters.map |m->Str| {m["id"].toStr}].setAll(stats)
   }
 

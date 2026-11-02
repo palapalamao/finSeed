@@ -44,6 +44,8 @@ class EnerCubixFlowConsumerTest : Test
         sources.each |s| {s.close};consumer.finish
         verifyErr(ArgErr#) {early:=consumer.overview}
         diagnostics:=pool.freeze
+        consumer.bind(graph)
+        verifyErr(ArgErr#) {output.close}
         ctx:=EnerCubixContext.shared(catalog,"metering",false,layout)
         ctx=EnerCubixContext.shared(catalog,q["dimension"].toStr,nativeMissing,layout)
         result:=EnerCubixEnergyFlow.projectPrepared(ctx,q,a,b,|Str id,Bool known->EnerCubixValue| {consumer.value(id,known,ctx)},consumer.overview,graph)

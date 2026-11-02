@@ -2,7 +2,7 @@
 internal class EnerCubixCockpitFlow
 {
   ** Resolve current readable relationships before loading any primary history.
-  static Str:Obj? prepare(Str:Obj? q, [Str:Obj?][] records, Str project)
+  static Str:Obj? prepare(Str:Obj? q, [Str:Obj?][] records, Str project,Bool includeCanonicalRecords := false)
   {
     visible:=EnerCubixEnergyFlow.visible(records.findAll |r| {r["_comparisonReadable"] != false},records)
     normalized:=EnerCubixEnergyFlow.normalizeRecords(visible)
@@ -31,15 +31,17 @@ internal class EnerCubixCockpitFlow
         if (ref is Str && ref.toStr.startsWith("p:") && !ref.toStr.startsWith("p:"+project+":r:")) throw ArgErr("cockpitRef")
       }
     }
-    return ["request":request,"records":visible,"meters":meters,"configuration":config.unique]
+    result:=Str:Obj?["request":request,"records":visible,"meters":meters,"configuration":config.unique]
+    if(includeCanonicalRecords) result["canonicalRecords"]=normalized
+    return result
   }
 
-  static Void attach(Str:Obj? prepared, [Str:Obj?][] histories, Str:Obj? boundary, Str:Obj? reports, Str:Obj? modules)
+  static Void attach(Str:Obj? prepared, [Str:Obj?][] histories, Str:Obj? boundary, Str:Obj? reports, Str:Obj? modules,|Str,Str:Obj?->Str:Obj?|? route := null)
   {
     try
     {
       q:=(Str:Obj?)prepared["request"]
-      report:=EnerCubixHistory.report(q,([Str:Obj?][])prepared["records"],EnerCubixCockpitMetrics.histories(q,histories))
+      report:=EnerCubixCockpitReports.read("energy-flow",q,([Str:Obj?][])prepared["records"],EnerCubixCockpitMetrics.histories(q,histories),route)
       graphs:=EnerCubixMath.maps(((Map)report["extra"])["energyFlowGraphs"])
       account:=(Map)((Map)report["extra"])["energyFlowAccounting"]
       partial:=account["canAdd"] != true || graphs.any |g|

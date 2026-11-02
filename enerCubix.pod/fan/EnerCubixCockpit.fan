@@ -171,7 +171,7 @@ class EnerCubixCockpit
     if (enabled.contains("balance"))
     {
       if (flow["error"] == true) modules["balance"]=EnerCubixCockpitFlow.error
-      else EnerCubixCockpitFlow.attach(flow,histories,boundary,reports,modules)
+      else EnerCubixCockpitFlow.attach(flow,histories,boundary,reports,modules,preparedReport)
     }
     if (enabled.contains("efficiency"))
     {

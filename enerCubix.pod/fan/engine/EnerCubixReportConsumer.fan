@@ -21,12 +21,12 @@ internal class EnerCubixReportConsumer
     }
     diagnostics?.bind(output)
     if(ctx.sharedCatalog!=null) {ctx.sharedCatalog.bind(output);borrowed=ctx.sharedCatalog.protectedRoots;sharedBorrowed=true}
+    shape:=report.freezeFrameMetadata(cursors.map |c->EnerCubixLine| {c.line},output)
     ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
     n:=report.dailyFrames ? 24 : (report.workingFrames ? 2 : 0);bucket:=EnerCubixMath.bucket(from,gran)
     if(!report.summaryFrames && !report.dailyFrames && !report.workingFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
-    shape:=report.frameShape(cursors.map |c->EnerCubixLine| {c.line})
     // 40 per period covers point+detail maps/links; 32 per membership covers
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
     // envelope includes totals, utility groups and shallow tariff map heads.
@@ -40,7 +40,9 @@ internal class EnerCubixReportConsumer
     output.hold(diagnostics==null ? 128+2*maxList : 128)
     // The summary finalizer creates only two line vectors and one coverage
     // vector. It never creates selection/detail candidate or area unions.
-    finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(ctx.byId.size+shape["members"]+shape["details"]+cursors.size+1)
+    // Final membership/area graphs are now frozen and charged above. Remaining
+    // finalizers use actual member/detail vectors and one real ancestor path.
+    finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(report.frameFinalDepth+shape["members"]+shape["details"]+cursors.size+1)
     if(!sharedBorrowed) ctx.byId.each |record| {protect(record)}
     // Area graphs were created under the calculation owner. They remain linked
     // from definitions (even perArea=false), so transfer their actual graph too.
@@ -51,7 +53,7 @@ internal class EnerCubixReportConsumer
       line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames))
       if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
       if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,state,output))
-      points:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
+      points:=report.frameScope(line).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
       covers.add(EnerCubixCoverageFold(points,from,to,state))
     }
     ledger.each |item|
