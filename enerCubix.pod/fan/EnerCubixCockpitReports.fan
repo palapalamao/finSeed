@@ -29,4 +29,6 @@ internal class EnerCubixCockpitReports
     if(DateTime.fromIso(request["to"].toStr) > DateTime.fromIso(request["asOf"].toStr)) request["to"]=request["asOf"]
     return request
   }
+  static Str:Obj? copQuery(Str:Obj? q,Str id)
+  {q.dup.setAll(["kind":"cop","_cockpitCopId":id])}
 }

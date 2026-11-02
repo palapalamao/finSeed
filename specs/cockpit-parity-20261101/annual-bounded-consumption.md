@@ -216,3 +216,14 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 联合准入峰158295，6规范窗口/44010逻辑小时/462源回调/12094捕获样本，unprepared0，关闭 raw/temporary0，有限 prepared48继续记账。纳入了 source、目录、七注册报告、能流图与共享池；外部冻结计划输入的创建、最终驾驶舱模块/Currency/codec同时存活仍未计入，故不是完整请求或原生82源证明。默认8项 provenance、12报告60槽59实有业务组等值，仅归一化 periodsCaptureId。完整回执 registry-flow-evidence.json。
 
 冻结私有测试包 registry-flow-offline-test.pod，SHA256 7246128F62D1BC0811D7AD2E84F035FE4C9EAF37EFF37B6C4564D5D703EBD889，4120584字节；仍旧0.14.1元数据，禁止部署。COP、规则、原生工厂/计划创建所有权、未来自定义范围、最终投影/codec、原生完整验收仍未完成；只读暂缓，无 FIN/浏览器/配置/历史操作。
+
+
+COP 私有注册与短计算帧（源码验证）
+
+COP 数量先按原小时顺序归并，单位变换和可靠性覆盖仍逐小时执行，不能缩放最终原量代替。新增 raw-context 目录保留旧 COP 原始别名、表达式引用与错误；其 canonical Dimension 仍独立规范化。Registry 按配置 ID 完成并保持旧警告前缀，Efficiency 只投影消费结果，传空历史也不会回退。默认 native 路由保持原状。
+
+专项5类16方法609校验通过，含8模块/20组COP/20主点联合（峰144787）、COP独立20组/100主点全报告对照、原量/单位/零分母/缺测虚拟主点/清洗质量及所有权。新的容量试验先暴露派生缓存过期晚：每个 consumer 现独立短 owner，消费结束立即清 Context 缓存，外层源帧继续可读；持久fold/output另行归属，原始源/peer额度不释放。用例直接核实源帧仍活动而报告及COP的byPoint已清。额外8模块/20COP/100主点组合仍触发200000保护（从freezeFrameMetadata移至openLine），不声称该极限组合通过，不放宽预算。来源描述缺失的怀疑经用例未复现，未修改相关生产逻辑。
+
+精确本批完整108类778方法272079校验通过，290320ms，registry-cop-full-fantom.log；旧1800秒容量夹具不作为 native30秒证明。捕获 zeda 的8模块私有注册仍14键、11报告99顶层90extra及清洗计数、热图2328/209、空间和能流5行/1图等旧结果；此捕获无COP配置，实际COP计算的证明来自受控夹具。峰158303、44010小时、462回调/12094样本、unprepared0，关闭raw/temporary0，有限prepared48继续计账。默认8必需provenance与12报告59实有组仍相等，仅periodsCaptureId归一化。
+
+冻结 registry-cop-offline-test.pod SHAB657943F9D75E439693AAC221E964D5BF26A489F50ECDF2D367DB8975E7EAA54，4199713B，仅私有验证，元数据0.14.1不得当新版部署。完整证据registry-cop-evidence.json。外部计划构造、最终投影及codec共同计账、规则与native factory、未来桶、实机年度9模块/82点和UI/PDF未完成；所有权计数不是JVM堆测量。只读账号按用户暂缓，无 FIN 服务/配置/历史/浏览器操作。

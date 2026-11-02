@@ -94,22 +94,35 @@ internal class EnerCubixCockpitEfficiency
     return ["items":prepared,"meters":meters.unique,"devices":devices.unique,"configuration":configuration.unique,"opaqueUnavailable":unavailable,"request":q,"records":records]
   }
 
-  static Void attach(Str:Obj? prepared,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports,Str:Obj? modules)
+  static Void attach(Str:Obj? prepared,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports,Str:Obj? modules,|Str->Str:Obj?|? preparedCop := null)
   {
     try
     {
       q:=(Str:Obj?)prepared["request"];rs:=([Str:Obj?][])prepared["records"]
-      dim:=EnerCubixDimension(q["dimension"].toStr,rs,q["spaceSource"] == "fin")
-      ctx:=EnerCubixContext(rs,EnerCubixKnownUsage.clip(EnerCubixCockpitMetrics.histories(q,histories),DateTime.fromIso(q["asOf"].toStr)),TimeZone.fromStr(q["tz"].toStr),dim)
-      from:=DateTime.fromIso(q["from"].toStr).toTimeZone(ctx.tz);to:=DateTime.fromIso(q["to"].toStr).toTimeZone(ctx.tz)
+      EnerCubixContext? ctx
+      if(preparedCop==null)
+      {
+        dim:=EnerCubixDimension(q["dimension"].toStr,rs,q["spaceSource"] == "fin")
+        ctx=EnerCubixContext(rs,EnerCubixKnownUsage.clip(EnerCubixCockpitMetrics.histories(q,histories),DateTime.fromIso(q["asOf"].toStr)),TimeZone.fromStr(q["tz"].toStr),dim)
+      }
+      zone:=TimeZone.fromStr(q["tz"].toStr)
+      from:=DateTime.fromIso(q["from"].toStr).toTimeZone(zone);to:=DateTime.fromIso(q["to"].toStr).toTimeZone(zone)
       items:=[Str:Obj?][,]
       EnerCubixMath.maps(prepared["items"]).each |p|
       {
         config:=(Str:Obj?)p["config"];id:=config["id"].toStr;reason:=p["reason"] as Str
+        numerator:=EnerCubixValue();denominator:=EnerCubixValue();ratio:=EnerCubixValue();result:=Str:Obj?[:]
+        if(preparedCop!=null)
+        {
+          data:=preparedCop(id)
+          numerator=(EnerCubixValue)data["numerator"];denominator=(EnerCubixValue)data["denominator"];ratio=(EnerCubixValue)data["ratio"];result=(Str:Obj?)data["report"]
+        }
+        else
+        {
         report:=EnerCubixReport(ctx,q.dup.set("kind","cop"),from,to,"cop",q["period"].toStr,"energy")
         line:=report.line(id,"")
-        numerator:=EnerCubixValue.sum(line.ticks.map |t->EnerCubixValue| {t.numerator ?: EnerCubixValue()})
-        denominator:=EnerCubixValue.sum(line.ticks.map |t->EnerCubixValue| {t.denominator ?: EnerCubixValue()})
+        numerator=EnerCubixValue.sum(line.ticks.map |t->EnerCubixValue| {t.numerator ?: EnerCubixValue()})
+        denominator=EnerCubixValue.sum(line.ticks.map |t->EnerCubixValue| {t.denominator ?: EnerCubixValue()})
         // Preserve actual quantities/units; normalize only the ratio operands.
         factor:=EnerCubixMath.num(p["factor"]) ?: 1f
         line.ticks.each |t|
@@ -119,14 +132,15 @@ internal class EnerCubixCockpitEfficiency
           else if (t.numerator?.value == null || t.denominator?.value == null || t.numerator?.reliable != true || t.denominator?.reliable != true)
             t.numerator=EnerCubixValue(null,EnerCubixValue.worse(t.numerator?.quality ?: "missing",t.denominator?.quality ?: "missing"),t.numerator?.sources ?: Str[,])
         }
-        ratio:=line.total
+        ratio=line.total
         if (DateTime.fromIso(q["asOf"].toStr) < to) ratio=EnerCubixValue(null,"COP_INCOMPLETE_HISTORY",ratio.sources)
-        ref:="cop:"+id
-        result:=report.finish([line])
+        result=report.finish([line])
         if (ratio.value == null && reason != null)
         {
           numerator=EnerCubixValue(null,reason);denominator=EnerCubixValue(null,reason)
         }
+        }
+        ref:="cop:"+id
         item:=Str:Obj?["configId":id,"name":config["name"] ?: id,"configRef":["id":id,"mod":config["mod"]],"numerator":metric("numerator",numerator,p["numeratorUnit"].toStr,boundary),"denominator":metric("denominator",denominator,p["denominatorUnit"].toStr,boundary),"ratio":metric("cop",ratio,"COP",boundary),"from":q["from"],"to":q["to"],"asOf":q["asOf"],"coverageIds":p["coverageIds"],"reportRef":ref]
         ["actualEfficiency","baselineEfficiency"].each |key| {if (config[key] != null) item[key]=config[key]}
         reports[ref]=result;items.add(item)
