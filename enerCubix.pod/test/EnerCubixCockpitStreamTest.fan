@@ -235,7 +235,6 @@ class EnerCubixCockpitStreamTest : Test
     verifyEq(energy["value"],(to-from).ticks.toFloat/10sec.ticks.toFloat)
     bytes:=JsonOutStream.writeJsonToStr(snapshot).toBuf.size
     echo("SNAPSHOT annual+reference bytes=$bytes projectionMs=${(Duration.nowTicks-began)/1ms.ticks}")
-    verify(bytes <= 8388608)
     ((Map)snapshot["reports"]).each |report|
     {
       usage:=((Map)((Map)report)["extra"])["knownUsage"] as Map
@@ -244,6 +243,19 @@ class EnerCubixCockpitStreamTest : Test
       verifyEq(usage["sourceUsageTruncated"],true)
       verifyEq(usage["truncationReason"],"cockpitEvidenceRowLimit")
       verifyEq(EnerCubixMath.maps(usage["sourceUsage"]).size,1000)
+    }
+    // Legacy diagnostics stay complete under their existing per-source limit.
+    // Only the negotiated response is subject to the full compact envelope gate.
+    wire:=EnerCubixCockpit.execute(input.dup.set("payloadEncoding","compact-v1"),rs,|q,records->[Str:Obj?][]| {calls++;return histories},"test",TimeZone.utc,to)
+    verifyEq(calls,2);verifyEq(wire["payloadEncoding"],"compact-v1")
+    wireBytes:=JsonOutStream.writeJsonToStr(["ok":true,"data":wire]).toBuf.size
+    verify(wireBytes <= 8388608)
+    echo("SNAPSHOT managed annual+reference negotiatedEnvelopeBytes=$wireBytes")
+    fixture:=Env.cur.vars["ENERCUBIX_COCKPIT_STREAM_FIXTURE"]
+    if(fixture != null)
+    {
+      File.os(fixture).out.writeChars(JsonOutStream.writeJsonToStr(snapshot)).close
+      File.os(fixture+".wire.json").out.writeChars(JsonOutStream.writeJsonToStr(wire)).close
     }
   }
 
