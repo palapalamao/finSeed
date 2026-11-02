@@ -1,5 +1,19 @@
 class EnerCubixLineFoldTest : Test
 {
+  Void testOwnedRatioAndGaugeStateExpiresWithItsOwner()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+    line:=definition;line.ratio=true
+    ratio:=EnerCubixLineFold(line,"value",owner)
+    item:=tick(0f,"ok",["p"]);item.numerator=EnerCubixValue(10f,"ok",["n"]);item.denominator=EnerCubixValue(5f,"ok",["d"])
+    ratio.add(item);result:=ratio.finish
+    line=definition;line.gauge=true
+    gauge:=EnerCubixLineFold(line,"value",owner);gauge.add(tick(1f,"substituted",["p"]))
+    verifyNull(gauge.finish.value)
+    owner.close;verifyEq(budget.temporary.val,0)
+    verifyEq(result.value,2f);verifyEq(result.sources,["n","d"])
+    verifyErr(ArgErr#) {ratio.finish};verifyErr(ArgErr#) {gauge.add(item)}
+  }
   Void testOriginalValueModesKeepOrderAndDetachInputs()
   {
     line:=definition

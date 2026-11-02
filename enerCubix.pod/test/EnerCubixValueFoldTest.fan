@@ -1,5 +1,21 @@
 class EnerCubixValueFoldTest : Test
 {
+  Void testOwnedStateChargesNewSourcesAndClosesWithoutAliasingFinishedValues()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());budget.holdOwned(13)
+    owner:=EnerCubixPreparedOwner(budget)
+    fold:=EnerCubixValueFold.strict(owner)
+    initial:=owner.entries
+    fold.add(EnerCubixValue(1f,"ok",["p"]))
+    verifyEq(owner.entries,initial+1)
+    fold.add(EnerCubixValue(2f,"ok",["p"]))
+    verifyEq(owner.entries,initial+1)
+    result:=fold.finish;owner.close
+    verifyEq(result.value,3f);verifyEq(result.sources,["p"]);verifyEq(budget.temporary.val,13)
+    verifyErr(ArgErr#) {fold.add(EnerCubixValue(1f,"ok"))}
+    verifyErr(ArgErr#) {fold.finish}
+    budget.releaseTemporary(13)
+  }
   Void testIndependentStrictAndKnownExpectedStates()
   {
     verifyValue(EnerCubixValueFold.strict().finish,null,"missing",Str[,])

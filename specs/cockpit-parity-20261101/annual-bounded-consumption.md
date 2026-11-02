@@ -64,6 +64,8 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 覆盖秒数专项已按架构确认固定为每唯一point内from/to时间顺序、同边界按nodeId/pointId裁决，比较真实时刻以覆盖DST重复小时；不改变贡献行、别名、过滤、每行秒数、sum后min或complete比较器。原无序Hash与增量时间序的亚秒Float尾差已有独立RED；8个完整闭合源区间端点例旧新对照仅3个coveredSeconds叶值变化，complete无翻转，其余字段逐项相等。已保留一个既有纳秒端点局限：fixture0实际完整、strict有值，但旧新exact Float比较均使complete=false；没有用epsilon或隐藏字段放行，不宣称该完整性问题已修正。私有CoverageFold按同一顺序分帧累计，不保留历史/贡献行；1/7/50/744帧宽逐位相等、长期额度固定、别名/长区间/缺失point/25h DST均覆盖。5类17方法12900校验通过，捕获main8 provenance/48业务组（含coverage）保持相等。证据coverage-order-correctness-evidence.json、coverage-fold-parity.json；仍未接全局业务消费者。
 
+多源帧已接真实Report.openLine叶计算和带所有权的Line/Value folds：同预算、唯一主点与相同消费水位先校验；Context动态根先清除，再退出各源prepared frame。各源可共享已计账的冻结规划目录，独立cursor则在open前为自身目录索引保守准入，清空后释放；满额时更早拒绝且不启动原生读取。6类35方法5306校验、当前精确源码完整87类688方法257148校验通过。受控82源×1000小时为scope82000、每表1000，902读块回调/82082样本、unprepared0、prepared+Context峰值3253、raw峰值8309，在默认30秒内约2.8秒；有限元数据492仍真实计账，不假归零。两源大数例分别保持scope的1e16+4和selection的1e16+2；首次测试错误是原生区间值按结束时刻标记，已补合法前边界样本并修正fixture，未改业务读数算法。捕获main8 provenance/48业务组保持相等，默认峰值109425。证据group-frame-evidence.json与group-frame-full-fantom.log。不是FIN时延、完整9模块报告/输出所有权或zeda site年度完成证据；默认加载仍未切换。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

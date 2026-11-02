@@ -25,6 +25,9 @@ internal class EnerCubixReport
   private Str:Obj? summary := [:]
   private Str:Obj? extra := [:]
 
+  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
+  {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
+
   EnerCubixLine line(Str id, Str category, Str? utility := null, DateTime start := from, DateTime end := to)
   {
     cursor:=openLine(id,category,utility,start,end)

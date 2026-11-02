@@ -1,12 +1,13 @@
 ** Ordered line reduction without retaining its input ticks.
 internal class EnerCubixLineFold
 {
-  new make(EnerCubixLine line,Str mode := "value")
+  new make(EnerCubixLine line,Str mode := "value",EnerCubixPreparedOwner? owner := null)
   {
     if(!["value","known","baseValue","baseKnown"].contains(mode)) throw ArgErr("lineFoldMode")
     this.mode=mode;ratio=mode == "value" && line.ratio;gauge=mode == "value" && line.gauge
-    if(ratio) {numerator=EnerCubixValueFold.strict();denominator=EnerCubixValueFold.strict()}
-    else total=mode == "known" || mode == "baseKnown" ? EnerCubixValueFold.known() : EnerCubixValueFold.strict()
+    this.owner=owner;owner?.watch |->Void| {close};owner?.hold(12)
+    if(ratio) {numerator=EnerCubixValueFold.strict(owner);denominator=EnerCubixValueFold.strict(owner)}
+    else total=mode == "known" || mode == "baseKnown" ? EnerCubixValueFold.known(owner) : EnerCubixValueFold.strict(owner)
   }
   private Str mode
   private Bool ratio
@@ -17,9 +18,13 @@ internal class EnerCubixLineFold
   private EnerCubixValueFold? total
   private EnerCubixValueFold? numerator
   private EnerCubixValueFold? denominator
+  private EnerCubixPreparedOwner? owner
+  private Bool closed := false
+  private Void close() {incomplete=null;total=null;numerator=null;denominator=null;owner=null;closed=true}
 
   Void add(EnerCubixTick tick)
   {
+    if(closed) throw ArgErr("lineFoldClosed")
     count++
     if(ratio)
     {
@@ -32,7 +37,7 @@ internal class EnerCubixLineFold
       (mode == "baseKnown" ? ((tick.baseKnown ?: tick.known) ?: EnerCubixValue()) : tick.value))
     if(gauge)
     {
-      if(incomplete == null && !v.reliable) incomplete=EnerCubixValue(null,v.quality,v.sources.dup)
+      if(incomplete == null && !v.reliable) {owner?.hold(2+v.sources.size);incomplete=EnerCubixValue(null,v.quality,v.sources.dup)}
       ticks:=(tick.end-tick.ts).ticks.toFloat;duration+=ticks
       total.add(v.scale(ticks))
     }
@@ -40,6 +45,7 @@ internal class EnerCubixLineFold
   }
   EnerCubixValue finish()
   {
+    if(closed) throw ArgErr("lineFoldClosed")
     if(ratio) return EnerCubixValue.divide(numerator.finish,denominator.finish)
     if(gauge && count > 0)
     {

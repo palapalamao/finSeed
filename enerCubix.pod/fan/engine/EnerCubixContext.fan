@@ -70,6 +70,9 @@ internal class EnerCubixContext
   private Bool framed := false
   private Bool transientContext := false
 
+  internal Bool ownedCatalog(EnerCubixPreparedBudget budget)
+  {framed && persistentOwner != null && preparedBudget === budget}
+
   internal Void useOwner(EnerCubixPreparedOwner owner)
   {
     if(framed || preparedBudget != null || !byPoint.isEmpty) throw ArgErr("preparedContextAlreadyInitialized")

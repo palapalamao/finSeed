@@ -2,8 +2,8 @@
 ** never substitute a block subtotal. No input value or source array is retained.
 internal class EnerCubixValueFold
 {
-  new strict() {sources.ordered=true}
-  new known() {knownMode=true;sources.ordered=true}
+  new strict(EnerCubixPreparedOwner? owner := null) {sources.ordered=true;useOwner(owner)}
+  new known(EnerCubixPreparedOwner? owner := null) {knownMode=true;sources.ordered=true;useOwner(owner)}
 
   private Bool knownMode := false
   private Bool seen := false
@@ -14,11 +14,18 @@ internal class EnerCubixValueFold
   private Str quality := "ok"
   private Str? invalidReason
   private Str:Bool sources := [:]
+  private EnerCubixPreparedOwner? owner
+  private Bool closed := false
+  private Void useOwner(EnerCubixPreparedOwner? owner)
+  {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(12)}
+  private Void close()
+  {sources.clear;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
 
   Void add(EnerCubixValue value)
   {
+    if(closed) throw ArgErr("valueFoldClosed")
     seen=true
-    value.sources.each |id| {if(!sources.containsKey(id)) sources[id]=true}
+    value.sources.each |id| {if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}}
     if(!knownMode)
     {
       if(value.value == null && value.quality != "filtered") missing=true
@@ -38,6 +45,7 @@ internal class EnerCubixValueFold
 
   EnerCubixValue finish()
   {
+    if(closed) throw ArgErr("valueFoldClosed")
     if(!seen) return EnerCubixValue()
     ids:=sources.keys.dup
     if(!knownMode) return EnerCubixValue(missing || numeric == 0 ? null : total,quality,ids)

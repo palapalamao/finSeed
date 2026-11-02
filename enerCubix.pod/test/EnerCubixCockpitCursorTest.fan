@@ -169,9 +169,9 @@ class EnerCubixCockpitCursorTest : Test
     failure(cursor,"HISTORY_MEMORY_LIMIT");cursor.close
     budget=EnerCubixStreamBudget();budget.cell(200000)
     verifyEq(budget.state.remaining,0)
-    cursor=open(q,[HisItem(at,Number(0))],config,budget)
-    failure(cursor,"PREPARED_READ_LIMIT");cursor.close
-    verifyEq(budget.cells,200000)
+    try {cursor=open(q,[HisItem(at,Number(0))],config,budget);fail("Catalog admission must fail before opening a source")}
+    catch(EnerCubixHttpErr e) {verifyEq(e.code,"PREPARED_READ_LIMIT")}
+    verifyEq(budget.cells,200000);verifyEq(budget.state.temporary.val,0);verifyEq(budget.activeCursors,0)
     budget=EnerCubixStreamBudget(50000,200000,1)
     cursor=open(q,[HisItem(at,Number(0)),HisItem(at+1hr,Number(1))],config,budget)
     failure(cursor,"HISTORY_SCAN_LIMIT");cursor.close
