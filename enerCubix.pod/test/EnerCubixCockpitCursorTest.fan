@@ -1,8 +1,8 @@
 using haystack
 using concurrent
 
-** Source-local scheduler seam only. No assertion of whole-request82-source
-** ownership/release or native FIN I/O is made by these controlled readers.
+** Controlled producer tests, including concurrent raw-buffer admission.
+** Not whole annual reports, Context/output ownership or native FIN I/O proof.
 class EnerCubixCockpitCursorTest : Test
 {
   Void testLongGapClosesCurrentHourWithoutPreparingFutureYear()
@@ -60,14 +60,68 @@ class EnerCubixCockpitCursorTest : Test
     failed.close
   }
 
-  Void testSourceLocalSeamRejectsUnaccountedConcurrentCursor()
+  Void testConcurrentCursorsShareAndReleaseRawOwnership()
   {
     budget:=EnerCubixStreamBudget();q:=query(at+2hr)
     first:=open(q,HisItem[,],config,budget)
-    verifyErr(ArgErr#) {open(q,HisItem[,],config,budget)}
-    first.close
-    second:=open(q,HisItem[,],config,budget);second.close
+    second:=open(q,HisItem[,],config,budget)
+    verifyEq(budget.activeCursors,2)
+    verifyErr(ArgErr#) {EnerCubixCockpitStream.prepare(q,records,["p":point(config)],["p":config],reader(HisItem[,]),budget)}
+    first.close;verifyEq(budget.activeCursors,1)
+    second.close;verifyEq(budget.activeCursors,0)
+    verifyEq(budget.residentRaw,0)
     verifyEq(budget.nativeReads,0)
+  }
+
+  Void test82CursorsAdmitBoundedChunksBeforeConsumingFirstHour()
+  {
+    end:=at+4day;q:=query(end);budget:=EnerCubixStreamBudget()
+    cursors:=EnerCubixCockpitStream[,]
+    for(i:=0;i<82;i++)
+    {
+      p:=Etc.makeDict(Etc.dictToMap(point(config)).set("id",Ref("p$i")))
+      cursors.add(EnerCubixCockpitStream.openCursor(p,config,at,end,q,records,budget,|Dict pt,Span span,|HisItem| sink|
+      {
+        n:=((span.start-at).ticks/1min.ticks).max(0)
+        ts:=at+Duration(n*1min.ticks)
+        while(ts < span.end && ts <= end)
+        {if(ts >= span.start) sink(HisItem(ts,Number(n)));n++;ts+=1min}
+      }))
+    }
+    verifyEq(budget.activeCursors,82)
+    cursors.each |cursor|
+    {
+      cursor.advance(at+1hr)
+      h:=EnerCubixHistoryData(cursor.view)
+      verifyEq(h.read(at,at+1hr).value,60f)
+      verifyEq(h.knownUsage(at,at+1hr,end)["knownValue"],60f)
+      verifyEq(cursor.watermark,at+1hr)
+    }
+    verify(budget.nativeReads > 82);verify(budget.residentRaw > 0)
+    verify(budget.peakHeld <= budget.heldLimit)
+    verify(budget.state.peak.val <= 200000)
+    echo("CONTROLLED_CURSOR_82 firstHourOnly=true residentRaw=${budget.residentRaw} streaming=${budget.evidence} prepared=${budget.state.evidence}")
+    cursors.each |cursor| {cursor.close}
+    verifyEq(budget.residentRaw,0);verifyEq(budget.activeCursors,0)
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testFailedPeerDoesNotReleaseAnotherCursorsTail()
+  {
+    q:=query(at+4hr);raw:=HisItem[,]
+    for(i:=0;i<=240;i++) raw.add(HisItem(at+Duration(i*1min.ticks),Number(i)))
+    budget:=EnerCubixStreamBudget();first:=open(q,raw,config,budget)
+    first.advance(at+1hr)
+    held:=budget.residentRaw;temporary:=budget.state.temporary.val
+    verify(held > 0);verify(temporary > 0)
+    failed:=EnerCubixCockpitStream.openCursor(point(config),config,at,at+4hr,q,records,budget,|Dict p,Span span,|HisItem| sink| {throw IOErr("controlled peer failure")})
+    verifyErr(IOErr#) {failed.advance(at+1hr)}
+    failed.close
+    verifyEq(budget.residentRaw,held);verifyEq(budget.state.temporary.val,temporary)
+    first.advance(at+2hr)
+    verifyEq(EnerCubixHistoryData(first.view).read(at+1hr,at+2hr).value,60f)
+    first.close
+    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
   }
 
   Void testBufferedDetailsRemainChargedUntilConsumedOrClosed()

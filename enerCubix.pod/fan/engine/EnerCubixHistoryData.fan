@@ -24,6 +24,8 @@ internal class EnerCubixHistoryData
 {
   new make(Str:Obj? data)
   {
+    frame:=data["_preparedFrame"] as EnerCubixPreparedFrame
+    frame?.check
     prepared = data["_preparedReads"] as Map
     preparedBudget = data["_preparedBudget"] as EnerCubixPreparedBudget
     id = data["pointId"]?.toStr ?: ""
@@ -51,6 +53,7 @@ internal class EnerCubixHistoryData
         emptyKnown=empty.knownUsage(at,at+1hr,at+1hr)
       }
     }
+    frame?.attach(this)
   }
   ** Typed bounded window for the streaming adapter. Arithmetic below is shared
   ** with whole-range reports; clipping keeps the original source cutoff rule.
@@ -85,9 +88,19 @@ internal class EnerCubixHistoryData
   private EnerCubixValue? emptyValue
   private Str:Obj? emptyKnown := [:]
   private EnerCubixKnownUsage? knownReader
+  private Bool frameExpired := false
+
+  internal Void expireFrame()
+  {
+    frameExpired=true;prepared=null;sparse=null;sparseDomains.clear
+    sparseContext=null;empty=null;emptyValue=null;emptyKnown.clear;knownReader=null
+    cleaning=null;samples.clear;rawSamples.clear;intervals=null
+  }
+  private Void frameCheck() {if(frameExpired) throw ArgErr("preparedFrameExpired")}
 
   Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
   {
+    frameCheck
     if (prepared != null)
     {
       preparedBudget?.lookup
@@ -110,6 +123,7 @@ internal class EnerCubixHistoryData
 
   EnerCubixValue read(DateTime start, DateTime end, Bool raw := false)
   {
+    frameCheck
     if (prepared != null)
     {
       preparedBudget?.lookup
@@ -190,6 +204,7 @@ internal class EnerCubixHistoryData
   ** last subpairs and the exact known queryEnd. This never infers an unread gap.
   Int? emptyDomain(DateTime start,DateTime end,DateTime? queryEnd := null)
   {
+    frameCheck
     if(sparse == null || sparse["version"] != 1 || end <= start || (queryEnd != null && !((DateTime[])sparse["queryEnds"]).contains(queryEnd))) return null
     index:=sparseDomains.findIndex |r| {start >= (DateTime)r["from"] && end <= (DateTime)r["to"]}
     if(index == null) return null
@@ -201,6 +216,7 @@ internal class EnerCubixHistoryData
 
   Bool unpreparedPair(DateTime start,DateTime end,DateTime? queryEnd)
   {
+    frameCheck
     if(prepared == null) return false
     row:=prepared.isEmpty ? null : prepared[EnerCubixCockpitStream.key(start,end)] as Map
     if(row != null && (queryEnd == null || (row["known"] as Map)?.containsKey(queryEnd.ticks.toStr) == true)) return false
@@ -208,6 +224,7 @@ internal class EnerCubixHistoryData
   }
   DateTime? constantEnd(DateTime start,DateTime end,DateTime? queryEnd)
   {
+    frameCheck
     if(sparse == null || sparse["version"] != 1) return null
     // Outside the frozen prepared window is an error domain, never missing.
     a:=(DateTime)sparse["from"];b:=(DateTime)sparse["to"]

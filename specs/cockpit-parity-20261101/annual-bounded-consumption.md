@@ -39,6 +39,8 @@
 - 39aa777d：4项19校验冻结原归约树、质量/来源顺序、coverage先每源sum再min、COP先sum操作数再divide。
 - 0d996c3a：增量严格/已有量标量fold，保留每原标量顺序，不接受合并块小计，不保留输入Value或可变sources引用，finish独立可继续。76类636方法238840校验通过；捕获main8个provenance/48业务组不变，峰值109425。未切批次扫描。
 - S2 单源内部 cursor：暂停原生分块和小时物化，保留未消费 raw/detail、清洗 previous 和跨小时闭合区间；Jan→Sep 闭合端只物化当前所需小时。共享 budget 仅允许一个 cursor，未实现跨源准入或 prepared 回收。关闭会实际清空未消费队列并释放其临时计账，已输出 prepared 状态仍保留/计账。8方法456校验覆盖清洗/NA/回绕、原始两种模式、密度拆分、缓冲所有权、真实EOF、失败及超时。45方法710校验、既有26方法233921校验通过；默认路径捕获main回放8个provenance/48业务组不变，峰值仍109425。新增入口未接全站，也未部署。证据：cursor-final-tests.log、cursor-legacy-stream-regression.log、cursor-seam-parity.json。
+- 后续 producer 增量：按所有活跃 cursor 共同计算 raw-held 和读块准入，逐源保留/释放未消费清洗详情与跨小时 interval；不再由各源独立声称200k。私有 withFrame 在消费者返回后使全部借用 reader 失效、清空自身 prepared/domain 引用，再仅释放自身条目；错误和超时也执行该清理。逃逸的旧 prefix 不允许切换释放模式；失效 reader 的 read/known/空域入口明确报错。拒绝的 owned reservation 不形成所有权，不重置其他源/消费者计数。消费者仍必须只保留另行计账的脱离源对象的 fold 或有界诊断，尚未实现 Context/全部业务出口所有权。
+- 受控82源各1000小时：原整批表示触发 PREPARED_READ_LIMIT；frame 路径完成82000对，scope82000、每源1000，含模拟外部状态和测试 scalar folds 后每轮保留1440、prepared+temporary峰值9876、raw峰值8391，902次读块回调/82082样本、unprepared0。此项测试 timeout 为30min，不是生产30s或真实FIN、9模块验收。5类32方法3225校验通过，既有3类26方法233921校验通过；默认真实捕获main回放8个provenance/48业务组不变、峰值109425。详见 cursor-owned-parity.json、cursor-owned-final-tests.log、cursor-frame-legacy-regression.log。默认加载路径仍未切换，安装仍0.14.1。
 - 当前离线结构盘点：82计划主点、边界18表、81个space焦点、18 own-profile、18 daily-own、79 balance-own，COP/calendar/tariff均0；focus多源有序energy集合去重1组。原词典序point扫描在该成员序有4处逆序。此盘点尚非完整消费者/峰值证明。
 
 ## 最小可执行分解（不是简单更换容器）

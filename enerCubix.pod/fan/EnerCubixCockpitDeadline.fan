@@ -26,11 +26,27 @@ internal const class EnerCubixPreparedBudget
   const AtomicInt contextEmptyHits := AtomicInt()
   Void reserve(Int n := 1) {prepared.add(n);guard}
   Void hold(Int n) {temporary.add(n);peakTemporary.val=peakTemporary.val.max(temporary.val);guard}
+  ** New owners allocate only after admission; a rejected reservation owns nothing.
+  Void reserveOwned(Int n)
+  {
+    if(n < 0) throw ArgErr("preparedEntryOwnership")
+    try {reserve(n)} catch(Err e) {prepared.add(-n);throw e}
+  }
+  Void holdOwned(Int n)
+  {
+    if(n < 0) throw ArgErr("preparedTemporaryOwnership")
+    try {hold(n)} catch(Err e) {temporary.add(-n);throw e}
+  }
   Int remaining() {(200000-prepared.val-temporary.val).max(0)}
   Void releaseTemporary(Int n)
   {
     if(n < 0 || n > temporary.val) throw ArgErr("preparedTemporaryOwnership")
     temporary.add(-n)
+  }
+  Void releasePrepared(Int n)
+  {
+    if(n < 0 || n > prepared.val) throw ArgErr("preparedEntryOwnership")
+    prepared.add(-n)
   }
   private Void guard()
   {

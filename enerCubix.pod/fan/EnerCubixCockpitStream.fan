@@ -63,24 +63,24 @@ internal class EnerCubixCockpitStream
     return out
   }
 
-  ** Source-local producer seam only. Its budget cannot yet host concurrent
-  ** cursors; request-wide admission, frame ownership and release remain separate.
+  ** Pausable producer seam. Concurrent tails share admission; report folding
+  ** and prepared-frame ownership/release remain separate.
   internal static EnerCubixCockpitStream openCursor(Dict p,Dict? cfg,DateTime a,DateTime b,Str:Obj? q,[Str:Obj?][] records,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read)
   {
-    if(budget.cursorActive) throw ArgErr("cursorBudgetAlreadyActive")
     tz:=TimeZone.fromStr(q["tz"] as Str ?: a.tz.name)
     stream:=EnerCubixCockpitStream(p,cfg,a.toTimeZone(tz),b.toTimeZone(tz),q,records,budget)
     stream.cursorMode=true;stream.cursorReader=read
     pointTz:=TimeZone.fromStr(p["tz"] as Str ?: tz.name)
     stream.cursorReadAt=(stream.from-1day).toTimeZone(pointTz)
     stream.cursorReadEnd=(stream.to+1day).toTimeZone(pointTz)
-    budget.cursorActive=true
+    budget.openCursor(stream.cursorId)
     return stream
   }
 
   internal Void advance(DateTime through)
   {
     cursorCheck
+    if(cursorFrameActive) throw ArgErr("cursorFrameActive")
     if(through < watermark || through > to || (through != to && (through-from).ticks % 1hr.ticks != 0)) throw ArgErr("cursorWatermark")
     try
     {
@@ -111,19 +111,54 @@ internal class EnerCubixCockpitStream
 
   internal DateTime watermark() {hour < to ? hour : to}
   internal Bool scanComplete() {cursorEof && cursorFailure == null}
+  ** Borrowed data must be consumed before returning. Retained reductions and
+  ** copied diagnostic evidence belong to the consumer's separately charged state.
+  internal Void withFrame(|EnerCubixHistoryData| consume)
+  {
+    cursorCheck
+    if(cursorEscaped || cursorFrameActive || watermark <= (cursorConsumed ?: from)) throw ArgErr("cursorFrameMode")
+    cursorFramed=true;cursorFrameActive=true;frame:=EnerCubixPreparedFrame()
+    try
+    {
+      budget.check
+      consume(EnerCubixHistoryData(capture.set("_preparedFrame",frame)))
+      budget.check
+    }
+    catch(Err e) {cursorFailure=e;throw e}
+    finally
+    {
+      frame.expire;clearPrepared;cursorConsumed=watermark;cursorFrameActive=false
+    }
+  }
   ** Borrowed prefix view, not a frozen application snapshot or an eviction API.
   internal Str:Obj? view()
   {
     cursorCheck
+    if(cursorFramed) throw ArgErr("cursorFrameMode")
+    cursorEscaped=true
     out:=capture;out["streaming"]=budget.evidence
     return out
   }
   internal Void close()
   {
     if(!cursorMode || cursorClosed) return
-    clearCursorChunk;raw.clear;intervals.clear;cursorReader=null
-    budget.cursorActive=false;cursorClosed=true
-    // Prepared cells remain owned/charged: no frame eviction is claimed here.
+    if(cursorFrameActive) throw ArgErr("cursorFrameActive")
+    clearCursorChunk;raw.clear;intervals.clear;cursorReader=null;previous=null
+    if(cursorIntervalCharge > 0) {budget.state.releaseTemporary(cursorIntervalCharge);cursorIntervalCharge=0}
+    if(!cursorEscaped) clearPrepared
+    budget.closeCursor(cursorId);cursorClosed=true
+    // Escaped prefix cells remain owned/charged; only private frames can expire.
+  }
+  private Void clearPrepared()
+  {
+    reads.clear;emptyDomains.clear
+    if(cursorPreparedCharge > 0) {budget.state.releasePrepared(cursorPreparedCharge);cursorPreparedCharge=0}
+  }
+  private Void preparedCell(Int n)
+  {
+    if(cursorMode) budget.state.reserveOwned(n)
+    else budget.cell(n)
+    if(cursorMode) cursorPreparedCharge+=n
   }
   private Void cursorCheck()
   {
@@ -134,6 +169,7 @@ internal class EnerCubixCockpitStream
   {
     cursorItems.clear;cursorDetails.clear;cursorIndex=0
     if(cursorDetailCharge > 0) {budget.state.releaseTemporary(cursorDetailCharge);cursorDetailCharge=0}
+    budget.holdCursor(cursorId,raw.size+(previous == null ? 0 : 1))
   }
   private Bool nextCursorChunk()
   {
@@ -159,7 +195,7 @@ internal class EnerCubixCockpitStream
       }
       if(items.isEmpty) continue
       charge:=cleaned ? 2*items.size : 0
-      if(charge > 0) budget.state.hold(charge)
+      if(charge > 0) budget.state.holdOwned(charge)
       EnerCubixCleanResult? result
       try
       {
@@ -174,6 +210,7 @@ internal class EnerCubixCockpitStream
         }
         items.clear
         if(charge > cursorDetailCharge) budget.state.releaseTemporary(charge-cursorDetailCharge)
+        budget.holdCursor(cursorId,cursorItems.size+raw.size+(previous == null ? 0 : 1))
         return true
       }
       catch(Err e)
@@ -298,8 +335,14 @@ internal class EnerCubixCockpitStream
   private Int validTicks := 0
   private DateTime? lastObserved
   private Bool cursorMode := false
+  private Str cursorId := Uuid().toStr
   private Bool cursorClosed := false
   private Bool cursorEof := false
+  private Bool cursorEscaped := false
+  private Bool cursorFramed := false
+  private Bool cursorFrameActive := false
+  private DateTime? cursorConsumed
+  private Int cursorPreparedCharge := 0
   private Err? cursorFailure
   private |Dict,Span,|HisItem|->Void|? cursorReader
   private DateTime? cursorReadAt
@@ -310,6 +353,7 @@ internal class EnerCubixCockpitStream
   private [Str:Obj?]?[] cursorDetails := [,]
   private Int cursorIndex := 0
   private Int cursorDetailCharge := 0
+  private Int cursorIntervalCharge := 0
   private Bool captured := false
 
   private Void block(DateTime a,DateTime b,|Dict,Span,|HisItem|->Void| read)
@@ -333,14 +377,16 @@ internal class EnerCubixCockpitStream
     items:=HisItem[,];HisItem? leading:=null;cap:=budget.blockLimit
     if(cursorMode)
     {
-      rawRoom:=((budget.heldLimit-raw.size-(previous == null ? 0 : 1))/3).max(0)
+      rawRoom:=((budget.rawRoom(cursorId)-raw.size-(previous == null ? 0 : 1))/3).max(0)
       if(rawRoom == 0) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")
-      cap=cap.min(rawRoom)
+      cap=cap.min(rawRoom).min(budget.heldLimit/(budget.activeCursors*3))
+      if(cap == 0) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")
       if(cleaned)
       {
         prepRoom:=budget.state.remaining/2
         if(prepRoom == 0) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")
-        cap=cap.min(prepRoom)
+        cap=cap.min(prepRoom).min(200000/(budget.activeCursors*2))
+        if(cap == 0) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")
       }
     }
     try
@@ -351,15 +397,22 @@ internal class EnerCubixCockpitStream
         if(item.ts < a) {if(last == null && (leading == null || item.ts > leading.ts)) leading=item;return}
         if(item.ts >= b) return
         if(items.size >= cap) throw EnerCubixStreamBlockErr()
-        items.add(item);budget.hold((cursorMode ? 3*items.size : items.size)+raw.size+(cursorMode && previous != null ? 1 : 0))
+        items.add(item)
+        if(cursorMode) budget.holdCursor(cursorId,3*items.size+raw.size+(previous == null ? 0 : 1))
+        else budget.hold(items.size+raw.size)
       }
       if(leading != null && last == null && items.size >= cap) throw EnerCubixStreamBlockErr()
     }
-    catch(Err e) {items.clear;throw e}
+    catch(Err e)
+    {
+      items.clear;leading=null
+      if(cursorMode) budget.holdCursor(cursorId,raw.size+(previous == null ? 0 : 1))
+      throw e
+    }
     if(leading != null && last == null) items.insert(0,leading)
     byTime:=Int:HisItem[:];items.each |item| {byTime[item.ts.ticks]=item}
     items=byTime.vals.sort |x,y| {x.ts <=> y.ts}
-    if(cursorMode) budget.hold(3*items.size+raw.size+(previous == null ? 0 : 1))
+    if(cursorMode) budget.holdCursor(cursorId,3*items.size+raw.size+(previous == null ? 0 : 1))
     budget.peakBlock=budget.peakBlock.max(items.size)
     if(!cleaned && mode == "interval" && !point.has("hisCollectInterval") && !point.has("hisInterval") && !items.isEmpty)
     {
@@ -386,10 +439,12 @@ internal class EnerCubixCockpitStream
       if(d["emitted"] == true && seconds > 0f)
       {
         end:=item.ts.toTimeZone(from.tz)
+        if(cursorMode) {budget.state.holdOwned(1);cursorIntervalCharge++}
         intervals.add(EnerCubixInterval(end-Duration((seconds*1sec.ticks.toFloat).toInt),end,EnerCubixMath.num(d["value"]),EnerCubixHistory.detailQuality(d),d["valueType"].toStr))
       }
     }
-    budget.hold(heldItems+raw.size+(cursorMode && previous != null ? 1 : 0))
+    if(cursorMode) budget.holdCursor(cursorId,heldItems+raw.size+(previous == null ? 0 : 1))
+    else budget.hold(heldItems+raw.size)
     if(d != null && d["reason"] == "removedNA") return
     cursorClosable=item.ts
     firstHour:=EnerCubixMath.floorHour(item.ts)
@@ -425,7 +480,7 @@ internal class EnerCubixCockpitStream
       event:=EnerCubixHistory.nativeDetail(d).setAll(["pointId":point.id.id,"unit":point["unit"],"profileId":meta["profileId"],"profileVersion":meta["profileVersion"],"parameters":meta["parameters"]])
       reason:=d["reason"].toStr
       event["rule"]=reason == "rollover" || reason == "rolloverOutOfRange" ? "hisTotalizedRollover" : (["deltaMin","deltaMax","derivMin","derivMax","timeMax"].contains(reason) ? reason : null)
-      if(cursorMode) budget.cell(1)
+      if(cursorMode) budget.state.reserveOwned(1)
       diagnostics.add(event)
     }
   }
@@ -478,11 +533,14 @@ internal class EnerCubixCockpitStream
     else values.each |v,k|
     {
       facts:=((Map)((Map)v)["known"]).vals.findAll |r| {((Map)r)["_closedOwnPrimaryHour"] == true}.size
-      budget.cell(2+queryEnds.size+facts);budget.materializedPairs++;reads[k]=v
+      preparedCell(2+queryEnds.size+facts);budget.materializedPairs++;reads[k]=v
     }
     hour=end
     raw=raw.size > 2 ? raw[-2..-1] : raw
+    oldIntervals:=intervals.size
     intervals=intervals.findAll |row| {row.end > end}
+    if(cursorMode && intervals.size < oldIntervals)
+    {released:=oldIntervals-intervals.size;budget.state.releaseTemporary(released);cursorIntervalCharge-=released}
   }
 
   internal static [Str:Obj?][] pairs(DateTime hour, [Str:Obj?][] queries, [Str:Obj?]?[] tariffs, EnerCubixContext ctx)
@@ -526,7 +584,7 @@ internal class EnerCubixCockpitStream
     {
       domain:=Str:Obj?["from":hour,"to":end]
       if(strictQuality != "missing") domain["strictQuality"]=strictQuality
-      budget.cell(domain.size);budget.sparseDomains++;emptyDomains.add(domain)
+      preparedCell(domain.size);budget.sparseDomains++;emptyDomains.add(domain)
     }
     hour=end
   }
@@ -539,7 +597,13 @@ internal class EnerCubixCockpitStream
 
   private Str:Obj? capture()
   {
-    if(!captured) {budget.cell(4+queries.size+queryEnds.size+tariffs.size);captured=true}
+    if(!captured)
+    {
+      n:=4+queries.size+queryEnds.size+tariffs.size
+      if(cursorMode) budget.state.reserveOwned(n)
+      else budget.cell(n)
+      captured=true
+    }
     out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":lastObserved?.toIso]
     if (cleaned)
     {
@@ -574,7 +638,30 @@ internal class EnerCubixStreamBudget
   Int originalWindows := 0
   Int normalizedWindows := 0
   Int detailCount := 0
-  Bool cursorActive := false
+  private Str:Int cursorRaw := [:]
+  private Int cursorRawTotal := 0
+  Bool cursorActive() {!cursorRaw.isEmpty}
+  Int activeCursors() {cursorRaw.size}
+  Int residentRaw() {cursorRawTotal}
+  Int rawRoom(Str owner) {heldLimit-residentRaw+(cursorRaw[owner] ?: 0)}
+  Void openCursor(Str owner)
+  {
+    if(cursorRaw.containsKey(owner)) throw ArgErr("cursorOwnership")
+    cursorRaw[owner]=0
+  }
+  Void holdCursor(Str owner,Int n)
+  {
+    old:=cursorRaw[owner]
+    if(old == null || n < 0) throw ArgErr("cursorOwnership")
+    total:=cursorRawTotal-old+n
+    hold(total)
+    cursorRaw[owner]=n;cursorRawTotal=total
+  }
+  Void closeCursor(Str owner)
+  {
+    if(!cursorRaw.containsKey(owner)) throw ArgErr("cursorOwnership")
+    cursorRawTotal-=cursorRaw.remove(owner)
+  }
   private Int started := Duration.nowTicks
   Void check() {state.deadline.check}
   Void scan() {if (++scanned > scanLimit) throw EnerCubixHttpErr(422,"HISTORY_SCAN_LIMIT","cockpitHistoryScanLimit");if (scanned % 1024 == 0) check}
