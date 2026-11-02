@@ -53,6 +53,7 @@ internal class EnerCubixContext
   private Str:EnerCubixValue cache := [:]
   private Str:EnerCubixValue tariffBaseline := [:]
   private Str:Obj? defaultTariffs := [:]
+  private Str:EnerCubixTariffCursor tariffCursors := [:]
   private Str:[Str:Obj?] dimensionPlans := [:]
   private EnerCubixContext? strictContext
   private DateTime? knownEnd
@@ -120,9 +121,18 @@ internal class EnerCubixContext
   private Void dropPersistent()
   {
     if(frameOwner != null) throw ArgErr("preparedFrameActive")
-    dropFrame;tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
+    dropFrame;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
     byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
   }
+
+  internal Void bindTariffCursor(Str id,EnerCubixTariffCursor cursor,EnerCubixPreparedOwner owner)
+  {
+    if(owner !== persistentOwner || strictContext != null || transientContext || tariffCursors.containsKey(id)) throw ArgErr("tariffCursorContext")
+    retain(2,true);tariffCursors[id]=cursor
+  }
+
+  internal EnerCubixValue ownRaw(Str:Obj? record,DateTime from,DateTime to,Str[] path)
+  {rawNode(record,from,to,path)}
 
   ** Empty prepared lookups do not become a second dense cache. They have zero
   ** coverage and no source intervals; authoritative per-object coverage remains.
@@ -465,7 +475,8 @@ internal class EnerCubixContext
       // Baseline is meter-specific. Missing preceding hours invalidate the price band.
       meterId:=r["id"].toStr
       baselineKey:="$meterId|${cycle.ticks}|${from.ticks}"
-      baseline:=tariffBaseline[baselineKey]
+      rolling:=tariffCursors[meterId]
+      baseline:=rolling == null ? tariffBaseline[baselineKey] : rolling.baseline(from,to,path)
       if (baseline == null)
       {
         values := EnerCubixValue[,]; cursor:=cycle
@@ -480,7 +491,7 @@ internal class EnerCubixContext
       nextKey:="$meterId|${cycle.ticks}|${to.ticks}"
       // Only one complete original hour extends the canonical prefix. A partial
       // or multi-hour raw query is not the cycle's ordered hourly reduction.
-      if(from == EnerCubixMath.floorHour(from) && to == from+1hr)
+      if(rolling == null && from == EnerCubixMath.floorHour(from) && to == from+1hr)
         saveBaseline(nextKey,EnerCubixValue.sum([baseline,raw]))
       if (!baseline.reliable || !raw.reliable) return EnerCubixValue(null,EnerCubixValue.worse(baseline.quality,raw.quality),raw.sources)
       if (baseline.value == null) return EnerCubixValue(null,"missingTariffBaseline",raw.sources)

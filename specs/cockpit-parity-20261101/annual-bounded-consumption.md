@@ -60,6 +60,8 @@
 
 Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属两个 owner，严格／已有量 Context 共享借用历史；bound 的临时元数据、告警和费用快照只存活于当前帧。清空根引用后仅释放自身额度，外部 owner 保持；失效、跨 budget、无租约、同一长期／短期 owner 均明确拒绝。两项准入失败用例先复现失败，再修正注册清理回调的顺序。5类37方法2666校验通过，捕获main8个provenance/48业务组相等（仅归一化periodsCaptureId），峰值109425/unprepared0。证据context-owner-parity.json与context-owner-final-tests.log。普通路径仍未切换，最终输出／覆盖与全消费者调度尚未实现；不是全站年度验收。
 
+阶梯前序私有 cursor 在当前小时消费者结束后，按原完整小时追加本设备主点用量；只保留严格累计标量，必要非整点前缀仍读取当前帧，跨账期重置。真实缺测、NA/reset/量程保留；已有量不能建立阶梯。先复现释放后第二小时应15却null，再以整段oracle验证月／年、不同设备费率、Wh换算、原Float顺序、746小时跨月及未准备步骤不污染状态。长期owner条目不随帧累计增长。完整84类676方法253232校验、专项5类35方法11364校验通过；捕获main8 provenance/48业务组不变，峰值109425/unprepared0，详见tariff-cursor-parity.json。仅内部入口，默认路径和安装包仍0.14.1，尚未接完整消费者。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。
