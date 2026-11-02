@@ -65,10 +65,17 @@ internal class EnerCubixContext
   private Int nodeCalls := 0
   private Bool omittedEmptyEvidence := false
   private Bool omittedUnpreparedEvidence := false
+  internal Bool emptyEvidenceOmitted() {omittedEmptyEvidence}
+  internal Bool unpreparedEvidenceOmitted() {omittedUnpreparedEvidence}
   private EnerCubixPreparedOwner? persistentOwner
   private EnerCubixPreparedOwner? frameOwner
   private Bool framed := false
   private Bool transientContext := false
+  private [Str:Int[]]? warningRanks
+  private Int warningPhase := 0
+  private Int warningLine := 0
+  private Int warningTime := 0
+  private Int warningSequence := 0
 
   internal Bool ownedCatalog(EnerCubixPreparedBudget budget)
   {framed && persistentOwner != null && preparedBudget === budget}
@@ -117,14 +124,14 @@ internal class EnerCubixContext
     knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null
     if(transientContext)
     {
-      tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
+      tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
       byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
     }
   }
   private Void dropPersistent()
   {
     if(frameOwner != null) throw ArgErr("preparedFrameActive")
-    dropFrame;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
+    dropFrame;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
     byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
   }
 
@@ -161,8 +168,47 @@ internal class EnerCubixContext
 
   Void warn(Str message)
   {
+    if(warningRanks != null)
+    {
+      previous:=warningRanks[message]
+      if(previous == null)
+      {retain(6,true);warningRanks[message]=[warningPhase,warningLine,warningTime,warningSequence]}
+      else if(warningBefore(previous))
+      {previous[0]=warningPhase;previous[1]=warningLine;previous[2]=warningTime;previous[3]=warningSequence}
+      warningSequence++
+    }
     if(!warnings.contains(message)) {if(persistentOwner != null) retain(1,true);warnings.add(message)}
   }
+
+  internal Void orderWarnings()
+  {
+    if(persistentOwner == null || frameOwner != null || warningRanks != null) throw ArgErr("warningOrderContext")
+    retain(5,true);warningRanks=Str:Int[][:]
+    warnings.each |message,i| {retain(6,true);warningRanks[message]=[-1,i,0,0]}
+  }
+  internal Void warningScope(Int phase,Int line,Int time)
+  {
+    if(warningRanks == null || persistentOwner == null) throw ArgErr("warningOrderContext")
+    warningPhase=phase;warningLine=line;warningTime=time;warningSequence=0
+  }
+  internal Str[] orderedWarnings()
+  {
+    if(warningRanks == null) return warnings
+    return warnings.sort |a,b->Int|
+    {
+      x:=warningRanks[a];y:=warningRanks[b]
+      for(i:=0;i<4;i++) {c:=x[i]<=>y[i];if(c!=0) return c}
+      return 0
+    }
+  }
+  private Bool warningBefore(Int[] previous)
+  {
+    if(warningPhase != previous[0]) return warningPhase<previous[0]
+    if(warningLine != previous[1]) return warningLine<previous[1]
+    if(warningTime != previous[2]) return warningTime<previous[2]
+    return warningSequence<previous[3]
+  }
+  private Void clearWarnings() {warnings.clear;warningRanks?.clear;warningRanks=null}
 
   Str displayName(Str id)
   {

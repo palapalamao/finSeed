@@ -1,0 +1,165 @@
+** Private full-profile consumer. Source frames remain borrowed; period, own-meter
+** and coverage reductions are independent. No default route uses this seam.
+internal class EnerCubixReportConsumer
+{
+  new make(EnerCubixContext ctx,EnerCubixReport report,EnerCubixLineCursor[] cursors,
+    DateTime from,DateTime to,Str gran,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output)
+  {
+    if(!report.acceptsFrames || !report.ownedFrameCatalog(state) || state === output || state.budget !== output.budget || !ctx.ownedCatalog(state.budget) || cursors.any |c| {c.watermark != from || !c.line.ticks.isEmpty}) throw ArgErr("reportConsumerPlan")
+    this.ctx=ctx;this.report=report;this.cursors=cursors.dup;this.to=to;this.at=from;this.output=output
+    state.watch |->Void| {closeState};state.hold(20+5*cursors.size)
+    ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
+    // Reserve final DTO containers before any report output is assembled. Values
+    // and their source arrays are admitted separately by the period/meter folds.
+    n:=0;bucket:=EnerCubixMath.bucket(from,gran)
+    while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
+    metadata:=0;ctx.byId.each |r| {metadata+=entries(r)}
+    output.hold(2048+128*ledger.size+40*n*cursors.size+metadata*(cursors.size+4))
+    ctx.byId.each |record| {protect(record)}
+    EnerCubixLine[] definitions:=cursors.map |c->EnerCubixLine| {c.line}
+    output.watch |->Void|
+    {
+      closeOutput;report.clearFrames
+      definitions.each |EnerCubixLine line| {line.consumedTotals?.clear;line.consumedTotals=null};definitions.clear
+    }
+    cursors.each |cursor|
+    {
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output))
+      points:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
+      covers.add(EnerCubixCoverageFold(points,from,to,state))
+    }
+    ledger.each |item|
+    {
+      key:=item["id"].toStr+"|"+item["category"].toStr
+      meters[key+"|false"]=EnerCubixValueFold.strict(state);meters[key+"|true"]=EnerCubixValueFold.known(state)
+    }
+  }
+  private EnerCubixContext? ctx
+  private EnerCubixReport? report
+  private EnerCubixLineCursor[] cursors := [,]
+  private EnerCubixPeriodConsumer[] periods := [,]
+  private EnerCubixCoverageFold[] covers := [,]
+  private [Str:Obj?][] ledger := [,]
+  private Str:EnerCubixValueFold meters := [:]
+  private Str:[Str:Obj?] evidence := [:]
+  private DateTime at
+  private DateTime to
+  private EnerCubixPreparedOwner output
+  private Str:Obj? result := [:]
+  private Obj[] borrowed := [,]
+  private EnerCubixValue[] frozenMeters := [,]
+  private Int readCount := 0
+  private Int detailCount := 0
+  private Bool emptyOmitted := false
+  private Bool unpreparedOmitted := false
+  private Bool closed := false
+  private Bool stateClosed := false
+  private Bool done := false
+  private Err? failure
+
+  Void addFrame(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {
+    check
+    if(done || at>=to || frame.budget !== output.budget) throw ArgErr("reportConsumerFrame")
+    try
+    {
+      report.beginFrame(frame,histories)
+      end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
+      cursors.each |cursor,i|
+      {ctx.warningScope(0,i,at.ticks);periods[i].add(cursor.next)}
+      consumeMeters(1,end)
+      reads:=report.frameReads;covers.each |cover| {cover.addFrame(reads,frame)}
+      // Normal finish freezes coverage/evidence before dimensionDetails reads.
+      // Detail-only meters must not appear in that earlier evidence snapshot.
+      capture(reads);emptyOmitted=emptyOmitted || report.frameEmptyOmitted;unpreparedOmitted=unpreparedOmitted || report.frameUnpreparedOmitted
+      consumeMeters(3,end);at=end
+    }
+    catch(Err e) {failure=e;throw e}
+  }
+  private Void consumeMeters(Int phase,DateTime end)
+  {
+    ledger.findAll |item| {item["phase"] == phase}.each |item|
+    {
+      id:=item["id"].toStr;category:=item["category"].toStr;key:="$id|$category"
+      ctx.warningScope(phase,(Int)item["order"],at.ticks)
+      meters[key+"|false"].add(report.frameMeter(id,category,at,end,false))
+      meters[key+"|true"].add(report.frameMeter(id,category,at,end,true))
+    }
+  }
+
+  Str:Obj? finish()
+  {
+    check
+    if(done) return result
+    if(at!=to) throw ArgErr("reportConsumerIncomplete")
+    try
+    {
+      totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:]
+      periods.each |consumer,i|
+      {
+        consumer.finish;line:=cursors[i].finish;output.hold(4)
+        line.consumedTotals=Str:EnerCubixValue[:]
+        ["value","known","baseValue","baseKnown"].each |mode| {line.consumedTotals[mode]=consumer.total(mode)}
+        buckets[line.id]=["rows":consumer.periods];coverage[line.id]=report.frameCoverage(line,covers[i].finish)
+      }
+      meters.each |fold,key| {output.hold(6+fold.sourceCount);value:=fold.finish;totals[key]=value;frozenMeters.add(value)}
+      omitted:=readCount>evidence.size || emptyOmitted || unpreparedOmitted
+      known:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":EnerCubixKnownUsage.evidence(evidence.vals),"detailsTruncated":omitted || evidence.vals.any |r| {r["detailsTruncated"] == true}]
+      if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
+      result=report.finishFrames(cursors.map |c->EnerCubixLine| {c.line},buckets,totals,coverage,known)
+      ((Map)result["extra"])["relationBasis"]="current"
+      done=true;return result
+    }
+    catch(Err e) {failure=e;throw e}
+  }
+  private Void capture([Str:Obj?][] reads)
+  {
+    reads.each |row|
+    {
+      readCount++
+      if(evidence.size>=1000) return
+      intervals:=EnerCubixMath.maps(row["intervals"]);keep:=intervals.size.min((1000-detailCount).max(0))
+      // Admit the complete detached graph before duplicating borrowed maps.
+      output.hold(3+row.size+EnerCubixMath.strings(row["sourceIds"]).size+keep)
+      for(i:=0;i<keep;i++) output.hold(1+intervals[i].size)
+      copy:=row.dup;copy["sourceIds"]=EnerCubixMath.strings(row["sourceIds"]).dup
+      copy["intervals"]=intervals[0..<keep].map |r->[Str:Obj?]| {r.dup}
+      if(keep<intervals.size) copy["detailsTruncated"]=true
+      detailCount+=keep
+      evidence[row["nodeId"].toStr+"|"+row["pointId"].toStr+"|"+DateTime.fromIso(row["from"].toStr).ticks+"|"+DateTime.fromIso(row["to"].toStr).ticks]=copy
+    }
+  }
+  private static Int entries(Obj? value)
+  {
+    if(value is Map) return ((Map)value).vals.reduce(1+((Map)value).size) |Int n,v->Int| {n+entries(v)}
+    if(value is List) return ((List)value).reduce(1+((List)value).size) |Int n,v->Int| {n+entries(v)}
+    return 0
+  }
+  private Void protect(Obj? value)
+  {
+    if(value isnot Map && value isnot List) return
+    if(borrowed.any |item| {item === value}) return
+    borrowed.add(value)
+    if(value is Map) ((Map)value).each |child| {protect(child)}
+    else ((List)value).each |child| {protect(child)}
+  }
+  private Void dropGraph(Obj? value)
+  {
+    if(value isnot Map && value isnot List) return
+    if(borrowed.any |item| {item === value}) return
+    // Clear before visiting children: repeated aliases and cycles terminate,
+    // without mutating configuration containers borrowed from the catalog.
+    if(value is Map) {children:=((Map)value).vals;((Map)value).clear;children.each |child| {dropGraph(child)}}
+    else {children:=((List)value).dup;((List)value).clear;children.each |child| {dropGraph(child)}}
+  }
+  private Void check()
+  {if(closed) throw ArgErr("reportConsumerClosed");if(failure!=null) throw failure;if(stateClosed && !done) throw ArgErr("reportConsumerClosed")}
+  private Void closeState()
+  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;stateClosed=true}
+  private Void closeOutput()
+  {
+    dropGraph(result);dropGraph(evidence)
+    frozenMeters.each |value| {if(!value.sources.isEmpty) value.sources.clear;value.value=null;value.quality="ownerExpired"}
+    frozenMeters.clear;borrowed.clear;periods.clear;closed=true
+  }
+}

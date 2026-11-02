@@ -70,6 +70,14 @@ Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属
 
 校验脚本纠正：此前新增回放辅助脚本误从根读取provenance字段，已对四组历史回放在正确的provenance容器内要求8个键存在并比较实际值，32项全部一致；缺键即失败。业务报告另要求12个report键相同，比较48槽位中的47个实有组，energy-flow/extra/usageCoverage原本缺省的一槽仍缺省。旧新证据已补入严格复核信息，见strict-provenance-verification.json及strict-business-verification.json。本增量最终回放也使用同一严格规则，不再依赖可选根字段读取。
 
+完整 profile DTO 私有消费缝已接通：复用原 selection/detail 成员选择、叶级小时计算、分期与独立整段 fold，冻结 own-meter totals 后由原 finish 输出图、合计、明细、面积和 coverage。Context 的有序告警按原 line/阶段/小时裁决，保留原去重。原 finish 在 dimensionDetails 前冻结来源及覆盖，初次对照发现新路径提前纳入详情专用分表，已按原阶段修正；同主点别名不会因此重复增加覆盖。Report/Area 索引和线的面积元数据先准入，最终 DTO 保守预留，分期 Value、来源数组和脱离帧的诊断逐项另计；关闭计算 owner 后仍可读输出，关闭输出后清空逃逸行和来源容器，同时保护借用配置。中途输出准入失败不能发布或重试半成品，也不重置其他 owner 的额度。
+
+该增量精确源码完整90类705方法258587校验通过（421308ms；包含显式1800秒预算的旧容量夹具，不作为生产30秒成功证据）。受控82源×1000小时完整月报告 summary/series/rows/coverage 与无 prepared 限制的整段 interval oracle 相等，prepared+Context+保留输出峰值45542、raw8309、902回调/82082样本、unprepared0，默认30秒预算内受控11597ms；长期计算额度不随帧增长。另覆盖NA、缺失、重复引用、跨月Float、分时费用、系数、单位换算、面积、不同分类提示顺序与失败清理。证据 report-consumer-full-fantom.log。
+
+真实捕获 zeda main 的单个 profile 私有回放（无FIN I/O）也通过：9个顶层字段/业务组、5个extra组与先前冻结整段结果零差异，保持原截至14:38:28.503447的末段；生产者只按原对齐小时水位推进，消费者不截短末段。385回调/12094捕获样本、unprepared0、峰值117453、raw691；关闭后temporary/raw均0，35条有限生产者元数据继续如实计账。该项只含当前期一个profile，不能与12报告/同期默认路径作同工作量性能比较。默认整包回放另验证provenance内8个必需键、12报告60槽中的59个实有组（含warnings）相等，仅periodsCaptureId归一化，原缺省energy-flow coverage仍缺省。见 report-consumer-native-main.stats.json、report-consumer-parity.json；SDK冻结包 report-consumer-offline-test.pod SHA59676FFE1D5CAD6E1D93B0D56E0799CEA1C06A50868AB7FBAEA62C158848E2FD。FIN Expert连接器通用离线契约不适配此私有Fantom消费类，仍未通过/目标版本未验证，不冒充SDK编译或FIN实机证明。
+
+此时仍没有完整消费者注册表；日报/时段/用途、空间仅摘要输出、热图、flow/COP/规则与全包公平1000诊断尚未统一接入。当前私有profile的最多1000来源行及1000子区间不等于全包1000配额，未宣称全部输出/全9模块年度通过。普通路径和安装包不切换，版本仍0.14.1；只读账号按用户暂缓。安装包hash本轮复核仍ED905...51A4，但观察到FIN已由其他操作变为PID34644；原PID44028的30分钟观察不能套用于新进程，本开发聊天未执行该重启。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

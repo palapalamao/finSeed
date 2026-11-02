@@ -177,6 +177,7 @@ internal class EnerCubixLine
   Bool reference := false
   Str? utility
   EnerCubixTick[] ticks := [,]
+  internal [Str:EnerCubixValue]? consumedTotals
 
   EnerCubixValue baseTotal() { reduce(ticks,"baseValue") }
   EnerCubixValue baseKnownTotal() { reduce(ticks,"baseKnown") }
@@ -189,6 +190,7 @@ internal class EnerCubixLine
 
   private EnerCubixValue reduce(EnerCubixTick[] values,Str mode)
   {
+    if(consumedTotals != null && values === ticks) return consumedTotals[mode] ?: throw ArgErr("consumedLineMode")
     fold:=EnerCubixLineFold(this,mode)
     values.each |tick| {fold.add(tick)}
     return fold.finish

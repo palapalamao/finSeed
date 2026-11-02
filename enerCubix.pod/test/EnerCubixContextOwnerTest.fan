@@ -81,6 +81,29 @@ class EnerCubixContextOwnerTest : Test
     budget.state.releaseTemporary(199993)
   }
 
+  Void testWarningsFollowOriginalLineAndPhaseOrderAcrossInterleavedHours()
+  {
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    ctx.warn("preamble");ctx.orderWarnings
+    ctx.warningScope(0,1,at.ticks);ctx.warn("second line")
+    ctx.warningScope(3,0,at.ticks);ctx.warn("details")
+    ctx.warningScope(0,0,(at+12hr).ticks);ctx.warn("first line later")
+    ctx.warningScope(0,0,at.ticks);ctx.warn("first line earlier");ctx.warn("same hour next")
+    ctx.warningScope(1,0,at.ticks);ctx.warn("selection")
+    verifyEq(ctx.orderedWarnings,["preamble","first line earlier","same hour next","first line later","second line","selection","details"])
+    retained:=owner.entries
+    // Repeated later visits cannot replace the first logical occurrence.
+    ctx.warningScope(4,0,at.ticks);ctx.warn("first line earlier")
+    verifyEq(owner.entries,retained)
+    // An earlier logical visit to the same message updates its rank in place.
+    ctx.warningScope(0,0,at.ticks-1);ctx.warn("first line later")
+    verifyEq(owner.entries,retained)
+    verifyEq(ctx.orderedWarnings,["preamble","first line later","first line earlier","same hour next","second line","selection","details"])
+    owner.close;verify(ctx.warnings.isEmpty);verifyEq(budget.state.temporary.val,0)
+    verifyErr(ArgErr#) {ctx.warningScope(0,0,at.ticks)}
+  }
+
   private EnerCubixCockpitStream source(EnerCubixStreamBudget budget,HisItem[] raw)
   {
     cfg:=Etc.makeDict(["defNull":Marker.val]);p:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])

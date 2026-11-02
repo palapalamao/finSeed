@@ -1,8 +1,14 @@
 internal class EnerCubixReport
 {
-  new make(EnerCubixContext ctx, Str:Obj? request, DateTime from, DateTime to, Str kind, Str period, Str metric)
+  new make(EnerCubixContext ctx, Str:Obj? request, DateTime from, DateTime to, Str kind, Str period, Str metric,EnerCubixPreparedOwner? catalogOwner := null)
   {
     this.ctx=ctx; this.request=request; this.from=from; this.to=to; this.kind=kind; this.period=period; this.metric=metric
+    if(catalogOwner != null)
+    {
+      if(!ctx.ownedCatalog(catalogOwner.budget)) throw ArgErr("reportCatalogOwner")
+      catalogOwner.hold(30+3*ctx.byId.size);this.catalogOwner=catalogOwner
+      catalogOwner.watch |->Void| {areas.clear;this.catalogOwner=null}
+    }
     areas=EnerCubixArea(ctx.byId.vals)
     dataCutoff=EnerCubixKnownUsage.cutoff(request)
     if (EnerCubixKnownUsage.supported(kind,metric))
@@ -11,6 +17,7 @@ internal class EnerCubixReport
     }
   }
   private EnerCubixArea areas
+  private EnerCubixPreparedOwner? catalogOwner
   private EnerCubixContext ctx
   private EnerCubixContext? knownCtx
   private DateTime dataCutoff
@@ -24,6 +31,26 @@ internal class EnerCubixReport
   private [Str:Obj?][] rows := [,]
   private Str:Obj? summary := [:]
   private Str:Obj? extra := [:]
+  private Str:Str:Obj? consumedPeriods := [:]
+  private [Str:EnerCubixValue]? consumedMeters
+  private [Str:[Str:Obj?]]? consumedCoverage
+  private [Str:Obj?]? consumedEvidence
+
+  internal Bool acceptsFrames()
+  { ["profile","primary","ranking","proportion","dashboard"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
+  internal Bool ownedFrameCatalog(EnerCubixPreparedOwner owner) {catalogOwner === owner}
+  internal [Str:Obj?][] frameReads() {knownCtx?.knownReads?.vals ?: [Str:Obj?][,]}
+  internal Bool frameEmptyOmitted() {knownCtx?.emptyEvidenceOmitted ?: false}
+  internal Bool frameUnpreparedOmitted() {knownCtx?.unpreparedEvidenceOmitted ?: false}
+  internal EnerCubixValue frameMeter(Str id,Str category,DateTime start,DateTime end,Bool known)
+  { (known ? knownCtx : ctx).node(id,category,start,end,metric) }
+  internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence)
+  {
+    consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence
+    return finish(lines)
+  }
+  internal Void clearFrames()
+  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
 
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
   {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
@@ -37,6 +64,13 @@ internal class EnerCubixReport
 
   internal EnerCubixLineCursor openLine(Str id,Str category,Str? utility := null,DateTime start := from,DateTime end := to)
   {
+    if(catalogOwner != null)
+    {
+      // A single explicit area source is bounded; organization service area may
+      // contain all participating meters. Admit its metadata before resolving it.
+      members:=ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id) ? ctx.scopeMeters(id,category).size : 0
+      catalogOwner.hold(128+64*members)
+    }
     r:=ctx.byId[id]
     name:=r?.get("name")?.toStr ?: id
     if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定分项"))
@@ -258,7 +292,7 @@ internal class EnerCubixReport
       }
       extra["usageBasis"]="knownUsage"
       extra["usageCoverage"]=lines.findAll |l| {!l.reference && !l.ratio && !l.gauge}.map |l->[Str:Obj?]| {coverage(l)}
-      extra["knownUsage"]=knownCtx.knownEvidence.set("asOf",dataCutoff.toIso)
+      extra["knownUsage"]=(consumedEvidence ?: knownCtx.knownEvidence).set("asOf",dataCutoff.toIso)
     }
     recordLineAreas(lines)
     if (kind == "leak") leakTotals(lines)
@@ -299,14 +333,7 @@ internal class EnerCubixReport
     lines.each |l|
     {
       if (l.reference) return
-      members:=kind == "utility" ? ctx.dimension.usageMembers(l.nodeId) : ctx.dimension.members(l.nodeId)
-      own:=ctx.byId[l.nodeId]
-      if (members.isEmpty && own != null && ["meter","totalMeter"].contains(own["kind"]?.toStr ?: "")) members=[own]
-      if (kind == "leak")
-      {
-        members=leakMembers(l.nodeId,l.category).dup
-        if (own != null) members.insert(0,own)
-      }
+      members:=detailMembers(l)
       countedMembers:=members
       if (kind != "leak") countedMembers=kind == "utility" ? ctx.dimension.usageFrontier(members) : ctx.dimension.frontier(members)
       counted:=countedMembers.map |m->Str| { m["id"].toStr }
@@ -325,8 +352,49 @@ internal class EnerCubixReport
     extra["details"]=details
   }
 
+  private [Str:Obj?][] detailMembers(EnerCubixLine line)
+  {
+    members:=kind == "utility" ? ctx.dimension.usageMembers(line.nodeId) : ctx.dimension.members(line.nodeId)
+    own:=ctx.byId[line.nodeId]
+    if(members.isEmpty && own != null && ["meter","totalMeter"].contains(own["kind"]?.toStr ?: "")) members=[own]
+    if(kind == "leak")
+    {
+      members=leakMembers(line.nodeId,line.category).dup
+      if(own != null) members.insert(0,own)
+    }
+    return members
+  }
+
+  private Str:Obj? selectionGroup(EnerCubixLine[] lines,Str category)
+  {
+    selected:=lines.findAll |line| {!line.reference && line.category == category}
+    candidates:=selected.map |line->[Str:Obj?][]| {ctx.scopeMeters(line.nodeId,category,Str[,],line.utility)}.flatten
+    return ["selected":selected,"candidates":candidates,"meters":ctx.selectionMeters(candidates)]
+  }
+
+  ** Own-meter totals used after line consumption. Reuse the same selection and
+  ** detail membership as normal finalization; this is not a history read plan.
+  internal [Str:Obj?][] frameLedger(EnerCubixLine[] lines)
+  {
+    out:=[Str:Obj?][,];seen:=Str:Bool[:];order:=0
+    add:=|Str id,Str category,Int phase|
+    {
+      key:="$id|$category"
+      if(seen.containsKey(key)) return
+      seen[key]=true;out.add(["id":id,"category":category,"phase":phase,"order":order++])
+    }
+    if(!["cop","leak","utility"].contains(kind))
+      lines.findAll |line| {!line.reference && !line.gauge && !line.ratio}.map |line->Str| {line.category}.unique.sort.each |Str category,Int categoryIndex|
+      {order=categoryIndex*(ctx.byId.size+1);EnerCubixMath.maps(selectionGroup(lines,category)["meters"]).each |meter| {add(meter["id"].toStr,category,1)}}
+    order=0
+    if(ctx.dimension != null && kind != "utility") lines.findAll |line| {!line.reference}.each |line|
+    {detailMembers(line).each |meter| {add(meter["id"].toStr,meter["categoryId"] as Str ?: "",3)}}
+    return out
+  }
+
   private EnerCubixValue meterTotal(Str id, Str category, Bool known := false)
   {
+    if(consumedMeters != null) return consumedMeters["$id|$category|$known"] ?: throw ArgErr("consumedMeterNotPlanned")
     values:=EnerCubixValue[,]; cursor:=from
     while (cursor < to)
     {
@@ -349,11 +417,12 @@ internal class EnerCubixReport
   private [Str:Obj?][] selectionTotals(EnerCubixLine[] lines)
   {
     out:=[Str:Obj?][,]
-    lines.findAll |l| {!l.reference && !l.gauge && !l.ratio}.map |l->Str| {l.category}.unique.sort.each |Str category|
+    lines.findAll |l| {!l.reference && !l.gauge && !l.ratio}.map |l->Str| {l.category}.unique.sort.each |Str category,Int categoryIndex|
     {
-      selected:=lines.findAll |l| {!l.reference && l.category == category}
-      candidates:=selected.map |l->[Str:Obj?][]| {ctx.scopeMeters(l.nodeId,category,Str[,],l.utility)}.flatten
-      meters:=ctx.selectionMeters(candidates)
+      group:=selectionGroup(lines,category)
+      selected:=(EnerCubixLine[])group["selected"]
+      candidates:=([Str:Obj?][])group["candidates"]
+      meters:=([Str:Obj?][])group["meters"]
       strict:=EnerCubixValue.sum(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category)})
       known:=knownCtx == null ? null : EnerCubixKnownUsage.combine(meters.map |m->EnerCubixValue| {meterTotal(m["id"].toStr,category,true)})
       quality:=ctx.dimension?.quality(request["metric"] == "cost" ? candidates.unique : candidates)
@@ -369,7 +438,11 @@ internal class EnerCubixReport
       {
         area:=areas.selection(selected.map |l->Str| {l.nodeId},ctx.dimension,meters.map |m->Str| {m["id"].toStr})
         if (lines.findAll |l| {!l.reference}.map |l->Str| {l.category}.unique.size == 1) extra["normalizationArea"]=area
-        if (area["value"] == null) ctx.warn(area["quality"].toStr)
+        if (area["value"] == null)
+        {
+          if(consumedMeters != null) ctx.warningScope(1,categoryIndex*(ctx.byId.size+1)+ctx.byId.size,Int.maxVal)
+          ctx.warn(area["quality"].toStr)
+        }
         base:=known ?: strict
         strict=EnerCubixArea.scale(strict,area)
         if (known != null) known=EnerCubixArea.scale(known,area)
@@ -404,6 +477,7 @@ internal class EnerCubixReport
 
   private Str:Obj? coverage(EnerCubixLine line)
   {
+    if(consumedCoverage != null) return consumedCoverage[line.id] ?: throw ArgErr("consumedCoverageNotPlanned")
     start:=line.ticks.first?.ts ?: from; finish:=line.ticks.last?.end ?: to
     meters:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
     Str[] points:=meters.map |m->Str| {m["pointId"] as Str ?: ""}
@@ -418,8 +492,14 @@ internal class EnerCubixReport
     amount:=covered.isEmpty ? 0f : (Float)covered.min
     starts:=reads.findAll |r| {r["intervalStart"] != null}.map |r->DateTime| {DateTime.fromIso(r["intervalStart"].toStr)}
     ends:=reads.findAll |r| {r["intervalEnd"] != null}.map |r->DateTime| {DateTime.fromIso(r["intervalEnd"].toStr)}
+    return frameCoverage(line,["coveredSeconds":amount,"expectedSeconds":seconds,"coverage":seconds > 0f ? (amount/seconds).min(1f) : 0f,"coverageStart":starts.isEmpty ? null : ((DateTime)starts.min).toIso,"coverageEnd":ends.isEmpty ? null : ((DateTime)ends.max).toIso])
+  }
+
+  internal Str:Obj? frameCoverage(EnerCubixLine line,Str:Obj? stats)
+  {
     value:=line.knownTotal
-    return ["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"knownValue":value.value,"knownQuality":value.quality,"coveredSeconds":amount,"expectedSeconds":seconds,"coverage":seconds > 0f ? (amount/seconds).min(1f) : 0f,"coverageStart":starts.isEmpty ? null : ((DateTime)starts.min).toIso,"coverageEnd":ends.isEmpty ? null : ((DateTime)ends.max).toIso,"complete":line.total.value != null && line.total.reliable && amount >= seconds,"meterIds":meters.map |m->Str| {m["id"].toStr}]
+    meters:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)
+    return Str:Obj?["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"knownValue":value.value,"knownQuality":value.quality,"complete":line.total.value != null && line.total.reliable && (Float)stats["coveredSeconds"] >= (Float)stats["expectedSeconds"],"meterIds":meters.map |m->Str| {m["id"].toStr}].setAll(stats)
   }
 
   private [Str:Obj?][] utilityTotals(EnerCubixLine[] lines)
@@ -493,6 +573,23 @@ internal class EnerCubixReport
 
   private Void append(EnerCubixLine l, Str gran)
   {
+    if(consumedPeriods.containsKey(l.id))
+    {
+      points:=[Str:Obj?][,]
+      EnerCubixMath.maps(consumedPeriods[l.id]["rows"]).each |item|
+      {
+        at:=DateTime.fromIso(item["ts"].toStr);value:=(EnerCubixValue)item["value"]
+        point:=value.point(at);row:=baseRow(l,at.toIso,value);row["ts"]=at.toIso
+        if(displaysKnown(l))
+        {
+          known:=(EnerCubixValue)item["known"]
+          fields:=EnerCubixKnownUsage.fields(known).set("bucketEnd",EnerCubixMath.nextBucket(at,gran).toIso)
+          point.setAll(fields);row.setAll(fields)
+        }
+        points.add(point);rows.add(row)
+      }
+      series.add(seriesMap(l,points));return
+    }
     grouped:=Str:EnerCubixTick[][:]; order:=Str[,]; timestamps:=Str:DateTime[:]
     l.ticks.each |t|
     {
@@ -890,7 +987,8 @@ internal class EnerCubixReport
       extra["tariffSnapshot"]=tariffs.keys.sort.map |id->[Str:Obj?]| {tariffs[id]}
     }
     if (knownCtx == null && !["trend"].contains(kind)) extra["usagePolicy"]=kind == "forecast" ? "completeTrainingHistoryRequired" : (metric == "cost" ? "billingRequiresCompleteCoverage" : (kind == "regression" ? "completePairsRequired" : "comparableCoverageRequired"))
-    return ["kind":kind,"from":from.toIso,"to":to.toIso,"asOf":dataCutoff.toIso,"period":period,"series":series,"rows":rows,"warnings":ctx.warnings,"summary":summary,"extra":extra]
+    warnings:=ctx.orderedWarnings
+    return ["kind":kind,"from":from.toIso,"to":to.toIso,"asOf":dataCutoff.toIso,"period":period,"series":series,"rows":rows,"warnings":consumedMeters == null ? warnings : warnings.dup,"summary":summary,"extra":extra]
   }
 }
 

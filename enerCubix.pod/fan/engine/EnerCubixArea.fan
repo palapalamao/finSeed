@@ -11,6 +11,7 @@ internal class EnerCubixArea
   }
   private Str:[Str:Obj?] byId := [:]
   private Str:Str nativeIds := [:]
+  internal Void clear() {byId.clear;nativeIds.clear}
 
   Str:Obj? node(Str id)
   {
