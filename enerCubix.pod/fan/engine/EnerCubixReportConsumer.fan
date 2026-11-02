@@ -18,8 +18,8 @@ internal class EnerCubixReportConsumer
     ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
-    n:=report.dailyFrames ? 24 : 0;bucket:=EnerCubixMath.bucket(from,gran)
-    if(!report.dailyFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
+    n:=report.dailyFrames ? 24 : (report.workingFrames ? 2 : 0);bucket:=EnerCubixMath.bucket(from,gran)
+    if(!report.dailyFrames && !report.workingFrames) while(bucket<to) {n++;bucket=EnerCubixMath.nextBucket(bucket,gran)}
     shape:=report.frameShape(cursors.map |c->EnerCubixLine| {c.line})
     // 40 per period covers point+detail maps/links; 32 per membership covers
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
@@ -37,8 +37,9 @@ internal class EnerCubixReportConsumer
     cursors.each |cursor| {output.hold(ownedMetadata(cursor.line.normalizationArea));cursor.line.outputOwnsArea=true}
     cursors.each |cursor|
     {
-      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.dailyFrames))
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.dailyFrames && !report.workingFrames))
       if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
+      if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,state,output))
       points:=ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
       covers.add(EnerCubixCoverageFold(points,from,to,state))
     }
@@ -54,6 +55,7 @@ internal class EnerCubixReportConsumer
   private EnerCubixPeriodConsumer[] periods := [,]
   private EnerCubixCoverageFold[] covers := [,]
   private EnerCubixDailyConsumer[] daily := [,]
+  private EnerCubixWorkingConsumer[] working := [,]
   private [Str:Obj?][] ledger := [,]
   private Str:EnerCubixValueFold meters := [:]
   private Str:[Str:Obj?] evidence := [:]
@@ -82,7 +84,11 @@ internal class EnerCubixReportConsumer
       report.beginFrame(frame,histories)
       end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
       cursors.each |cursor,i|
-      {ctx.warningScope(0,i,at.ticks);tick:=cursor.next;periods[i].add(tick);if(!daily.isEmpty) daily[i].add(tick,report.frameBand(cursor.line,tick))}
+      {
+        ctx.warningScope(0,i,at.ticks);tick:=cursor.next;periods[i].add(tick)
+        if(!daily.isEmpty) daily[i].add(tick,report.frameBand(cursor.line,tick))
+        if(!working.isEmpty) working[i].add(tick,report.frameWorking(tick))
+      }
       consumeMeters(1,end)
       // Normal finish freezes coverage/evidence before dimensionDetails reads.
       // Detail-only meters must not appear in that earlier evidence snapshot.
@@ -115,7 +121,7 @@ internal class EnerCubixReportConsumer
     if(at!=to) throw ArgErr("reportConsumerIncomplete")
     try
     {
-      totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:];dailyData:=Str:[Str:Obj?][:]
+      totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:];dailyData:=Str:[Str:Obj?][:];workingData:=Str:[Str:Obj?][][:]
       periods.each |consumer,i|
       {
         consumer.finish;line:=cursors[i].finish;output.hold(4)
@@ -123,6 +129,7 @@ internal class EnerCubixReportConsumer
         ["value","known","baseValue","baseKnown"].each |mode| {line.consumedTotals[mode]=consumer.total(mode)}
         buckets[line.id]=["rows":consumer.periods];coverage[line.id]=report.frameCoverage(line,covers[i].finish)
         if(!daily.isEmpty) dailyData[line.id]=daily[i].finish
+        if(!working.isEmpty) workingData[line.id]=working[i].finish
       }
       meters.each |fold,key| {output.hold(6+fold.sourceCount);value:=fold.finish;totals[key]=value;frozenMeters.add(value)}
       omitted:=readCount>evidence.size || emptyOmitted || unpreparedOmitted
@@ -138,7 +145,7 @@ internal class EnerCubixReportConsumer
         // Original finalizers create candidate arrays, source unions and area
         // scratch graphs. Admit them before invoking any of those allocations.
         scratch.hold(finishScratch)
-        result=report.finishFrames(cursors.map |c->EnerCubixLine| {c.line},buckets,totals,coverage,known,dailyData)
+        result=report.finishFrames(cursors.map |c->EnerCubixLine| {c.line},buckets,totals,coverage,known,dailyData,workingData)
         ((Map)result["extra"])["relationBasis"]="current"
       }
       finally {scratch.close}
@@ -192,7 +199,7 @@ internal class EnerCubixReportConsumer
   private Void check()
   {if(closed) throw ArgErr("reportConsumerClosed");if(failure!=null) throw failure;if(stateClosed && !done) throw ArgErr("reportConsumerClosed")}
   private Void closeState()
-  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;daily.clear;stateClosed=true}
+  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;daily.clear;working.clear;stateClosed=true}
   private Void closeOutput()
   {
     dropGraph(result);dropGraph(evidence)

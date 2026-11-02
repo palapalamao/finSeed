@@ -36,10 +36,13 @@ internal class EnerCubixReport
   private [Str:[Str:Obj?]]? consumedCoverage
   private [Str:Obj?]? consumedEvidence
   private Str:[Str:Obj?] consumedDaily := [:]
+  private Str:[Str:Obj?][] consumedWorking := [:]
 
   internal Bool acceptsFrames()
-  { ["profile","primary","ranking","proportion","dashboard","daily","utility"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
+  { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
   internal Bool dailyFrames() {kind == "daily"}
+  internal Bool workingFrames() {["workingHours","workingDays"].contains(kind)}
+  internal Bool frameWorking(EnerCubixTick tick) {ctx.working(tick.ts,kind == "workingHours",request["workHours"])}
   internal Str frameBand(EnerCubixLine line,EnerCubixTick tick)
   {ctx.timeBand(line.nodeId,line.category,tick.ts,tick.end,line.utility)}
   internal Bool ownedFrameCatalog(EnerCubixPreparedOwner owner) {catalogOwner === owner}
@@ -48,13 +51,13 @@ internal class EnerCubixReport
   internal Bool frameUnpreparedOmitted() {knownCtx?.unpreparedEvidenceOmitted ?: false}
   internal EnerCubixValue frameMeter(Str id,Str category,DateTime start,DateTime end,Bool known)
   { (known ? knownCtx : ctx).node(id,category,start,end,metric) }
-  internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence,Str:[Str:Obj?] daily := [:])
+  internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence,Str:[Str:Obj?] daily := [:],Str:[Str:Obj?][] working := [:])
   {
-    consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence;consumedDaily=daily
+    consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence;consumedDaily=daily;consumedWorking=working
     return finish(lines)
   }
   internal Void clearFrames()
-  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
+  {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;areas.clear}
 
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
   {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
@@ -785,16 +788,18 @@ internal class EnerCubixReport
 
   private Void working(EnerCubixLine[] lines)
   {
+    if(consumedMeters != null) ctx.warningScope(2,-1,0)
     available:=kind == "workingHours" ? (request["workHours"] ?: ctx.calendar?.get("workHours")) != null : ctx.calendar?.get("workDays") != null
     if (!available) ctx.warn("Work calendar is required")
     lines.each |l|
     {
       work:=l.ticks.findAll |t| { ctx.working(t.ts,kind == "workingHours",request["workHours"]) }
       off:=l.ticks.findAll |t| { !ctx.working(t.ts,kind == "workingHours",request["workHours"]) }
-      a:=!available ? EnerCubixValue(null,"missingCalendar") : l.total(work)
-      b:=!available ? EnerCubixValue(null,"missingCalendar") : l.total(off)
-      if (available && work.isEmpty) a=EnerCubixValue(0f,"ok")
-      if (available && off.isEmpty) b=EnerCubixValue(0f,"ok")
+      frozen:=consumedWorking[l.id]
+      a:=!available ? EnerCubixValue(null,"missingCalendar") : (frozen == null ? l.total(work) : (EnerCubixValue)frozen[0]["value"])
+      b:=!available ? EnerCubixValue(null,"missingCalendar") : (frozen == null ? l.total(off) : (EnerCubixValue)frozen[1]["value"])
+      if (available && frozen == null && work.isEmpty) a=EnerCubixValue(0f,"ok")
+      if (available && frozen == null && off.isEmpty) b=EnerCubixValue(0f,"ok")
       row:=baseRow(l,"working",l.total); row["working"]=a.value; row["nonworking"]=b.value
       row["workingPercentage"]=EnerCubixValue.divide(a,EnerCubixValue.sum([a,b])).scale(100f).value
       row["workingQuality"]=a.quality; row["nonworkingQuality"]=b.quality
@@ -803,8 +808,8 @@ internal class EnerCubixReport
       points[0]["label"]="working"; points[1]["label"]="nonworking"
       if (displaysKnown(l))
       {
-        knownWork:=!available ? EnerCubixValue(null,"missingCalendar") : (work.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(work))
-        knownOff:=!available ? EnerCubixValue(null,"missingCalendar") : (off.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(off))
+        knownWork:=!available ? EnerCubixValue(null,"missingCalendar") : (frozen == null ? (work.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(work)) : (EnerCubixValue)frozen[0]["known"])
+        knownOff:=!available ? EnerCubixValue(null,"missingCalendar") : (frozen == null ? (off.isEmpty ? EnerCubixValue(0f,"ok") : l.knownTotal(off)) : (EnerCubixValue)frozen[1]["known"])
         row.setAll(EnerCubixKnownUsage.fields(l.knownTotal))
         row["knownWorking"]=knownWork.value; row["knownNonworking"]=knownOff.value
         row["knownWorkingQuality"]=knownWork.quality; row["knownNonworkingQuality"]=knownOff.quality

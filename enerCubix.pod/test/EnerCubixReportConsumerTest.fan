@@ -78,6 +78,18 @@ class EnerCubixReportConsumerTest : Test
     exercise(query.set("kind","utility").set("perArea",true),rs)
   }
 
+  Void testWorkingBucketsKeepCalendarExceptionsOverridesAndMissingState()
+  {
+    ["workingHours","workingDays"].each |kind|
+    {
+      exercise(query.set("kind",kind),records)
+      rs:=records
+      rs.add(["id":"cal","kind":"calendar","workDays":[6],"workHours":[23,1],"exceptions":[["date":"2026-02-01","working":true]]])
+      exercise(query.set("kind",kind).set("perArea",true),rs)
+      exercise(query.set("kind",kind).set("workHours",Int[,]),rs)
+    }
+  }
+
   Void testOwnDailyObjectsDoNotCopyUnrelatedCatalogIntoEachOutput()
   {exerciseOutputGraph("own")}
   Void testEveryOverlappingScopeDetailPairRemainsAdmitted()
@@ -88,6 +100,8 @@ class EnerCubixReportConsumerTest : Test
   {exerciseOutputGraph("utility");exerciseOutputGraph("alias")}
   Void testDiagnosticLimitAndNearFullFailureDoNotLoseOwnership()
   {exerciseOutputGraph("own",100);exerciseOutputGraph("organization",24,true)}
+  Void testWorkingOutputOwnsTwoBinsWithoutUnusedPeriodSeries()
+  {exerciseOutputGraph("working")}
 
   private Void exerciseOutputGraph(Str mode,Int hours := 24,Bool failFinish := false)
   {
@@ -95,6 +109,7 @@ class EnerCubixReportConsumerTest : Test
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];ids:=Str[,]
     for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","categoryId":"c","pointId":"p$i"])}
     dimension:="metering";kind:="daily";area:=false
+    if(mode=="working") {kind="workingDays";rs.add(["id":"cal","kind":"calendar","workDays":[1,2,3,4,5]])}
     if(mode=="space")
     {
       dimension="space";ids.clear
@@ -160,7 +175,7 @@ class EnerCubixReportConsumerTest : Test
       // catalog graphs. Include capture and frozen rows, not just the JSON root.
       seen:=Obj[,];borrowed:=(Obj[])EnerCubixReportConsumer#.field("borrowed").get(consumer)
       roots:=Obj?[actual,borrowed]
-      ["consumedPeriods","consumedMeters","consumedCoverage","consumedEvidence","consumedDaily"].each |field| {roots.add(EnerCubixReport#.field(field).get(report))}
+      ["consumedPeriods","consumedMeters","consumedCoverage","consumedEvidence","consumedDaily","consumedWorking"].each |field| {roots.add(EnerCubixReport#.field(field).get(report))}
       ["evidence","frozenMeters"].each |field| {roots.add(EnerCubixReportConsumer#.field(field).get(consumer))}
       cursors.each |cursor| {roots.add(cursor.line.consumedTotals);roots.add(cursor.line.normalizationArea)}
       ((EnerCubixPeriodConsumer[])EnerCubixReportConsumer#.field("periods").get(consumer)).each |period| {roots.add(EnerCubixPeriodConsumer#.field("totals").get(period))}
