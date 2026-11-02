@@ -62,7 +62,7 @@ class EnerCubixCockpit
     Str:Obj? flow:=[:]
     if (enabled.contains("balance"))
     {
-      try {flow=EnerCubixCockpitFlow.prepare(request,frozen,project)}
+      try {flow=EnerCubixCockpitFlow.prepare(request,frozen,project,preparedReport!=null)}
       catch (EnerCubixHttpErr e) {throw e}
       catch (Err e) {flow=["error":true]}
     }
@@ -92,9 +92,12 @@ class EnerCubixCockpit
     pointIds.unique.each |id| {ref(id,project)}
     historyRequest["_cockpitPointIds"]=pointIds.unique.sort
     historyRequest["_cockpitConfigIds"]=EnerCubixMath.maps(flow["configuration"]).dup.addAll(EnerCubixMath.maps(efficiency["configuration"])).map |r->Str| {r["id"].toStr}.unique.sort
+    // Only an explicit private prepared route gets this acyclic metadata bundle.
+    // The report request never points back to its enclosing history request.
+    if(preparedReport!=null) historyRequest["_cockpitConsumers"]=["request":request,"boundary":boundary,"enabled":enabled,"comparison":comparison,"auxiliary":auxiliary,"owned":ownedConfig,"flow":flow,"efficiency":efficiency]
     observedFrom:=readClock()
     deadline?.check
-    histories:=plan.isEmpty ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
+    histories:=plan.isEmpty && preparedReport==null ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
     if(input["payloadEncoding"] == "compact-v1") histories=histories.map |h->[Str:Obj?]|
     {
       meta:=h["cleaning"] as Map
