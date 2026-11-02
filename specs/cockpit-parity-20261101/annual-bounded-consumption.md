@@ -58,6 +58,8 @@
 
 ## 最小可执行分解（不是简单更换容器）
 
+Context 私有所有权缝已补齐：长期元数据与单帧动态缓存分属两个 owner，严格／已有量 Context 共享借用历史；bound 的临时元数据、告警和费用快照只存活于当前帧。清空根引用后仅释放自身额度，外部 owner 保持；失效、跨 budget、无租约、同一长期／短期 owner 均明确拒绝。两项准入失败用例先复现失败，再修正注册清理回调的顺序。5类37方法2666校验通过，捕获main8个provenance/48业务组相等（仅归一化periodsCaptureId），峰值109425/unprepared0。证据context-owner-parity.json与context-owner-final-tests.log。普通路径仍未切换，最终输出／覆盖与全消费者调度尚未实现；不是全站年度验收。
+
 ### S1 明确全部消费计划与可合并状态
 
 在Cockpit现有计划旁列出consumer：原请求/同期、维度对象集、category/metric、period、queryEnd、费率/日历/COP与区间边界。抽取现有report定义，避免另写一份不同的选择/去重逻辑。所有读对在原计划内；读取后禁止追加FIN范围。

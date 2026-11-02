@@ -26,6 +26,7 @@ internal class EnerCubixHistoryData
   {
     frame:=data["_preparedFrame"] as EnerCubixPreparedFrame
     frame?.check
+    sourceFrame=frame
     prepared = data["_preparedReads"] as Map
     preparedBudget = data["_preparedBudget"] as EnerCubixPreparedBudget
     id = data["pointId"]?.toStr ?: ""
@@ -89,10 +90,14 @@ internal class EnerCubixHistoryData
   private Str:Obj? emptyKnown := [:]
   private EnerCubixKnownUsage? knownReader
   private Bool frameExpired := false
+  private EnerCubixPreparedFrame? sourceFrame
+
+  internal Bool ownedFrame(EnerCubixPreparedBudget budget)
+  {sourceFrame != null && !frameExpired && preparedBudget === budget}
 
   internal Void expireFrame()
   {
-    frameExpired=true;prepared=null;sparse=null;sparseDomains.clear
+    frameExpired=true;sourceFrame=null;prepared=null;sparse=null;sparseDomains.clear
     sparseContext=null;empty=null;emptyValue=null;emptyKnown.clear;knownReader=null
     cleaning=null;samples.clear;rawSamples.clear;intervals=null
   }

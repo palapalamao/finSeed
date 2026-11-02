@@ -6,14 +6,16 @@ internal class EnerCubixContext
     tz=strict.tz; dimension=strict.dimension; comparison=strict.comparison; byId=strict.byId; byPoint=strict.byPoint
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
     preparedBudget=strict.preparedBudget;deadline=strict.deadline
-    preparedBudget?.hold(4);if(preparedBudget != null) tariffBaseline.ordered=true
+    inheritOwners(strict,false)
+    retain(4,true);if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new bound(EnerCubixContext source, Str id, Str:Obj? record)
   {
     tz=source.tz; dimension=source.dimension; comparison=source.comparison; byId=source.byId.dup.set(id,record)
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
     preparedBudget=source.preparedBudget;deadline=source.deadline
-    preparedBudget?.hold(4);if(preparedBudget != null) tariffBaseline.ordered=true
+    inheritOwners(source,true)
+    retain(4+(persistentOwner == null ? 0 : byId.size));if(preparedBudget != null) tariffBaseline.ordered=true
   }
   new make([Str:Obj?][] records, [Str:Obj?][] histories, TimeZone tz, EnerCubixDimension? dimension := null)
   {
@@ -62,11 +64,71 @@ internal class EnerCubixContext
   private Int nodeCalls := 0
   private Bool omittedEmptyEvidence := false
   private Bool omittedUnpreparedEvidence := false
+  private EnerCubixPreparedOwner? persistentOwner
+  private EnerCubixPreparedOwner? frameOwner
+  private Bool framed := false
+  private Bool transientContext := false
+
+  internal Void useOwner(EnerCubixPreparedOwner owner)
+  {
+    if(framed || preparedBudget != null || !byPoint.isEmpty) throw ArgErr("preparedContextAlreadyInitialized")
+    framed=true
+    index:=1+byId.size+children.size
+    children.each |rows| {index+=rows.size}
+    owner.watch |->Void| {dropPersistent};owner.hold(index)
+    persistentOwner=owner;preparedBudget=owner.budget;deadline=owner.budget.deadline;tariffBaseline.ordered=true
+  }
+  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
+  {
+    if(persistentOwner == null || frameOwner != null || owner === persistentOwner || owner.budget !== preparedBudget) throw ArgErr("preparedContextOwner")
+    histories.each |h,id| {if(h.id != id || !h.ownedFrame(owner.budget)) throw ArgErr("preparedContextSourceFrame")}
+    if(strictContext != null)
+    {
+      if(strictContext.frameOwner !== owner || histories.size != strictContext.byPoint.size || histories.any |h,id| {h !== strictContext.byPoint[id]}) throw ArgErr("preparedContextStrictFrame")
+    }
+    owner.watch |->Void| {dropFrame}
+    if(strictContext == null) {owner.hold(1+histories.size);byPoint=histories.dup}
+    else byPoint=strictContext.byPoint
+    frameOwner=owner
+  }
+  private Void inheritOwners(EnerCubixContext source,Bool temporary)
+  {
+    if(source.framed && source.persistentOwner == null) throw ArgErr("preparedContextClosed")
+    if(source.persistentOwner == null) return
+    transient:=source.transientContext || (temporary && source.frameOwner != null)
+    source.frameOwner?.watch |->Void| {dropFrame}
+    if(!transient) source.persistentOwner.watch |->Void| {dropPersistent}
+    persistentOwner=source.persistentOwner;frameOwner=source.frameOwner;framed=true;transientContext=transient
+  }
+  private Void retain(Int n,Bool persistent := false)
+  {
+    owner:=transientContext ? frameOwner : (persistent ? persistentOwner : (frameOwner ?: persistentOwner))
+    if(owner != null) owner.hold(n)
+    else preparedBudget?.hold(n)
+  }
+  private Void frameCheck() {if(framed && frameOwner == null) throw ArgErr("preparedContextInactive")}
+  private Void dropFrame()
+  {
+    cache.clear;knownReads.clear;byPoint=Str:EnerCubixHistoryData[:]
+    knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null
+    if(transientContext)
+    {
+      tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
+      byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
+    }
+  }
+  private Void dropPersistent()
+  {
+    if(frameOwner != null) throw ArgErr("preparedFrameActive")
+    dropFrame;tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;warnings.clear
+    byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
+  }
 
   ** Empty prepared lookups do not become a second dense cache. They have zero
   ** coverage and no source intervals; authoritative per-object coverage remains.
   Str:Obj? knownEvidence(Bool includeDetails := true)
   {
+    frameCheck
     reads:=EnerCubixKnownUsage.evidence(knownReads.vals)
     out:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":reads]
     if(includeDetails || omittedEmptyEvidence || omittedUnpreparedEvidence) out["detailsTruncated"]=omittedEmptyEvidence || omittedUnpreparedEvidence || reads.any |r| {r["detailsTruncated"] == true}
@@ -75,15 +137,19 @@ internal class EnerCubixContext
   }
   Void mergeKnown(EnerCubixContext other)
   {
+    frameCheck;other.frameCheck
     omittedEmptyEvidence=omittedEmptyEvidence || other.omittedEmptyEvidence
     omittedUnpreparedEvidence=omittedUnpreparedEvidence || other.omittedUnpreparedEvidence
-    other.knownReads.each |v,k| {if(!knownReads.containsKey(k)) preparedBudget?.hold(1);knownReads[k]=v}
+    other.knownReads.each |v,k| {if(!knownReads.containsKey(k)) retain(1);knownReads[k]=v}
   }
 
   private EnerCubixValue sumValues(EnerCubixValue[] values)
   { strictContext == null ? EnerCubixValue.sum(values) : EnerCubixKnownUsage.combine(values) }
 
-  Void warn(Str message) { if (!warnings.contains(message)) warnings.add(message) }
+  Void warn(Str message)
+  {
+    if(!warnings.contains(message)) {if(persistentOwner != null) retain(1,true);warnings.add(message)}
+  }
 
   Str displayName(Str id)
   {
@@ -179,6 +245,7 @@ internal class EnerCubixContext
   ** Exclude only this group's master; each child group's master remains authoritative.
   EnerCubixValue branch(Str id, Str category, DateTime start, DateTime end, Str metric)
   {
+    frameCheck
     values:=EnerCubixValue[,]
     (children[id] ?: [Str:Obj?][,]).each |r|
     {
@@ -191,6 +258,7 @@ internal class EnerCubixContext
 
   EnerCubixValue node(Str id, Str category, DateTime from, DateTime to, Str metric := "energy", Str[] path := Str[,], Str? utility := null, Bool useMaster := true)
   {
+    frameCheck
     if(++nodeCalls % 128 == 0) deadline?.check
     if (path.contains(id)) return EnerCubixValue(null,"cycle")
     key := preparedBudget == null ? "$id|$category|${from.ticks}|${to.ticks}|$metric|$utility|$useMaster" : ""
@@ -216,7 +284,7 @@ internal class EnerCubixContext
         members:=dimension.members(id).findAll |m| { (m["categoryId"]?.toStr ?: "") == category }
         authoritative:=(utility == null ? dimension.frontier(members) : dimension.usageFrontier(members)).findAll |m| { utility == null || (m["utilityId"]?.toStr ?: "") == utility }
         plan=["members":authoritative,"quality":dimension.quality(members)]
-        preparedBudget?.hold(1+authoritative.size)
+        retain(1+authoritative.size,true)
         dimensionPlans[planKey]=plan
       }
       authoritative:=([Str:Obj?][])plan["members"]
@@ -281,7 +349,7 @@ internal class EnerCubixContext
     if (result.value == null) { label:=r["name"] ?: id; warn("$label : ${result.quality}") }
     if (path.isEmpty && preparedBudget == null) cache[key]=result
     if(stable != null && result.value == null)
-    {if(!cache.containsKey(stable)) preparedBudget.hold(2);cache[stable]=result}
+    {if(!cache.containsKey(stable)) retain(2);cache[stable]=result}
     return result
   }
 
@@ -307,6 +375,7 @@ internal class EnerCubixContext
 
   DateTime? constantEnd(Str id,Str category,DateTime from,DateTime to,Str metric)
   {
+    frameCheck
     r:=byId[id]
     if(r == null || preparedBudget == null || !["meter","totalMeter"].contains(r["kind"])) return null
     mode:=metric == "cost" ? tariff(r)?.get("mode") : null
@@ -317,12 +386,14 @@ internal class EnerCubixContext
 
   EnerCubixValue nodeTotal(Str id, DateTime from, DateTime to, Str[] path := Str[,])
   {
+    frameCheck
     cats := categories(id)
     return EnerCubixValue.sum(cats.map |cat->EnerCubixValue| { node(id,cat,from,to,"energy",path) })
   }
 
   private EnerCubixValue rawNode(Str:Obj? r, DateTime from, DateTime to, Str[] path)
   {
+    frameCheck
     if (r["kind"] == "nativePoint") return EnerCubixValue(null,"notEnergyPoint")
     if (dimension?.nativeSpace == true && r["nativeSourceMissing"] == true) return EnerCubixValue(null,"nativeSourceMissing")
     EnerCubixValue raw := EnerCubixValue()
@@ -356,7 +427,7 @@ internal class EnerCubixContext
           evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":from.toIso,"to":to.toIso])
           recordId:=r["id"].toStr
           key:="$recordId|$point|${from.ticks}|${to.ticks}"
-          if(!knownReads.containsKey(key)) preparedBudget?.hold(2)
+          if(!knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }
       }
@@ -382,6 +453,7 @@ internal class EnerCubixContext
     if (!usedTariffs.containsKey(r["id"].toStr))
     {
       snapshot:=t.findAll |value,key| {["id","mod","name","mode","rate","band","rules","exceptions","blocks","categoryId","currency"].contains(key)}
+      if(persistentOwner != null) retain(2,true)
       usedTariffs[r["id"].toStr]=snapshot.dup.set("nodeId",r["id"])
     }
     mode := t["mode"]?.toStr ?: "flat"
@@ -442,7 +514,7 @@ internal class EnerCubixContext
     if(preparedBudget != null && !tariffBaseline.containsKey(key))
     {
       if(tariffBaseline.size >= 256) tariffBaseline.remove(tariffBaseline.keys.first)
-      else preparedBudget.hold(2)
+      else retain(2,true)
     }
     tariffBaseline[key]=value
   }
@@ -566,7 +638,7 @@ internal class EnerCubixContext
     if(preparedBudget != null && defaultTariffs.containsKey(category)) return defaultTariffs[category] as Map
     defaults:=byId.vals.findAll |r| { r["kind"] == "tariff" && r["categoryId"] == record["categoryId"] && r["isDefault"] == true }
     result:=defaults.size == 1 ? defaults.first : null
-    if(preparedBudget != null) {preparedBudget.hold(2);defaultTariffs[category]=result}
+    if(preparedBudget != null) {retain(2,true);defaultTariffs[category]=result}
     return result
   }
 
