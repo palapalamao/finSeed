@@ -1,3 +1,4 @@
+import type {BudgetConfig,RuleConfig,CockpitConfigList,CockpitConfigAudit} from './cockpitConfig';
 import {serverMessage,t} from './i18n';
 import {finCsrfFetch} from 'haystack-nclient';
 import type {Catalog,ComparisonScope,FinPoint,ReportRequest,ReportResult,EnerCubixRecord} from './types';
@@ -24,6 +25,12 @@ export class EnerCubixApi {
   let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及能源魔方扩展是否已启用。"),login?"FIN 会话已失效，请在 FIN 中重新登录。":"FIN 未返回 JSON，请检查项目名称及能源魔方扩展是否已启用。");}
   try{return unwrap<T>(value,response.status);}catch(error){if(response.status===401||error instanceof ApiError&&(['session_expired','unauthorized','http_401'].includes(error.code)))this.onSessionExpired?.();throw error;}
  }
+ budgets=()=>this.request<CockpitConfigList<BudgetConfig>>('cockpit/budgets');
+ ruleProfiles=()=>this.request<CockpitConfigList<RuleConfig>>('cockpit/rule-profiles');
+ saveBudget=(body:Record<string,unknown>)=>this.request<BudgetConfig>('cockpit/budgets/save',body);
+ saveRuleProfile=(body:Record<string,unknown>)=>this.request<RuleConfig>('cockpit/rule-profiles/save',body);
+ deleteCockpitConfig=(type:'budget'|'rule',record:{id?:string;mod?:string})=>this.request<{deleted:string}>('cockpit/'+(type==='budget'?'budgets':'rule-profiles')+'/delete',{id:record.id,mod:record.mod});
+ cockpitConfigAudit=(targetId:string)=>this.request<CockpitConfigAudit>('cockpit/config-audit?targetId='+encodeURIComponent(targetId));
  catalog=()=>this.request<Catalog>('catalog');
  assets=(signal?:AbortSignal)=>this.request<CockpitAssetCatalog>('cockpit/assets',undefined,signal);
  uploadAsset=(body:{id?:string;mod?:string;manifestMod:string|null;scopeId:string;name:string;base64:string;clearHotspots?:boolean})=>this.request<CockpitAssetCatalog>('cockpit/assets/upload',body);

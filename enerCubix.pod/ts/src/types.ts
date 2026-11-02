@@ -3,7 +3,7 @@ import type {MeterOrigin} from './meterOrigin';
 export type Kind = 'space'|'nativePoint'|'organization'|'group'|'meter'|'totalMeter'|'sensor'|'category'|'subcategory'|'utility'|'tariff'|'calendar'|'expression'|'cop'|'template'|'settings'|'binding'|'job'|'alarm'|'cleaningProfile';
 export type Dimension = 'space'|'metering'|'organization'|'legacy';
 export interface EnerCubixRecord {id?: string;mod?:string;kind:Kind;name:string;[key:string]:unknown}
-export interface Catalog {version:string;project:string;user:{name:string;canWrite:boolean};records:EnerCubixRecord[];storageModel?:'nativeEquip'|'legacy';spaceSource?:'fin';nativeTreePath?:string;nativeTreeWarnings?:string[]}
+export interface Catalog {version:string;project:string;projectRef?:string;cockpitConfigRefs?:{id:string;mod?:string}[];user:{name:string;canWrite:boolean};records:EnerCubixRecord[];storageModel?:'nativeEquip'|'legacy';spaceSource?:'fin';nativeTreePath?:string;nativeTreeWarnings?:string[]}
 export interface FinPoint {id:string;name:string;unit?:string;kind?:string;his:boolean;hisMode?:string;source?:string;siteId?:string;floorId?:string;equipId?:string;siteName?:string;navName?:string;energyTags?:string[];hisStart?:string;hisEnd?:string;hisStatus?:string;hisErr?:string;hisLastCollect?:string;curStatus?:string;equipName?:string;equipNavName?:string;floorName?:string}
 export type ReportKind = 'profile'|'ranking'|'proportion'|'utility'|'daily'|'comparison'|'primary'|'cop'|'leak'|'workingHours'|'workingDays'|'regression'|'forecast'|'trend'|'dashboard'|'energyFlow';
 export type Preset='today'|'yesterday'|'thisWeek'|'lastWeek'|'thisMonth'|'lastMonth'|'thisYear'|'lastYear';

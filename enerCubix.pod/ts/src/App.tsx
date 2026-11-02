@@ -21,7 +21,7 @@ import {buildReportDisplay} from './reportDisplay';
 const startupLocale=locale;
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
 type View=ReportKind|ManageView|'messages'|'cockpit';
-const management:ManageView[]=['tree','categories','tariffs','calendars','expressions','copConfig','bindings','templates','tasks','settings','otherSettings','spaceAssets'];
+const management:ManageView[]=['tree','categories','tariffs','calendars','expressions','copConfig','bindings','templates','tasks','settings','otherSettings','spaceAssets','budgets','ruleProfiles'];
 const settingsViews:ManageView[]=management.filter(key=>key!=='templates');
 const reportViews:ReportKind[]=['dashboard','regression',...analysisGroups.flatMap(group=>group.kinds)];
 function readTemplate(){return new URLSearchParams(location.hash.split('?')[1]||'').get('template')||undefined;}

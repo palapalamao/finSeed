@@ -1,3 +1,4 @@
+import {serverMessage} from './i18n';
 import type {Catalog} from './types';
 import type {CockpitMetric,CockpitSnapshot,CockpitConclusion,CockpitScope} from './cockpitTypes';
 import {dimensionBranch} from './dimensionTree';
@@ -26,7 +27,7 @@ export function cockpitReasonText(code:string):string{
   missingArea:t('未配置有效统计面积'),ambiguousArea:t('面积边界不明确，请引用服务空间'),missingTariff:t('未配置适用费率'),missingCoefficient:t('未配置折算系数'),missing:t('历史读数不足'),filtered:t('有效用量小计'),substituted:t('清洗后用量，含替代值'),
   CURRENT_UNAVAILABLE:t('本期没有可用数值'),REFERENCE_UNAVAILABLE:t('参照期没有可用数值'),INCOMPLETE_COVERAGE:t('两期覆盖不完整，不计算变化率'),INCOMPATIBLE_UNIT:t('两期单位或能源不兼容'),REPLACEMENT_HISTORY:t('包含替代值，不计算变化率'),ZERO_REFERENCE:t('参照期为零，百分比不可计算'),INCOMPATIBLE_CURRENCY:t('范围内币种不一致'),ACTIVE_EVENTS_UNAVAILABLE:t('当前事件状态不可用'),ACTIVE_EVENTS_READ_ERROR:t('当前事件状态读取失败'),LEAP_DAY_CLAMPED:t('闰日参照调整至二月末日'),TIMEZONE_OFFSET_CHANGED:t('两期时区偏移不同'),DURATION_DIFFERENCE:t('日历对齐后的两期时长不同'),LOCAL_TIME_ADJUSTED:t('不存在的当地时刻已按项目时区调整'),LOCAL_TIME_AMBIGUOUS:t('重复的当地时刻已按项目时区解析'),MODULE_UNAVAILABLE:t('本次快照未提供此指标'),partial:t('当前仅有部分有效用量'),historySampleLimit:t('历史样本超过当前查询上限，请缩小范围'),topologyIncomplete:t('计量关系尚未完整确认')
  };
- return labels[code]||qualityLabel(code);
+ return labels[code]||(serverMessage(code)!==code?serverMessage(code):qualityLabel(code));
 }
 export function cockpitComparisonText(metric:CockpitMetric):string{
  const comparison=metric.comparison;if(!comparison)return t('未启用同期比较');
