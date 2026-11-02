@@ -158,6 +158,98 @@ class EnerCubixCockpitM4Test : Test
       if(folder != null) File.os(folder+(total == 224600f ? "/p27-24day-224600.json" : "/p29-24day-260000.json")).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
     }
   }
+  Void testUsdLabelsAgreeAcrossCurrentReferenceCanonicalAndLegacyStaysUnchanged()
+  {
+    rs:=records;rs.find |r| {r["kind"] == "tariff"}["currency"]="USD"
+    owned:=config;EnerCubixMath.maps(owned["budgets"]).first["currency"]="USD"
+    q:=input;q["comparison"]=["mode":"custom","from":"2026-09-30T00:00:00Z","to":"2026-09-30T01:00:00Z"]
+    hs:=history
+    // The raw source list is supplied explicitly; no second native load.
+    hs.first["samples"]=[["ts":"2026-09-30T00:00:00Z","value":5f],["ts":"2026-10-01T00:00:00Z","value":10f]]
+    calls:=0
+    result:=EnerCubixCockpit.execute(q,rs,|rq,recs->[Str:Obj?][]| {calls++;return hs},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+    verifyEq(calls,1)
+    budget:=(Map)((Map)((Map)((Map)result["modules"])["kpis"])["data"])["budget"]
+    verifyEq(budget["currency"],"USD");verifyEq(budget["periodActualCost"],10f)
+    reports:=(Map)result["reports"]
+    ["profile-cost","reference-profile-cost","budget-canonical-cost"].each |key|
+    {
+      report:=(Map)reports[key]
+      verifyEq(((Map)report["extra"])["currencyStatus"],"ok");verifyEq(((Map)report["extra"])["currency"],"USD")
+      expected:=key == "reference-profile-cost" ? 5f : 10f
+      monetaryRows(report).each |row|
+      {
+        verifyEq(row["unit"],"USD")
+        if(row.containsKey("value")) verifyEq(row["value"],expected)
+        if(row.containsKey("knownValue")) verifyEq(row["knownValue"],expected)
+        if(row.containsKey("quality")) verifyEq(row["quality"],"ok")
+      }
+      verifyEq(EnerCubixMath.maps(((Map)report["extra"])["usageCoverage"]).first["coveredSeconds"],3600f)
+      verifyEq(EnerCubixMath.maps(((Map)((Map)report["extra"])["knownUsage"])["sourceUsage"]).first["unit"],"kWh")
+    }
+    rq:=EnerCubixCockpit.query(input,"test",TimeZone.utc,end).set("metric","cost")
+    legacy:=EnerCubixHistory.report(rq,rs,history)
+    monetaryRows(legacy).each |row| {verifyEq(row["unit"],"元")}
+    verifyEq(EnerCubixMath.maps(((Map)legacy["summary"])["selectionTotals"]).first["value"],10f)
+    output:=Env.cur.vars["ENERCUBIX_M4_USD_FIXTURE"]
+    if(output != null) File.os(output).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
+  }
+  Void testCockpitCurrencyRejectsInvalidAndMixedAndKeepsLegacyCny()
+  {
+    ["",4,"USD","CNY"].each |currency|
+    {
+      rs:=records;rs.find |r| {r["kind"] == "tariff"}["currency"]=currency
+      owned:=config;EnerCubixMath.maps(owned["budgets"]).first["currency"]=currency == "USD" ? "USD" : "CNY"
+      result:=EnerCubixCockpit.execute(input,rs,|rq,recs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+      kpis:=(Map)((Map)((Map)result["modules"])["kpis"])["data"]
+      cost:=EnerCubixMath.maps(kpis["values"]).find |v| {v["id"] == "cost"}
+      report:=(Map)((Map)result["reports"])["profile-cost"]
+      if(currency == "USD" || currency == "CNY")
+      {verifyEq(cost["unit"],currency);verifyEq(cost["value"],10f);verifyEq(((Map)report["extra"])["currencyStatus"],"ok")}
+      else
+      {verifyNull(cost["value"]);verifyEq(cost["unit"],"");verifyEq(((Map)report["extra"])["currencyStatus"],"unavailable");verifyEq(((Map)kpis["budget"])["status"],"unavailable")}
+    }
+    result:=EnerCubixCockpit.execute(input,records,|rq,recs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,config)
+    report:=(Map)((Map)result["reports"])["profile-cost"]
+    verifyEq(((Map)report["extra"])["currency"],"CNY");verifyEq(((Map)report["extra"])["currencyBasis"],"legacyCnyConvention")
+  }
+  Void testMixedAndAbsentTariffNeverExportQualifiedMoneyAndKeepRawEnergy()
+  {
+    rs:=records;rs.find |r| {r["kind"] == "tariff"}["currency"]="USD"
+    rs.addAll([["id":"cny","kind":"tariff","mode":"flat","rate":1f,"currency":"CNY"],["id":"b","kind":"meter","nativeEquip":true,"pointId":"pb","spaceId":"s","categoryId":"c","tariffId":"cny"]])
+    hs:=history.dup.add(["pointId":"pb","mode":"interval","unit":"kWh","samples":[["ts":"2026-10-01T00:00:00Z","value":20f]]])
+    owned:=config;EnerCubixMath.maps(owned["budgets"]).first["currency"]="USD"
+    result:=EnerCubixCockpit.execute(input,rs,|rq,recs->[Str:Obj?][]| {hs},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+    kpis:=(Map)((Map)((Map)result["modules"])["kpis"])["data"]
+    verifyEq(EnerCubixMath.maps(kpis["values"]).find |v| {v["id"] == "energy"}["value"],30f)
+    verifyNull(EnerCubixMath.maps(kpis["values"]).find |v| {v["id"] == "cost"}["value"])
+    ["profile-cost","budget-canonical-cost"].each |key|
+    {
+      report:=(Map)((Map)result["reports"])[key]
+      verifyEq(((Map)report["extra"])["currencyStatus"],"unavailable")
+      monetaryRows(report).each |r| {verifyEq(r["unit"],"");if(r.containsKey("value")) verifyNull(r["value"]);if(r.containsKey("knownValue")) verifyNull(r["knownValue"])}
+      EnerCubixMath.maps(report["series"]).each |s| {EnerCubixMath.maps(s["points"]).each |p| {verifyNull(p["value"]);verifyEq(p["quality"],"currencyUnconfirmed")}}
+      verify(EnerCubixMath.maps(((Map)((Map)report["extra"])["knownUsage"])["sourceUsage"]).all |r| {r["unit"] == "kWh"})
+    }
+    rs.find |r| {r["id"] == "tariff"}.remove("currency")
+    EnerCubixMath.maps(owned["budgets"]).first["currency"]="CNY"
+    result=EnerCubixCockpit.execute(input,rs,|rq,recs->[Str:Obj?][]| {hs},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+    report:=(Map)((Map)result["reports"])["profile-cost"]
+    verifyEq(((Map)report["extra"])["currencyBasis"],"mixedExplicitAndLegacyCny")
+    verifyEq(EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).first["value"],30f)
+    rs=records.exclude |r| {r["kind"] == "tariff"}
+    result=EnerCubixCockpit.execute(input,rs,|rq,recs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,config)
+    report=(Map)((Map)result["reports"])["profile-cost"]
+    verifyEq(((Map)report["extra"])["currencyReasonCodes"],["COST_TARIFF_MISSING"])
+  }
+  private [Str:Obj?][] monetaryRows(Map report)
+  {
+    rows:=EnerCubixMath.maps(report["series"]).dup.addAll(EnerCubixMath.maps(report["rows"]))
+    summary:=(Map)report["summary"];extra:=(Map)report["extra"]
+    ["totals","knownTotals","selectionTotals"].each |key| {rows.addAll(EnerCubixMath.maps(summary[key]))}
+    ["selectionTotals","usageCoverage","details"].each |key| {rows.addAll(EnerCubixMath.maps(extra[key]))}
+    return rows
+  }
   private DateTime end() {DateTime.fromIso("2026-10-01T01:00:00Z")}
   private Str:Obj? input() {["schemaVersion":1,"requestId":"m4-controlled","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"hour","from":"2026-10-01T00:00:00Z","to":end.toIso],"asOf":end.toIso,"modules":["kpis","trend","issues"],"comparison":["mode":"none"]]}
   private Str:Obj? config() {["projectRef":"p:test","modelComplete":true,"budgetsComplete":true,"rulesComplete":true,"budgets":[["id":"budget","mod":"b1","version":1,"name":"Controlled monthly budget","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","month":"2026-10","currency":"CNY","amount":310000f,"distribution":"uniform","enabled":true]],"rules":[["id":"rule","mod":"r1","version":1,"name":"Controlled non-working clue","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","calendarRef":"cal","ruleType":"nonWorkingHighUsage","threshold":5f,"thresholdUnit":"kWh","enabled":true]]]}

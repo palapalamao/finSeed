@@ -179,6 +179,9 @@ internal class EnerCubixCockpitMetrics
         value["unit"]=currencies.size == 1 ? currencies.first : ""
         value["details"]=["estimate":true,"tariffs":tariffs]
         if (currencies.size > 1) invalidate(value,"INCOMPATIBLE_CURRENCY")
+        currency:=EnerCubixCockpitCurrency.observe(report)
+        value=EnerCubixCockpitCurrency.metric(value,currency)
+        report=EnerCubixCockpitCurrency.report(report,currency)
       }
       else
       {

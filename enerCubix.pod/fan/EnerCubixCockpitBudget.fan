@@ -54,6 +54,9 @@ internal class EnerCubixCockpitBudget
     currencies:=tariffs.map |t->Str| {t["currency"] as Str ?: "CNY"}.unique
     cost["unit"]=currencies.size == 1 ? currencies.first : ""
     cost["details"]=["estimate":true,"tariffs":tariffs]
+    currency:=EnerCubixCockpitCurrency.observe(report)
+    cost=EnerCubixCockpitCurrency.metric(cost,currency)
+    report=EnerCubixCockpitCurrency.report(report,currency)
     reports["budget-canonical-cost"]=report
     return ["boundary":own,"cost":cost,"request":request.findAll |v,k| {!k.startsWith("_")}]
   }
