@@ -11,9 +11,9 @@ internal class EnerCubixCockpitCapture
     {
       if(bindings.any |b| {b.entries!=0}) throw ArgErr("diagnosticsStillBorrowed")
       groups.each |g| {while(!g.cells.isEmpty) remove(g);clear(g.spec);g.rows.clear}
-      heads.each |m| {m.clear};heads.clear;metadataEntries.clear;envelopes.clear;byKind.clear;snapshot.clear;groups.clear;protectedRoots.clear;bindings.clear;closed=true
+      heads.each |m| {m.clear};heads.clear;metadataEntries.clear;envelopes.clear;periodEnvelopes.clear;byKind.clear;snapshot.clear;groups.clear;protectedRoots.clear;bindings.clear;closed=true
     }
-    owner.hold(24)
+    owner.hold(26)
     scratch:=EnerCubixPreparedOwner(owner.budget)
     try
     {
@@ -36,6 +36,7 @@ internal class EnerCubixCockpitCapture
   private Map[] heads := [,]
   private [Str:Obj?][] metadataEntries := [,]
   private EnerCubixCockpitCaptureEnvelope[] envelopes := [,]
+  private EnerCubixCockpitCapturePeriodEnvelope[] periodEnvelopes := [,]
   private Str:Int byKind := [:]
   private Str:Obj? snapshot := [:]
   private Int kept := 0
@@ -43,6 +44,7 @@ internal class EnerCubixCockpitCapture
   private Bool frozen := false
   private Err? failure
   Int retainedRows() {check;return kept}
+  internal Bool finalized() {check;return frozen}
   internal EnerCubixPreparedBudget budget() {owner.budget}
   Void bind(EnerCubixPreparedOwner borrower)
   {
@@ -76,6 +78,16 @@ internal class EnerCubixCockpitCapture
     envelopes.add(EnerCubixCockpitCaptureEnvelope(g,target,output,count,emptyOmitted,unpreparedOmitted))
     target["sourceUsage"]=g.rows;target["_capturePending"]=true
     g.unknown=g.unknown || emptyOmitted || unpreparedOmitted
+  }
+  ** Flow rows are projected only after freeze has finalized these counters;
+  ** later source/reference groups can still reclaim their sample allocation.
+  Void periodEnvelope(Str key,Str:Obj? target,EnerCubixPreparedOwner output,Int count)
+  {
+    check;g:=group(key)
+    if(frozen || target.isImmutable || count!=g.total || g.spec["kind"]!="coveragePeriods") throw ArgErr("diagnosticEnvelope")
+    bind(output);output.hold(12);owner.hold(6)
+    periodEnvelopes.add(EnerCubixCockpitCapturePeriodEnvelope(g,target,output,count))
+    target["periods"]=g.rows;target["_capturePending"]=true
   }
 
   Bool put(Str key,Str:Obj? row)
@@ -158,6 +170,14 @@ internal class EnerCubixCockpitCapture
         e.target["detailsTruncated"]=omitted || e.group.rows.any |r| {r["detailsTruncated"]==true}
         e.target["sourceUsageDiagnosticRef"]="diagnostic-"+e.group.order
         if(omitted) e.target.setAll(["sourceUsageCaptureId":e.group.captureId,"sourceUsageTruncated":true,"sourceUsageRowCount":e.emptyOmitted || e.unpreparedOmitted ? null : e.count,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":e.emptyOmitted,"omittedUnprepared":e.unpreparedOmitted])
+        e.target.remove("_capturePending")
+      }
+      periodEnvelopes.each |e|
+      {
+        if(e.output.entries==0 || e.target.isEmpty) throw ArgErr("diagnosticEnvelopeExpired")
+        limited:=e.group.rows.size<e.count
+        reason:=limited ? (e.group.unknown ? "upstreamAndSnapshotLimit" : "snapshotDiagnosticBudget") : (e.group.unknown ? "upstreamDiagnosticLimit" : null)
+        e.target.setAll(["periodsCaptureId":e.group.captureId,"periodRecordTotalCount":e.group.unknown ? null : e.count,"periodsReturnedCount":e.group.rows.size,"periodsTruncated":limited || e.group.unknown,"periodsTruncationReason":reason,"periodsDiagnosticRef":"diagnostic-"+e.group.order])
         e.target.remove("_capturePending")
       }
       list:=metadataEntries
@@ -271,4 +291,13 @@ internal class EnerCubixCockpitCaptureEnvelope
   Int count
   Bool emptyOmitted
   Bool unpreparedOmitted
+}
+internal class EnerCubixCockpitCapturePeriodEnvelope
+{
+  new make(EnerCubixCockpitCaptureGroup group,Str:Obj? target,EnerCubixPreparedOwner output,Int count)
+  {this.group=group;this.target=target;this.output=output;this.count=count}
+  EnerCubixCockpitCaptureGroup group
+  Str:Obj? target
+  EnerCubixPreparedOwner output
+  Int count
 }

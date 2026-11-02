@@ -27,6 +27,45 @@ internal class EnerCubixEnergyFlow
   private Str graphId:=""
   private Bool calculationGraph:=false
   private Str[] allowed:=Str[,]
+  private |Str,Bool->EnerCubixValue|? preparedValue
+  private [Str:Obj?]? preparedOverview
+  private EnerCubixPreparedOwner? projectionOwner
+  private EnerCubixPreparedOwner? projectionState
+  private Obj[] projectionRoots := [,]
+
+  ** Pure current-relationship energy projection. The provider owns each
+  ** device's independently folded primary value and replays that device's
+  ** strict warnings in visitation order. There is no history fallback.
+  internal static Str:Obj? projectPrepared(EnerCubixContext ctx,Str:Obj? request,DateTime from,DateTime to,|Str,Bool->EnerCubixValue| value,Str:Obj? overview,EnerCubixPreparedOwner? output := null)
+  {
+    if(request["metric"]!="energy" || request["flowMode"]=="endUse" || request["meterHistorySegments"]!=null) throw ArgErr("preparedFlowProjectionPlan")
+    if(output!=null && !ctx.ownedCatalog(output.budget)) throw ArgErr("preparedFlowProjectionOwner")
+    output?.hold(24)
+    flow:=EnerCubixEnergyFlow(ctx,request,from,to)
+    flow.preparedValue=value;flow.preparedOverview=overview
+    flow.projectionOwner=output
+    if(output!=null)
+    {
+      output.watch |->Void| {flow.projectionRoots.each |root| {if(root is Map) ((Map)root).clear;else ((List)root).clear};flow.projectionRoots.clear}
+      flow.projectionState=EnerCubixPreparedOwner(output.budget)
+    }
+    try {return flow.report}
+    finally
+    {
+      flow.values.clear;flow.knownValues.clear;flow.allowed=Str[,]
+      flow.preparedValue=null;flow.preparedOverview=null;flow.projectionState?.close
+    }
+  }
+  // Every newly retained container is charged before construction. Only these
+  // roots are cleared; primary-value source arrays and overview rows are borrowed.
+  private Void outputHold(Int cells) {projectionOwner?.hold(cells)}
+  private Void remember(Obj value) {if(projectionOwner!=null) projectionRoots.add(value)}
+  private EnerCubixPreparedOwner? workspace(Int cells)
+  {
+    if(projectionOwner==null) return null
+    lease:=EnerCubixPreparedOwner(projectionOwner.budget)
+    try {lease.hold(cells);return lease} catch(Err e) {lease.close;throw e}
+  }
 
   internal static [Str:Obj?][] normalizeRecords([Str:Obj?][] records)
   {
@@ -62,8 +101,10 @@ internal class EnerCubixEnergyFlow
   }
 
   ** Explicit objects ignore automatic inclusion. Group membership preserves it.
-  static Str:Obj? scope(Str:Obj? req, EnerCubixDimension dim)
+  static Str:Obj? scope(Str:Obj? req, EnerCubixDimension dim,EnerCubixPreparedOwner? work := null)
   {
+    work?.budget?.deadline?.check
+    work?.hold(32+12*dim.records.size)
     if (!["metering","space","organization"].contains(req["dimension"]) || !["energy","cost"].contains(req["metric"]) || req["perArea"] == true)
       throw ArgErr("能流图支持能耗或费用，不支持面积归一化")
     category:=req["categoryId"]?.toStr ?: ""
@@ -90,8 +131,9 @@ internal class EnerCubixEnergyFlow
     roots.each |root|
     {
       id:=root["id"].toStr
-      if (dim.scope(id)) reachable.addAll(dim.members(id).findAll |r| {r["categoryId"] == category}.map |r->Str| {r["id"].toStr})
-      else closure(id,dim,category,reachable)
+      work?.budget?.deadline?.check
+      if (dim.scope(id)) {members:=dim.members(id).findAll |r| {r["categoryId"] == category};work?.hold(members.size);reachable.addAll(members.map |r->Str| {r["id"].toStr})}
+      else closure(id,dim,category,reachable,work)
     }
     reachable=reachable.unique
     unassigned:=ids.isEmpty && dim.dimension == "metering" ? automatic.findAll |r| {!reachable.contains(r["id"].toStr)} : [Str:Obj?][,]
@@ -110,71 +152,99 @@ internal class EnerCubixEnergyFlow
     return seen.contains(parent)
   }
 
-  private static Void closure(Str id,EnerCubixDimension dim,Str category,Str[] found)
+  private static Void closure(Str id,EnerCubixDimension dim,Str category,Str[] found,EnerCubixPreparedOwner? work := null)
   {
+    work?.budget?.deadline?.check
     if (found.contains(id)) return
     r:=dim.byId[id]
     if (r == null || !meter(r) || r["categoryId"] != category || r["_comparisonReadable"] == false) return
-    found.add(id)
+    work?.hold(3);found.add(id)
     refs:=Str[,]
     if (r["expressionId"] != null)
     {
       expr:=dim.byId[r["expressionId"].toStr]
       if (expr?.get("_comparisonReadable") == false) return
       vars:=expr?.get("variables") as Map
+      work?.hold(2+3*(vars?.size ?: 0))
       if (vars != null) vars.vals.each |ref| {if (ref != null) refs.add(dim.canonical(ref.toStr))}
     }
-    else refs=dim.directChildren(id).map |m->Str| {m["id"].toStr}
-    refs.unique.each |ref| {closure(ref,dim,category,found)}
+    else
+    {
+      if(work!=null) {n:=0;dim.records.each |candidate| {if(included(candidate) && candidate["meterParentId"]==id) n++};work.hold(2+3*n)}
+      refs=dim.directChildren(id).map |m->Str| {m["id"].toStr}
+    }
+    refs.unique.each |ref| {closure(ref,dim,category,found,work)}
   }
 
   Str:Obj? report()
   {
-    plan:=scope(request,dim); roots:=EnerCubixMath.maps(plan["roots"])
+    scratch:=workspace(64)
+    try
+    {
+    plan:=scope(request,dim,scratch); roots:=EnerCubixMath.maps(plan["roots"])
     if (request["flowMode"] == "endUse") return endUseReport(plan)
     ownIds:=EnerCubixMath.maps(plan["selected"]).dup.addAll(EnerCubixMath.maps(plan["unassigned"])).map |r->Str| {r["id"].toStr}.unique
-    overview:=EnerCubixFlowOverview.build(request,dim.records,histories,ownIds)
-    graphs:=[Str:Obj?][,]
+    overview:=preparedOverview ?: EnerCubixFlowOverview.build(request,dim.records,histories,ownIds)
+    outputHold(2+roots.size);graphs:=[Str:Obj?][,];remember(graphs)
     roots.each |root|
     {
-      id:=root["id"].toStr; graphId=dim.dimension+"|"+id; nodes=[Str:Obj?][,]; links=[Str:Obj?][,]
+      ctx.deadline?.check
+      id:=root["id"].toStr; graphId=dim.dimension+"|"+id
+      outputHold(4);nodes=[Str:Obj?][,];links=[Str:Obj?][,];remember(nodes);remember(links)
       grouped:=dim.scope(id)
       calculationGraph=!grouped && derived(root)
       allowed=grouped ? dim.members(id).findAll |r| {r["categoryId"] == category}.map |r->Str| {r["id"].toStr} : ownIds
       build(id,null,null,Str[,],grouped)
-      boundary:=grouped ? boundaries(id) : contribution(id,Str[,])
+      boundary:=grouped ? boundaries(id,scratch) : contribution(id,Str[,],scratch)
       basis:=grouped ? dim.dimension : (derived(root) ? "calculation" : "metering")
-      graphs.add(["graphId":graphId,"objectId":id,"basis":basis,"categoryId":category,"unit":unit,"focusId":id,"rootIds":[id],"nodes":nodes,"links":links,"unassigned":[Str:Obj?][,],"contributionMemberIds":EnerCubixMath.strings(boundary["members"]),"sharedMemberIds":Str[,],"additive":boundary["additive"] == true,"boundaryQuality":boundary["quality"] ?: "ok"])
+      memberCount:=((List)boundary["members"]).size
+      outputHold(25+memberCount)
+      members:=EnerCubixMath.strings(boundary["members"]);rootIds:=[id];unassigned:=[Str:Obj?][,];shared:=Str[,]
+      graph:=Str:Obj?["graphId":graphId,"objectId":id,"basis":basis,"categoryId":category,"unit":unit,"focusId":id,"rootIds":rootIds,"nodes":nodes,"links":links,"unassigned":unassigned,"contributionMemberIds":members,"sharedMemberIds":shared,"additive":boundary["additive"] == true,"boundaryQuality":boundary["quality"] ?: "ok"]
+      remember(members);remember(rootIds);remember(unassigned);remember(shared);remember(graph);graphs.add(graph)
     }
     accounting:=account(graphs,EnerCubixMath.maps(plan["unassigned"]))
+    totalSources:=0;if(projectionOwner!=null) EnerCubixMath.strings(accounting["memberIds"]).each |id| {totalSources+=usage(id).sources.size}
+    scratch?.hold(16+4*totalSources+2*((List)accounting["memberIds"]).size)
+    outputHold(2+totalSources)
     strictTotal:=EnerCubixValue.sum(EnerCubixMath.strings(accounting["memberIds"]).map |id->EnerCubixValue| {usage(id)})
+    remember(strictTotal.sources)
     knownTotal:=EnerCubixValue(EnerCubixMath.num(accounting["unionValue"]),accounting["unionQuality"].toStr)
     if (accounting["basis"] == "unavailable") strictTotal=EnerCubixValue(null,accounting["unionQuality"].toStr)
-    total:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strictTotal.value,"quality":strictTotal.quality,"meterIds":accounting["memberIds"],"sourceIds":strictTotal.sources]
+    outputHold(12);total:=Str:Obj?["id":category+"|"+unit,"categoryId":category,"unit":unit,"value":strictTotal.value,"quality":strictTotal.quality,"meterIds":accounting["memberIds"],"sourceIds":strictTotal.sources];remember(total)
     total.setAll(EnerCubixKnownUsage.fields(knownTotal))
     if (request["metric"] == "cost") total=costScopeTotal(roots.dup.addAll(EnerCubixMath.maps(plan["unassigned"])),accounting)
-    overview["selectionTotals"]=[total]
-    rows:=[Str:Obj?][,];series:=[Str:Obj?][,]
+    outputHold(3);selection:=[total];remember(selection);overview["selectionTotals"]=selection
+    outputHold(4);rows:=[Str:Obj?][,];series:=[Str:Obj?][,];remember(rows);remember(series)
     graphs.each |g|
     {
       EnerCubixMath.maps(g["nodes"]).each |n|
       {
-        row:=n.dup
+        ctx.deadline?.check
         own:=EnerCubixMath.maps(overview["rows"]).find |r| {r["id"] == n["nodeId"]}
+        rowCount:=n.size;if(own!=null) own.each |v,k| {if(!n.containsKey(k)) rowCount++}
+        outputHold(3+rowCount);row:=n.dup;remember(row)
         if (own != null)
         {
           ["coverage","coveredSeconds","activeSeconds","complete","completeValue","completeQuality"].each |key| {n[key]=own[key]}
           row.setAll(own).set("id",n["id"]).set("graphId",g["graphId"])
         }
         rows.add(row)
+        outputHold(22)
         point:=Str:Obj?["ts":from.toIso,"value":n["value"],"quality":n["quality"],"sourceIds":n["sourceIds"],"knownValue":n["knownValue"],"knownValueType":n["knownValueType"],"knownQuality":n["knownQuality"]]
-        series.add(["id":n["id"],"nodeId":n["nodeId"],"graphId":g["graphId"],"name":n["name"],"categoryId":category,"unit":unit,"points":[point]])
+        points:=[point];line:=Str:Obj?["id":n["id"],"nodeId":n["nodeId"],"graphId":g["graphId"],"name":n["name"],"categoryId":category,"unit":unit,"points":points]
+        remember(point);remember(points);remember(line);series.add(line)
       }
     }
     flow:=compatible(graphs,roots,plan,total)
-    return ["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":ctx.warnings,
-      "summary":["value":total["value"],"unit":unit,"selectionTotals":[total]],
-      "extra":costEvidence(["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]])]
+    outputHold(29+ctx.warnings.size+((List)plan["coveredScopes"]).size*5)
+    warnings:=ctx.warnings.dup;summary:=Str:Obj?["value":total["value"],"unit":unit,"selectionTotals":[total]]
+    extra:=Str:Obj?["energyFlow":flow,"energyFlowGraphs":graphs,"energyFlowAccounting":accounting,"energyFlowOverview":overview,"energyFlowCoveredScopes":plan["coveredScopes"],"selectionTotals":[total],"usageBasis":"knownUsage","knownUsage":overview["knownUsage"]]
+    result:=Str:Obj?["kind":"energyFlow","from":from.toIso,"to":to.toIso,"period":request["period"] ?: "day","series":series,"rows":rows,"warnings":warnings,"summary":summary,"extra":costEvidence(extra)]
+    remember(warnings);remember(summary);remember(extra);remember(result);remember(summary["selectionTotals"]);remember(extra["selectionTotals"]);remember(plan["coveredScopes"]);((List)plan["coveredScopes"]).each |row| {remember(row)}
+    return result
+    }
+    finally {scratch?.close}
   }
 
   ** Reuse the physical-boundary resolver directly; this is not a leak report.
@@ -353,12 +423,25 @@ internal class EnerCubixEnergyFlow
 
   private Void build(Str id,Str? parent,EnerCubixValue? parentValue,Str[] path,Bool grouping)
   {
+    ctx.deadline?.check
     r:=ctx.byId[id]
     if (r == null || path.contains(id) || r["_comparisonReadable"] == false) return
+    scratch:=workspace(32)
+    try
+    {
     occurrence:=nodes.any |n| {n["id"] == id} ? id+"|"+nodes.size : id
     value:=usage(id);known:=knownUsage(id)
     row:=base(occurrence,id,ctx.displayName(id),dim.scope(id) ? dim.dimension : "meter",parent,value,known)
-    row["percentage"]=calculationGraph ? null : percentage(value,parentValue);nodes.add(row)
+    row["percentage"]=calculationGraph ? null : percentage(value,parentValue);outputHold(1);nodes.add(row)
+    vars:=ctx.byId[r["expressionId"] as Str ?: ""]?.get("variables") as Map
+    childBound:=0
+    if(projectionOwner!=null)
+    {
+      if(grouping && dim.scope(id)) dim.records.each |n| {if(dim.scope(n["id"].toStr) && n["parentId"]==id) childBound++;if(allowed.contains(n["id"].toStr) && membership(n)==id) childBound++}
+      else if(r["expressionId"]!=null) childBound=vars?.size ?: 0
+      else dim.records.each |n| {if(included(n) && n["meterParentId"]==id) childBound++}
+    }
+    scratch?.hold(20+8*childBound)
     children:=Str[,];relation:=grouping ? "grouping" : (derived(r) ? "calculation" : "metering")
     if (grouping && dim.scope(id))
     {
@@ -369,15 +452,15 @@ internal class EnerCubixEnergyFlow
     {
       if (r["expressionId"] != null)
       {
-        expr:=ctx.byId[r["expressionId"].toStr];vars:=expr?.get("variables") as Map
-        if (expr?.get("_comparisonReadable") != false && vars != null) children.addAll(vars.vals.map |ref->Str| {ref?.toStr ?: ""})
+        expr:=ctx.byId[r["expressionId"].toStr];references:=expr?.get("variables") as Map
+        if (expr?.get("_comparisonReadable") != false && references != null) children.addAll(references.vals.map |ref->Str| {ref?.toStr ?: ""})
       }
       else children.addAll(dim.directChildren(id).map |n->Str| {n["id"].toStr})
     }
     children=children.unique.findAll |child| {c:=ctx.byId[child];return c != null && !path.contains(child) && child != id && c["_comparisonReadable"] != false && (dim.scope(child) || (meter(c) && c["categoryId"] == category && allowed.contains(child)))}.sort
     row["hasChildren"]=!children.isEmpty
     groupingBoundaries:=Str:Str[][:]
-    if (grouping) children.each |child| {groupingBoundaries[child]=groupingMembers(child)}
+    if (grouping) children.each |child| {groupingBoundaries[child]=groupingMembers(child,scratch)}
     suppressed:=Str[,];seenPoints:=Str[,]
     children.each |child|
     {
@@ -397,7 +480,9 @@ internal class EnerCubixEnergyFlow
       }
     }
     displayed:=children.findAll |child| {!suppressed.contains(child)}
-    inputSafe:=relation != "calculation" || contribution(id,Str[,])["additive"] == true
+    inputSafe:=relation != "calculation" || contribution(id,Str[,],scratch)["additive"] == true
+    sourceBound:=0;if(projectionOwner!=null) displayed.each |child| {sourceBound+=usage(child).sources.size+knownUsage(child).sources.size}
+    scratch?.hold(32+8*sourceBound+2*displayed.size)
     subtotal:=inputSafe ? EnerCubixValue.sum(displayed.map |child->EnerCubixValue| {usage(child)}) : EnerCubixValue(null,"comparisonNonAdditive")
     knownSubtotal:=inputSafe ? EnerCubixKnownUsage.combine(displayed.map |child->EnerCubixValue| {knownUsage(child)}) : EnerCubixValue(null,"comparisonNonAdditive")
     mode:=grouping ? "consistency" : EnerCubixBalance.mode(ctx,id)
@@ -417,7 +502,7 @@ internal class EnerCubixEnergyFlow
       {
         members:=groupingBoundaries[child]
         if (members.any |m| {seenMembers.any |other| {m == other || ancestor(m,other) || ancestor(other,m)}}) distributionSafe=false
-        seenMembers.addAll(members)
+        scratch?.hold(members.size);seenMembers.addAll(members)
       }
       if (!distributionSafe) quality="overlappingScopes"
       distributionSafe=distributionSafe && known.value != null && known.value >= 0f && knownSubtotal.value != null && knownSubtotal.value >= 0f && knownSubtotal.value <= known.value+(known.value.abs+1f)*0.000000001f && displayed.all |child| {v:=knownUsage(child);return v.value != null && v.value >= 0f}
@@ -429,7 +514,10 @@ internal class EnerCubixEnergyFlow
     row["balanceMode"]=mode;row["lossEligible"]=request["metric"] != "cost" && !grouping && ["ok","estimated","derived","cleaned","corrected"].contains(quality) && EnerCubixBalance.eligible(mode,value,subtotal)
     children.each |child|
     {
-      before:=nodes.size;build(child,occurrence,value,path.dup.add(id),grouping)
+      before:=nodes.size
+      childPath:=workspace(2+path.size+1)
+      try {build(child,occurrence,value,path.dup.add(id),grouping)}
+      finally {childPath?.close}
       if (nodes.size == before) return
       target:=nodes[before]["id"].toStr;amount:=knownUsage(child)
       if (suppressed.contains(child)) {nodes[before]["percentage"]=null;if (grouping) nodes[before]["referenceOnly"]=true}
@@ -438,51 +526,79 @@ internal class EnerCubixEnergyFlow
     }
     if (difference != null && difference > 0f && good(value) && good(subtotal))
     {
-      diffId:="__energyFlowDifference__:$occurrence";v:=EnerCubixValue(difference,quality,value.sources.dup.addAll(subtotal.sources).unique)
+      sourceCount:=value.sources.size+subtotal.sources.size
+      scratch?.hold(8+3*sourceCount);outputHold(2+sourceCount)
+      diffId:="__energyFlowDifference__:$occurrence";v:=EnerCubixValue(difference,quality,value.sources.dup.addAll(subtotal.sources).unique);remember(v.sources)
       gap:=base(diffId,diffId,"","difference",occurrence,v,v);gap["percentage"]=percentage(v,value);gap["balanceMode"]=mode;gap["lossEligible"]=row["lossEligible"]
-      nodes.add(gap);addLink(occurrence,diffId,v,value,"metering")
+      outputHold(1);nodes.add(gap);addLink(occurrence,diffId,v,value,"metering")
     }
+    }
+    finally {scratch?.close}
   }
 
-  private Str[] groupingMembers(Str id)
+  private Str[] groupingMembers(Str id,EnerCubixPreparedOwner? target := null)
   {
-    if (dim.scope(id)) return EnerCubixMath.strings(boundaries(id)["members"])
+    if (dim.scope(id)) {boundary:=boundaries(id,target);target?.hold(2+2*((List)boundary["members"]).size);return EnerCubixMath.strings(boundary["members"])}
+    target?.hold(2)
     r:=ctx.byId[id]
     return r == null ? Str[,] : [derived(r) ? id : physicalId(r)]
   }
 
-  private Str:Obj? boundaries(Str id)
+  private Str:Obj? boundaries(Str id,EnerCubixPreparedOwner? target := null)
   {
-    members:=dim.frontier(dim.members(id).findAll |r| {r["categoryId"] == category}).map |r->Str| {derived(r) ? r["id"].toStr : physicalId(r)}.unique.sort
+    scratch:=workspace(32+8*dim.records.size)
+    try
+    {
+    frontier:=dim.frontier(dim.members(id).findAll |r| {r["categoryId"] == category})
+    target?.hold(6+frontier.size)
+    members:=frontier.map |r->Str| {derived(r) ? r["id"].toStr : physicalId(r)}.unique.sort
     return ["members":members,"additive":members.all |m| {!derived(ctx.byId[m])},"quality":ctx.byId[id]?.get("_flowBoundaryUnavailable") == true ? "comparisonUnavailable" : (dim.quality(dim.members(id)) ?: "ok")]
+    }
+    finally {scratch?.close}
   }
 
   ** This describes contributions; it never evaluates or changes the formula.
-  private Str:Obj? contribution(Str id,Str[] path)
+  private Str:Obj? contribution(Str id,Str[] path,EnerCubixPreparedOwner? target := null)
   {
+    ctx.deadline?.check
+    target?.hold(6)
     r:=ctx.byId[id]
     if (r == null || !meter(r) || path.contains(id) || r["_flowBoundaryUnavailable"] == true || r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false || r["categoryId"] != category || EnerCubixMath.unitFactor(r["unit"] as Str ?: unit,unit) == null)
       return ["members":Str[,],"additive":false,"quality":"comparisonUnresolved"]
-    if (!derived(r)) return ["members":[physicalId(r)],"additive":true,"quality":"ok"]
+    if (!derived(r)) {target?.hold(1);return ["members":[physicalId(r)],"additive":true,"quality":"ok"]}
+    scratch:=workspace(32+path.size)
+    try
+    {
     expr:=ctx.byId[r["expressionId"]?.toStr ?: ""]
+    childCount:=0;if(projectionOwner!=null) dim.records.each |c| {if(included(c) && c["meterParentId"]==id) childCount++}
+    scratch?.hold(8+3*(expr?.get("formula")?.toStr?.size ?: 0)+2*childCount)
     refs:=r["expressionId"] != null ? EnerCubixComparisonScope.additive(expr) : dim.directChildren(id).map |c->Str| {c["id"].toStr}
     if (refs == null || refs.isEmpty) return ["members":Str[,],"additive":false,"quality":"comparisonNonAdditive"]
     members:=Str[,];complete:=true
     refs.each |ref|
     {
-      c:=contribution(ref,path.dup.add(id));child:=EnerCubixMath.strings(c["members"])
+      scratch?.hold(2+path.size+1)
+      c:=contribution(ref,path.dup.add(id),scratch)
+      scratch?.hold(2+3*((List)c["members"]).size);child:=EnerCubixMath.strings(c["members"])
       if (c["additive"] != true || child.any |m| {members.contains(m)}) complete=false
       members.addAll(child)
     }
+    target?.hold(members.size)
     return ["members":members.unique.sort,"additive":complete,"quality":complete ? "ok" : "comparisonUnresolved"]
+    }
+    finally {scratch?.close}
   }
 
   private Str:Obj? account([Str:Obj?][] graphs,[Str:Obj?][] unassigned)
   {
+    associations:=0;graphs.each |g| {associations+=((List)g["contributionMemberIds"]).size}
+    scratch:=workspace(48+12*associations+4*dim.records.size)
+    try
+    {
     owners:=Str:Str[][:]
     graphs.each |g| {EnerCubixMath.strings(g["contributionMemberIds"]).each |id| {if (!owners.containsKey(id)) owners[id]=Str[,];owners[id].add(g["objectId"].toStr)}}
     shared:=owners.keys.findAll |id| {owners[id].size > 1}.sort
-    graphs.each |g| {g["sharedMemberIds"]=EnerCubixMath.strings(g["contributionMemberIds"]).findAll |id| {shared.contains(id)}}
+    graphs.each |g| {outputHold(2+((List)g["contributionMemberIds"]).size);ids:=EnerCubixMath.strings(g["contributionMemberIds"]).findAll |id| {shared.contains(id)};remember(ids);g["sharedMemberIds"]=ids}
     allVirtual:=!graphs.isEmpty && graphs.all |g| {g["basis"] == "calculation"}
     mixed:=graphs.any |g| {g["basis"] == "calculation"} && !allVirtual
     members:=owners.keys.sort
@@ -494,61 +610,98 @@ internal class EnerCubixEnergyFlow
     topo:=dim.quality(members.map |id->[Str:Obj?]| {ctx.byId[id]})
     if (!allVirtual && topo != null) safe=false
     known:=EnerCubixKnownUsage.combine(members.map |id->EnerCubixValue| {knownUsage(id)})
-    return ["canAdd":safe && shared.isEmpty && !contains,"memberIds":members,"sharedMemberIds":shared,"sharedMembers":shared.map |id->[Str:Obj?]| {["meterId":id,"objectIds":owners[id]]},"unionValue":safe ? known.value : null,"unionQuality":safe ? known.quality : (!unassigned.isEmpty ? "topologyIncomplete" : (topo ?: "overlappingScopes")),"basis":safe ? (allVirtual ? "classificationUnion" : "physicalBoundary") : "unavailable"]
+    outputHold(15+members.size+2*shared.size+associations+6*shared.size)
+    sharedMembers:=shared.map |id->[Str:Obj?]|
+    {
+      ids:=owners[id].dup;row:=Str:Obj?["meterId":id,"objectIds":ids];remember(ids);remember(row);return row
+    }
+    result:=Str:Obj?["canAdd":safe && shared.isEmpty && !contains,"memberIds":members,"sharedMemberIds":shared,"sharedMembers":sharedMembers,"unionValue":safe ? known.value : null,"unionQuality":safe ? known.quality : (!unassigned.isEmpty ? "topologyIncomplete" : (topo ?: "overlappingScopes")),"basis":safe ? (allVirtual ? "classificationUnion" : "physicalBoundary") : "unavailable"]
+    remember(members);remember(shared);remember(sharedMembers);remember(result);return result
+    }
+    finally {scratch?.close}
   }
 
   private Str:Obj? compatible([Str:Obj?][] graphs,[Str:Obj?][] roots,Str:Obj? plan,Str:Obj? total)
   {
     if (graphs.size == 1) return graphs.first
+    nodeCount:=0;linkCount:=0;graphs.each |g| {nodeCount+=((List)g["nodes"]).size;linkCount+=((List)g["links"]).size}
+    scratch:=workspace(32+3*(nodeCount+linkCount)+2*((List)plan["unassigned"]).size+2*((List)total["sourceIds"]).size)
+    try
+    {
     summaryId:="__energyFlow__:$category"
+    outputHold(2+((List)total["sourceIds"]).size)
     v:=EnerCubixValue(EnerCubixMath.num(total["value"]),total["quality"].toStr,EnerCubixMath.strings(total["sourceIds"]))
+    remember(v.sources)
     summary:=base(summaryId,summaryId,ctx.byId[category]?.get("name")?.toStr ?: category,"summary",null,v,EnerCubixValue(EnerCubixMath.num(total["knownValue"]),total["knownQuality"].toStr))
-    ns:=[summary];ls:=[Str:Obj?][,]
+    outputHold(5+nodeCount+linkCount);ns:=[summary];ls:=[Str:Obj?][,];remember(ns);remember(ls)
     graphs.each |g|
     {
       ns.addAll(EnerCubixMath.maps(g["nodes"]));ls.addAll(EnerCubixMath.maps(g["links"]))
       root:=EnerCubixMath.maps(g["nodes"]).first
       if (good(v) && root != null && EnerCubixMath.num(root["knownValue"]) != null && (Float)root["knownValue"] > 0f)
-        ls.add(["source":summaryId,"target":root["id"],"value":root["knownValue"],"quality":root["knownQuality"],"relationKind":"metering","sourceIds":root["sourceIds"],"percentage":null])
+      {
+        outputHold(10);link:=Str:Obj?["source":summaryId,"target":root["id"],"value":root["knownValue"],"quality":root["knownQuality"],"relationKind":"metering","sourceIds":root["sourceIds"],"percentage":null];remember(link);ls.add(link)
+      }
     }
+    outputHold(2+((List)plan["unassigned"]).size)
     unassigned:=EnerCubixMath.maps(plan["unassigned"]).map |r->[Str:Obj?]| {id:=r["id"].toStr;return base(id,id,ctx.displayName(id),"meter",null,usage(id),knownUsage(id))}
-    return ["categoryId":category,"unit":unit,"focusId":summaryId,"rootIds":roots.map |r->Str| {r["id"].toStr},"nodes":ns,"links":ls,"unassigned":unassigned]
+    outputHold(11+roots.size);rootIds:=roots.map |r->Str| {r["id"].toStr};result:=Str:Obj?["categoryId":category,"unit":unit,"focusId":summaryId,"rootIds":rootIds,"nodes":ns,"links":ls,"unassigned":unassigned]
+    remember(unassigned);remember(rootIds);remember(result);return result
+    }
+    finally {scratch?.close}
   }
 
   private Str:Obj? base(Str occurrence,Str id,Str name,Str type,Str? parent,EnerCubixValue value,EnerCubixValue known)
   {
+    // Includes fields subsequently attached by build and the own-history row.
+    outputHold(38)
     row:=Str:Obj?["id":occurrence,"nodeId":id,"graphId":graphId,"name":name,"nodeType":type,"categoryId":category,"unit":unit,"value":value.value,"quality":value.quality,"sourceIds":value.sources,"submeter":null,"difference":null,"balanceQuality":value.quality,"hasChildren":false,"percentage":null]
     row.setAll(EnerCubixKnownUsage.fields(known));if (parent != null) row["parentId"]=parent
-    return row
+    remember(row);return row
   }
 
   private EnerCubixValue usage(Str id) {read(id,false)}
   private EnerCubixValue knownUsage(Str id) {read(id,true)}
   private EnerCubixValue read(Str id,Bool known)
   {
+    ctx.deadline?.check
     cache:=known ? knownValues : values
     if (cache.containsKey(id)) return cache[id]
     if (request["flowMode"] == "endUse" && (ctx.byId[id]?.get("_comparisonReadable") == false || ctx.byId[id]?.get("_comparisonPointReadable") == false)) return EnerCubixValue(null,"forbidden")
     if (dim.scope(id))
     {
-      pieces:=EnerCubixMath.strings(boundaries(id)["members"]).map |m->EnerCubixValue| {read(m,known)}
+      scratch:=workspace(32+6*dim.records.size)
+      try
+      {
+      pieces:=EnerCubixMath.strings(boundaries(id,scratch)["members"]).map |m->EnerCubixValue| {read(m,known)}
+      sourceCount:=0;pieces.each |EnerCubixValue v| {sourceCount+=v.sources.size}
+      scratch?.hold(16+4*sourceCount);outputHold(2+sourceCount)
       value:=known ? EnerCubixKnownUsage.combine(pieces) : EnerCubixValue.sum(pieces)
+      projectionState?.hold(7);remember(value.sources)
       cache[id]=value;return value
+      }
+      finally {scratch?.close}
     }
-    pieces:=EnerCubixValue[,];cursor:=from
-    while (cursor < to)
+    value:=EnerCubixValue()
+    if(preparedValue!=null) value=preparedValue(id,known)
+    else
     {
-      end:=EnerCubixMath.floorHour(cursor)+1hr;if (end > to) end=to
-      pieces.add((known ? knownCtx : ctx).node(id,category,cursor,end,request["metric"] as Str ?: "energy"));cursor=end
+      pieces:=EnerCubixValue[,];cursor:=from
+      while (cursor < to)
+      {
+        end:=EnerCubixMath.floorHour(cursor)+1hr;if (end > to) end=to
+        pieces.add((known ? knownCtx : ctx).node(id,category,cursor,end,request["metric"] as Str ?: "energy"));cursor=end
+      }
+      value=known ? EnerCubixKnownUsage.combine(pieces) : EnerCubixValue.sum(pieces)
     }
-    value:=known ? EnerCubixKnownUsage.combine(pieces) : EnerCubixValue.sum(pieces)
     if (!known && request["flowMode"] == "endUse" && value.value == null && value.quality == "missing" && knownUsage(id).quality == "na") value=EnerCubixValue(null,"na",value.sources)
-    if (value.value != null && value.value < 0f) value=EnerCubixValue(value.value,"negative",value.sources)
+    if (value.value != null && value.value < 0f) {projectionState?.hold(6);value=EnerCubixValue(value.value,"negative",value.sources)}
+    projectionState?.hold(1)
     cache[id]=value;return value
   }
 
   private Void addLink(Str source,Str target,EnerCubixValue value,EnerCubixValue? parent,Str relation)
-  {links.add(["source":source,"target":target,"value":value.value,"quality":value.quality,"sourceIds":value.sources,"percentage":relation == "calculation" ? null : percentage(value,parent),"relationKind":relation])}
+  {outputHold(10);link:=Str:Obj?["source":source,"target":target,"value":value.value,"quality":value.quality,"sourceIds":value.sources,"percentage":relation == "calculation" ? null : percentage(value,parent),"relationKind":relation];remember(link);links.add(link)}
   private Str? membership(Str:Obj? r)
   {
     if (dim.dimension == "organization") return r["organizationId"] as Str
@@ -564,31 +717,47 @@ internal class EnerCubixEnergyFlow
   {
     point:=r["pointId"] as Str
     if (point == null) return r["id"].toStr
+    count:=0;if(projectionOwner!=null) dim.records.each |m| {if(meter(m) && !derived(m) && m["categoryId"]==category && m["pointId"]==point && m["_comparisonReadable"]!=false) count++}
+    scratch:=workspace(4+3*count)
+    try
+    {
     matches:=dim.records.findAll |m| {meter(m) && !derived(m) && m["categoryId"] == category && m["pointId"] == point && m["_comparisonReadable"] != false}
     return matches.map |m->Str| {m["id"].toStr}.sort.first ?: r["id"].toStr
+    }
+    finally {scratch?.close}
   }
   private Bool ancestor(Str parent,Str child)
   {
+    scratch:=workspace(4)
+    try
+    {
     seen:=Str[,];cursor:=ctx.byId[child]?.get("meterParentId") as Str
     while (cursor != null && !seen.contains(cursor))
     {
       if (cursor == parent) return true
-      seen.add(cursor);cursor=ctx.byId[cursor]?.get("meterParentId") as Str
+      ctx.deadline?.check;scratch?.hold(1);seen.add(cursor);cursor=ctx.byId[cursor]?.get("meterParentId") as Str
     }
     return false
+    }
+    finally {scratch?.close}
   }
   private Bool validChain(Str id)
   {
+    scratch:=workspace(4)
+    try
+    {
     seen:=Str[,];cursor:=id
     while (!seen.contains(cursor))
     {
-      seen.add(cursor);r:=ctx.byId[cursor]
+      ctx.deadline?.check;scratch?.hold(1);seen.add(cursor);r:=ctx.byId[cursor]
       if (r == null || !meter(r) || r["categoryId"] != category) return false
       parent:=r["meterParentId"] as Str
       if (parent == null) return true
       cursor=parent
     }
     return false
+    }
+    finally {scratch?.close}
   }
   private static Bool derived(Str:Obj? r) {r["autoSum"] == true || r["expressionId"] != null || (r["meterOrigin"] as Map)?.get("type") == "virtual"}
   private static Bool meter(Str:Obj? r) {["meter","totalMeter"].contains(r["kind"])}
