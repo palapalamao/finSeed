@@ -190,6 +190,23 @@ internal class EnerCubixCockpitStream
     out:=capture;out["streaming"]=budget.evidence
     return out
   }
+  ** Final scalar provenance for a fully consumed cursor. Unlike view(), this
+  ** cannot escape prepared cells or revive a borrowed/expired source frame.
+  ** The callback must detach what it retains before this header is cleared.
+  internal Void withHeaderMetadata(|Str:Obj?| consume)
+  {
+    cursorCheck
+    if(cursorFrameActive || !cursorFramed || cursorConsumed!=to) throw ArgErr("sourceHeaderNotReady")
+    scratch:=EnerCubixPreparedOwner(budget.state)
+    try
+    {
+      scratch.hold(32)
+      ids:=[point.id.id]
+      header:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":ids,"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"sourceLastObservedAt":lastObserved?.toIso]
+      try {consume(header)} finally {header.clear;ids.clear}
+    }
+    finally {scratch.close}
+  }
   internal Void close()
   {
     if(!cursorMode || cursorClosed) return
