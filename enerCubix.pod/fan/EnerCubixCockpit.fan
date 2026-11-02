@@ -103,6 +103,8 @@ class EnerCubixCockpit
     histories=([Str:Obj?][])histories.toImmutable
     observedTo:=readClock()
     deadline?.check
+    historyMeta:=EnerCubixCockpitHistoryMeta(pointIds.unique,effectiveEnd)
+    histories.each |h| {historyMeta.observe(h)}
     report:=EnerCubixHistory.report(request,frozen,EnerCubixCockpitMetrics.histories(request,histories))
     row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).find |r| {r["categoryId"] == category}
     boundaryQuality:=row?.get("scopeQuality") as Str
@@ -192,27 +194,13 @@ class EnerCubixCockpit
     ownedRefs:=kpis || enabled.contains("issues") ? EnerCubixMath.maps(budgetResult["configuration"]).dup.addAll(ruleConfiguration) : [Str:Obj?][,]
     config.addAll(ownedRefs)
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
-    histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
+    proof:=historyMeta.snapshot
+    refs.addAll(EnerCubixMath.maps(proof["configRefs"]))
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
-    appliedCleaning:=histories.findAll |h| {h["cleaning"] is Map}.map |h->[Str:Obj?]|
-    {
-      cleaning:=(Map)h["cleaning"]
-      return ["pointId":h["pointId"],"profileId":cleaning["profileId"],"profileVersion":cleaning["profileVersion"],"parameters":cleaning["parameters"]]
-    }.unique.sort |[Str:Obj?] a,[Str:Obj?] b->Int| {a["pointId"].toStr <=> b["pointId"].toStr}
-    configStarts:=histories.findAll |h| {h["historyConfigObservedFrom"] is Str}.map |h->DateTime| {DateTime.fromIso(h["historyConfigObservedFrom"].toStr)}
-    configEnds:=histories.findAll |h| {h["historyConfigObservedTo"] is Str}.map |h->DateTime| {DateTime.fromIso(h["historyConfigObservedTo"].toStr)}
-    observed:=DateTime[,]; cutoff:=DateTime.fromIso(request["asOf"].toStr)
-    histories.each |h|
-    {
-      if (!EnerCubixMath.strings(historyRequest["_cockpitPointIds"]).contains(h["pointId"])) return
-      latest:=DateTime.fromIso(h["sourceLastObservedAt"] as Str ?: "",false)
-      if (latest != null && latest <= effectiveEnd) observed.add(latest)
-      rows:=EnerCubixMath.maps(h["rawSamples"] ?: h["samples"])
-      rows.each |s| {t:=DateTime.fromIso(s["ts"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
-      if (rows.isEmpty) EnerCubixMath.maps(h["intervals"]).each |s| {t:=DateTime.fromIso(s["to"]?.toStr ?: "",false); if (t != null && t <= effectiveEnd) observed.add(t)}
-    }
+    appliedCleaning:=proof["appliedCleaning"]
+    cutoff:=DateTime.fromIso(request["asOf"].toStr)
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
-    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":observed.isEmpty ? null : ((DateTime)observed.max).toIso,"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":histories.map |h->Obj?| {h["streaming"]}.unique,"historyLimitations":histories.findAll |h| {h["limitation"] != null}.map |h->[Str:Obj?]| {["pointId":h["pointId"],"reason":h["limitation"]]},"historyConfigObservedFrom":configStarts.isEmpty ? null : ((DateTime)configStarts.min).toIso,"historyConfigObservedTo":configEnds.isEmpty ? null : ((DateTime)configEnds.max).toIso]
+    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
     budget:=histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget
     if(budget != null) provenance["preparedRuntime"]=budget.evidence
     limitations:=Str[,]
