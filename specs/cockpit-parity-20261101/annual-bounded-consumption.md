@@ -1,8 +1,8 @@
 # ALL-59 年度查询有界消费设计审计
 
-状态：待技术核对；不是已实现或已验收结论。2026-11-02。
+状态：已完成数学/所有权合同核对，增量前置已验证；完整有界调度仍未实现或验收。2026-11-02。
 负责人：开发聊天；沿用冻结的 1:1 驾驶舱 / M4 需求，不增加产品范围。
-源码：developer f4394d90；FIN 实际仍为 b3a63083 / 0.14.0。
+源码：developer 0d996c3a；FIN 实际为 da8c8fa4 / 0.14.1。后续源码尚未部署。
 
 ## 已定位的两个阶段
 
@@ -29,6 +29,17 @@
 
 关键引用风险：toImmutable只冻结，不释放原数据；Context结束后report.extra.knownUsage仍可能保留源小时行。当前PreparedBudget.hold多数为累计计数，新增release必须对应真实所有权，不能按报告结束直接归零。
 
+## 调度选择与已落实的前置
+
+优先评估按时间水位交错扫描各源，保留每源原始/清洗状态并只物化当前消费窗口。原逐源全年方案作为对照，不能以大段跨源小时矩阵逃避200k限制。架构复核记录：current-relations工作区 out/cockpit-one-to-one-20261101/annual-consumption-contract-review.md。
+
+- 0.14.1已实际确认zeda main年度200，约6.24秒；site仍422。固定4816kWh/2799.549228CNY、13HTTP资源hash与同包30min1805秒/181采样已核对。手机275/344CSS宽度中英文四卡/金额及M4控件无越界；PDF受浏览器网址安全检查停止，未通过。
+- 592beaa3：来源摘要先detach，5类42方法290校验；真实捕获main回放8个provenance字段、48业务组不变。
+- ae96768a：单列修正规则的诊断配额依赖；同输入0/1/1000明细配额都为actual80、2个有效小时、触发1次。完整区间资格在裁剪前计算，未知/跨小时/NA/替代不因此可靠，私有事实仅实际启用的nonWorking消费者准备，新增保留事实逐条计账且默认不发布。差异白名单见 out/cockpit/parity-20261101/rule-diagnostic-correctness-evidence.json。
+- 39aa777d：4项19校验冻结原归约树、质量/来源顺序、coverage先每源sum再min、COP先sum操作数再divide。
+- 0d996c3a：增量严格/已有量标量fold，保留每原标量顺序，不接受合并块小计，不保留输入Value或可变sources引用，finish独立可继续。76类636方法238840校验通过；捕获main8个provenance/48业务组不变，峰值109425。未切批次扫描。
+- 当前离线结构盘点：82计划主点、边界18表、81个space焦点、18 own-profile、18 daily-own、79 balance-own，COP/calendar/tariff均0；focus多源有序energy集合去重1组。原词典序point扫描在该成员序有4处逆序。此盘点尚非完整消费者/峰值证明。
+
 ## 最小可执行分解（不是简单更换容器）
 
 ### S1 明确全部消费计划与可合并状态
@@ -38,6 +49,12 @@
 测试：从当前9模块输入生成确定计划；无/有日历、COP、预算、辅助能源、半小时费率及DST。与现有read lookup轨迹逐项比对；不可用能力保留原降级。
 
 ### S2 单源扫描与原计算消费缝
+
+先建立私有可暂停生产缝，默认prepare不切换，不提前做租约减账。扫描游标和消费小时分离：保留block未消费tail、clean details、clean previous/last、待消费闭合interval、consume hour。仅removeNA遵旧语义不推进关闭；null/NA/拒绝数字仍可更新clean previous，不能统一skip到正常数字。
+
+当前小时可定稿需其所有start归属区间已处理，或原规划读域真实耗尽；读到任意一条下一记录不足以证明区间完整。Jan→Sep闭合端只能在原规范化窗口±既有1day上下文内取得，保持整段秒数归起点一次、内部strict小时incomplete。收到Sep端后不得沿原while循环立即生成Jan→Sep全年prepared矩阵。
+
+block/density split是合法重复callback尝试，原计数如实记录，不承诺每raw仅一次。所有source tails与items/byTime/clean结果须按原raw-held与prepared/Context两类guard分别真实计账，不能合并单位或忽略尚有引用的对象。准入不足时确定性失败，不丢尾重扫、不死循环。必须先证明最大同时存活状态与最小可进展条件，才建真实回收。
 
 将Stream.prepare内一源/一规范化窗口的循环抽为内部consumer回调；当前全量路径保留为基线。一个主点窗口原生读取一次，顺序清洗；在丢弃源状态前，按S1所有消费者计算自身用量、费用、co2及其known/strict与覆盖摘要。阶梯费用保持逐表按时间顺序、完整周期基线。不能先把原始值按月相加再套分时或阶梯。
 
@@ -54,6 +71,8 @@
 - COP / 泄漏 / flow：保留原本需要的同小时两侧量与质量，完成关联后再折叠period；不平均比例，不把不同覆盖段拼为完整对比。FlowOverview.periods只属诊断，截断不影响真正业务值。
 - coverage：保存原算法的每source coveredSeconds/min、最早起始/最晚结束和complete资格；不能改成覆盖交集或补零。
 - 预算、面积、占比、组织树、规则与事件：在相关量冻结后应用现有业务算法，预算不分摊到子对象。
+
+每个出口固定原归约树：scope先同小时跨表再跨小时，selectionTotals先每表跨小时再跨表；quality同rank保留先者、known首invalid和sources首次顺序不换。coverage是min(per-source sum)，不得改成sum(hourly min)或交集；长区间不能裁3600。COP period=sum(N)/sum(D)，首小时D=0不自动使period无效；Flow整段own总量后相减，不等同逐小时Leak路径。warnings等非数值输出也保留原consumer/line/hour访次优先。
 
 本步骤是主要风险：现有Report把小时循环、knownReads及输出组装绑定；需抽出内部fold接口，而不是写一个全新的通用报告框架。预计触及Report、Context、Cockpit与各face/flow/efficiency/rules适配，约10-15个生产文件；在证明细粒度oracle前不得切换默认读取路径。普通历史报表路径不改。
 
@@ -73,6 +92,6 @@
 
 ## 本轮边界
 
-- f4394d90手机修正已10个Edge场景+14单测+类型/构建通过，仍未部署。
+- f4394d90手机修正已纳入0.14.1，控制层与原生275/344已分别记录；完整同尺寸/PDF验收仍未整体关闭。
 - 5470d402是真实有证明空域的最小优化，不宣称site问题关闭。
-- 逐源fold尚未实现。此审计不以文档替代交付；若不能保持上述全部合同，先保持当前明确422，不上线静默降级或假数据。
+- 完整有界调度及真实释放尚未实现，默认仍整批prepare。此审计不以文档替代交付；若不能保持上述全部合同，先保持当前明确422，不上线静默降级或假数据。
