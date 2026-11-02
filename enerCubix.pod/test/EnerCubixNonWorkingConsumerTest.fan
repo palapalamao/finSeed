@@ -33,7 +33,7 @@ class EnerCubixNonWorkingConsumerTest : Test
       {
         (0..<2).each |i| {start:=a+1hr*i;end:=start+1hr;source.advance(end);EnerCubixCockpitStream.withFrames([source],budget.state) |h,frame| {consumer.addFrame(start,end,h,frame)}}
         source.close;facts:=consumer.finish;state.close;planning.close
-        actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id->Str:Obj?| {return facts})
+        actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id,Str:Obj? request->Str:Obj?| {return facts})
         verifyEq(actual,expected,variant.toStr);verifyEq(budget.state.unprepared.val,0)
         peer.hold(budget.state.remaining);held:=peer.entries;output.close;verifyEq(peer.entries,held);verify(facts.isEmpty)
       }
@@ -69,7 +69,7 @@ class EnerCubixNonWorkingConsumerTest : Test
       {
         (0..<2).each |i| {start:=a+1hr*i;end:=start+1hr;source.advance(end);EnerCubixCockpitStream.withFrames([source],budget.state) |h,frame| {consumer.addFrame(start,end,h,frame)}}
         source.close;facts:=consumer.finish;state.close
-        actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id->Str:Obj?| {verifyEq(id,"rule");return facts})
+        actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id,Str:Obj? request->Str:Obj?| {verifyEq(id,"rule");return facts})
         verifyEq(actual,expected);verifyEq(EnerCubixMath.maps(actual["evaluations"]).first["actual"],80f)
         verifyEq(budget.nativeReads,1);verifyEq(budget.state.unprepared.val,0)
         output.close;verify(facts.isEmpty)

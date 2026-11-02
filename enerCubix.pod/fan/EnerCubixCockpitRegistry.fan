@@ -275,20 +275,28 @@ internal class EnerCubixCockpitRegistry
   {
     check
     if(!done || attachedCleaning.size!=cleaningKeys.size || !queries.containsKey(key)) throw ArgErr("cockpitRegistryReportNotPrepared")
-    scratch:=EnerCubixPreparedOwner(budget.state)
-    try
-    {
-      scratch.hold(4+query.size+queries[key].size)
-      if(!same(signature(query),signature(queries[key]))) throw ArgErr("cockpitRegistryReportNotPrepared")
-    }
-    finally {scratch.close}
+    expectQuery(query,queries[key],"cockpitRegistryReportNotPrepared")
     if(key.startsWith("cop:")) return (Str:Obj?)copWorks[key[4..-1]].result["report"]
     return key=="energy-flow" ? flowWork.result : works[key].result
   }
-  Str:Obj? copData(Str id)
-  {check;if(!done || attachedCleaning.size!=cleaningKeys.size || !copWorks.containsKey(id)) throw ArgErr("cockpitRegistryCopNotPrepared");return copWorks[id].result}
-  Str:Obj? ruleData(Str id)
-  {check;if(!done || attachedCleaning.size!=cleaningKeys.size || !ruleWorks.containsKey(id)) throw ArgErr("cockpitRegistryRuleNotPrepared");return ruleWorks[id].result}
+  private Void expectQuery(Str:Obj? query,Str:Obj? registered,Str error)
+  {
+    scratch:=EnerCubixPreparedOwner(budget.state)
+    try
+    {
+      scratch.hold(4+query.size+registered.size)
+      if(!same(signature(query),signature(registered))) throw ArgErr(error)
+    }
+    finally {scratch.close}
+  }
+  Str:Obj? copData(Str id,Str:Obj? query)
+  {read("cop:"+id,query);return copWorks[id].result}
+  Str:Obj? ruleData(Str id,Str:Obj? query)
+  {
+    check
+    if(!done || attachedCleaning.size!=cleaningKeys.size || !ruleWorks.containsKey(id)) throw ArgErr("cockpitRegistryRuleNotPrepared")
+    expectQuery(query,queries["profile-energy"],"cockpitRegistryRuleNotPrepared");return ruleWorks[id].result
+  }
   private Str:Obj? signature(Str:Obj? q)
   {q.findAll |v,k| {k!="_cockpitDeadline" && k!="_cockpitDiagnosticCapture" && k!="_cockpitPointIds"}}
   // Container type parameters can differ after native JSON/DTO conversion.

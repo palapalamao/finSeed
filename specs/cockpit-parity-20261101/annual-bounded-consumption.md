@@ -238,3 +238,5 @@ nonWorking consumer 在原生主点小时帧仍活动时读取严格值及闭合
 精确完整110类782方法272185检查通过，292785ms（registry-rule-full-fantom.log）。捕获9模块注册仍14私有键；旧11报告99顶层90extra及清洗计数、2328热图/209排除日、空间和能流5行1图无差异。该zeda捕获COP/规则配置均为0，不能视为真实COP/规则运行。6窗口44010小时，462回调12094样本，峰158304、unprepared0，关闭raw/temporary0，有限prepared48仍计账。默认8必需provenance与12报告59实有组严格相等，仅periodsCaptureId归一化。
 
 冻结 registry-rule-offline-test.pod SHAFF3A470565A76F275AB845B326601295FFBCF2583434EC2A7857CE020C04C871，4237891B，元数据0.14.1仅私有验证，不能当新版部署。下一阶段须把copData/ruleData也收紧为完整查询签名，接元数据冻结/来源session、未来范围及所有最终图/REST共同计账，之后才切native并验82点。当前输入外部计划及最终投影未共同计账，逻辑计数不作堆测量。无服务/历史/配置/浏览器操作，只读账号暂缓；UI/PDF及实机验收未完成。
+
+随后收紧 COP/规则私有 provider：回调携带完整查询，COP复用已注册报告签名校验，规则对主查询签名校验；提前/未知/失效仍拒绝。功能RED确认为篡改指标及时间后未抛错误（prepared-signature-red-tests.log），修正后时间/截止/对象/维度/粒度/分类/指标及COP ID篡改均被拒绝；合法重复读取与结果所有权不变，无隐式历史回退。7类36方法709检查通过，6048ms（prepared-signature-green-tests.log），构建及主点约束检查通过。本小批未再跑完整套件，最近完整110类782方法272185检查明确对应2183fec4及上述冻结包，不转移成后续源码的完整证明。来源session及最终共同计账仍未接，默认native不切换。

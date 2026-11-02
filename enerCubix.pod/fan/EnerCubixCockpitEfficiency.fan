@@ -94,7 +94,7 @@ internal class EnerCubixCockpitEfficiency
     return ["items":prepared,"meters":meters.unique,"devices":devices.unique,"configuration":configuration.unique,"opaqueUnavailable":unavailable,"request":q,"records":records]
   }
 
-  static Void attach(Str:Obj? prepared,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports,Str:Obj? modules,|Str->Str:Obj?|? preparedCop := null)
+  static Void attach(Str:Obj? prepared,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports,Str:Obj? modules,|Str,Str:Obj?->Str:Obj?|? preparedCop := null)
   {
     try
     {
@@ -114,7 +114,7 @@ internal class EnerCubixCockpitEfficiency
         numerator:=EnerCubixValue();denominator:=EnerCubixValue();ratio:=EnerCubixValue();result:=Str:Obj?[:]
         if(preparedCop!=null)
         {
-          data:=preparedCop(id)
+          data:=preparedCop(id,EnerCubixCockpitReports.copQuery(q,id))
           numerator=(EnerCubixValue)data["numerator"];denominator=(EnerCubixValue)data["denominator"];ratio=(EnerCubixValue)data["ratio"];result=(Str:Obj?)data["report"]
         }
         else

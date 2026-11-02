@@ -55,7 +55,7 @@ class EnerCubixRegistryCopTest : Test
       }
       sources.each |source| {source.close};registry.finish
       actualReports:=Str:Obj?[:];actualModules:=Str:Obj?[:]
-      EnerCubixCockpitEfficiency.attach(cop,[Str:Obj?][,],boundary,actualReports,actualModules,|Str id->Str:Obj?| {registry.copData(id)})
+      EnerCubixCockpitEfficiency.attach(cop,[Str:Obj?][,],boundary,actualReports,actualModules,|Str id,Str:Obj? request->Str:Obj?| {registry.copData(id,request)})
       verifyEq(json(actualReports),json(expectedReports));verifyEq(json(actualModules),json(expectedModules))
       verifyEq(actualReports.size,20);verifyEq(budget.nativeReads,20);verifyEq(budget.state.unprepared.val,0)
       verifyEq(registry.read("energy-flow",(Str:Obj?)flow["request"])["kind"],"energyFlow")
@@ -86,18 +86,22 @@ class EnerCubixRegistryCopTest : Test
       try
       {
         verifyEq(budget.nativeReads,0);verify(registry.keys.contains("cop:cop"))
-        verifyErr(ArgErr#) {registry.copData("cop")}
+        verifyErr(ArgErr#) {registry.copData("cop",EnerCubixCockpitReports.copQuery(q,"cop"))}
         points.keys.sort.each |id| {sources.add(EnerCubixCockpitStream.openCursor(points[id],null,a,b,q,rs,budget,read,registry.planning))}
         (0..<2).each |i| {start:=a+1hr*i;end:=start+1hr;sources.each |source| {source.advance(end)};EnerCubixCockpitStream.withFrames(sources,budget.state) |h,frame| {registry.addFrame(start,end,h,frame)}}
         sources.each |source| {source.close};registry.finish
         actualReports:=Str:Obj?[:];actualModules:=Str:Obj?[:]
         // No history is supplied to this projection. A fallback would change
         // the available values and fail the complete original result comparison.
-        EnerCubixCockpitEfficiency.attach(prepared,[Str:Obj?][,],boundary,actualReports,actualModules,|Str id->Str:Obj?| {registry.copData(id)})
+        EnerCubixCockpitEfficiency.attach(prepared,[Str:Obj?][,],boundary,actualReports,actualModules,|Str id,Str:Obj? request->Str:Obj?| {registry.copData(id,request)})
         verifyEq(json(actualReports),json(expectedReports));verifyEq(json(actualModules),json(expectedModules))
         report:=registry.read("cop:cop",EnerCubixCockpitReports.copQuery(q,"cop"));verify(report===actualReports["cop:cop"])
+        cq:=EnerCubixCockpitReports.copQuery(q,"cop")
+        [cq.dup.set("metric","cost"),cq.dup.set("to",(b+1hr).toIso),cq.dup.set("asOf",(b+1hr).toIso),cq.dup.set("nodeIds",["d"]),cq.dup.set("dimension","metering"),cq.dup.set("period","day"),cq.dup.set("_cockpitCopId","different")].each |changed|
+        {verifyErr(ArgErr#) {registry.copData("cop",changed)}}
+        verify(registry.copData("cop",cq)["report"]===report)
         verifyErr(ArgErr#) {registry.read("cop:cop",EnerCubixCockpitReports.copQuery(q,"different"))}
-        verifyErr(ArgErr#) {registry.copData("different")}
+        verifyErr(ArgErr#) {registry.copData("different",EnerCubixCockpitReports.copQuery(q,"different"))}
         verifyEq(budget.nativeReads,2);verifyEq(budget.state.unprepared.val,0)
         entries:=EnerCubixMath.maps(registry.diagnostics["entries"])
         verify(!entries.any |entry| {EnerCubixMath.strings(entry["reportRefs"]).contains("cop:cop")},"COP does not fabricate known-usage diagnostics")
@@ -122,7 +126,7 @@ class EnerCubixRegistryCopTest : Test
     [prepared,Str:Obj?["error":true]].each |plan|
     {
       budget:=EnerCubixStreamBudget();registry:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,Str:Obj?["id":"boundary","meterIds":["m"],"sourcePointIds":["p"]].toImmutable,["trend","efficiency"],["mode":"none"],null,[:],budget,[:],["p"],[:],[:],plan.toImmutable)
-      try {verifyEq(registry.keys,["profile-energy"]);verifyEq(budget.nativeReads,0);verifyErr(ArgErr#) {registry.copData("anything")}}
+      try {verifyEq(registry.keys,["profile-energy"]);verifyEq(budget.nativeReads,0);verifyErr(ArgErr#) {registry.copData("anything",EnerCubixCockpitReports.copQuery(q,"anything"))}}
       finally {registry.close}
       verifyEq(budget.state.temporary.val,0)
     }

@@ -22,20 +22,23 @@ class EnerCubixRegistryRuleTest : Test
     sources:=EnerCubixCockpitStream[,]
     try
     {
-      verifyEq(budget.nativeReads,0);verifyErr(ArgErr#) {registry.ruleData("rule")}
+      verifyEq(budget.nativeReads,0);verifyErr(ArgErr#) {registry.ruleData("rule",q)}
       points.keys.sort.each |id| {sources.add(EnerCubixCockpitStream.openCursor(points[id],null,a,b,q,rs,budget,read,registry.planning))}
       (0..<2).each |i| {start:=a+1hr*i;end:=start+1hr;sources.each |source| {source.advance(end)};EnerCubixCockpitStream.withFrames(sources,budget.state) |h,frame| {registry.addFrame(start,end,h,frame)}}
       sources.each |source| {source.close};registry.finish
       calls:=0
-      actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id->Str:Obj?| {calls++;return registry.ruleData(id)})
+      actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id,Str:Obj? request->Str:Obj?| {calls++;return registry.ruleData(id,request)})
       verifyEq(json(actual),json(expected));verifyEq(calls,1)
       evaluation:=EnerCubixMath.maps(actual["evaluations"]).find |e| {e["id"]=="rule"}
       verifyEq(evaluation["status"],"triggered");verifyEq(evaluation["actual"],40f)
+      [q.dup.set("to",(b+1hr).toIso),q.dup.set("from",(a+1hr).toIso),q.dup.set("asOf",(b+1hr).toIso),q.dup.set("nodeIds",["d"]),q.dup.set("dimension","metering"),q.dup.set("period","hour"),q.dup.set("metric","cost"),q.dup.set("categoryIds",["cn"])].each |changed|
+      {verifyErr(ArgErr#) {registry.ruleData("rule",changed)}}
+      verifyEq(registry.ruleData("rule",q)["actual"],40f)
       verifyEq(registry.read("cop:cop",EnerCubixCockpitReports.copQuery(q,"cop"))["kind"],"cop")
       verifyEq(registry.read("energy-flow",(Str:Obj?)flow["request"])["kind"],"energyFlow")
-      verifyErr(ArgErr#) {registry.ruleData("disabled")};verifyErr(ArgErr#) {registry.ruleData("pressure")};verifyErr(ArgErr#) {registry.ruleData("unknown")}
+      verifyErr(ArgErr#) {registry.ruleData("disabled",q)};verifyErr(ArgErr#) {registry.ruleData("pressure",q)};verifyErr(ArgErr#) {registry.ruleData("unknown",q)}
       verifyEq(budget.nativeReads,2);verifyEq(budget.state.unprepared.val,0);verify((Int)registry.diagnostics["returnedCount"]<=1000)
-      facts:=registry.ruleData("rule");registry.close;verify(facts.isEmpty)
+      facts:=registry.ruleData("rule",q);registry.close;verify(facts.isEmpty)
     }
     finally {sources.each |source| {source.close};registry.close}
     verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)

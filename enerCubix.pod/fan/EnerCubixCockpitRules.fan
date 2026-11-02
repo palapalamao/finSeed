@@ -2,7 +2,7 @@
 ** alarm/message is created, and no history beyond the existing plan is read.
 internal class EnerCubixCockpitRules
 {
-  static Str:Obj? project(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? owned,Str:Obj? boundary,Str:Obj? budget,Str snapshotId,|Str->Str:Obj?|? preparedRule := null)
+  static Str:Obj? project(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? owned,Str:Obj? boundary,Str:Obj? budget,Str snapshotId,|Str,Str:Obj?->Str:Obj?|? preparedRule := null)
   {
     evaluations:=[Str:Obj?][,];items:=[Str:Obj?][,]
     if(owned["rulesComplete"] == false) return ["evaluations":[["status":"unavailable","reasonCodes":["RULE_CONFIG_UNREADABLE"]]],"items":items]
@@ -35,7 +35,7 @@ internal class EnerCubixCockpitRules
       else if(p["ruleType"] == "nonWorkingHighUsage")
       {
         if(preparedRule==null) nonWorking(e,p,q,records,histories,boundary,threshold)
-        else e.setAll(preparedRule(p["id"].toStr))
+        else e.setAll(preparedRule(p["id"].toStr,q))
       }
       else {e["reasonCodes"]=["RULE_TYPE_UNSUPPORTED"];return}
       if(e["status"] != "triggered") return
