@@ -13,7 +13,7 @@ export function cockpitSpaceObjects(snapshot:CockpitSnapshot,catalog:Catalog):Co
 }
 export function cockpitSpaceSites(nodes:CockpitSpaceNode[]){
  const sites=nodes.filter(node=>node.nodeKind==='site');
- return sites.map(site=>({site,floors:nodes.filter(node=>node.nodeKind==='floor'&&node.parentId===site.id)})).filter(item=>item.floors.length>0);
+ return sites.map(site=>({site,floors:nodes.filter(node=>node.nodeKind==='floor'&&node.parentId===site.id)}));
 }
 export function cockpitSpaceIssues(snapshot:CockpitSnapshot,node:CockpitSpaceNode){
  const ids=new Set([node.id,node.nativeId,...node.meterIds]);return (snapshot.modules.issues?.data?.items||[]).filter(item=>ids.has(item.objectId)||item.sourceIds.some(id=>node.sourceIds.includes(id)));

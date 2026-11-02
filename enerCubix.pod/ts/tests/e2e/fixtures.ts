@@ -74,3 +74,6 @@ export async function openMoreFilters(page:Page){if(!await page.locator('.advanc
 export async function closeMoreFilters(page:Page){if(await page.locator('.advanced-query-drawer.ant-drawer-open').count())await page.locator('.advanced-query-drawer .ant-drawer-footer .ant-btn').click();await expect(page.locator('.advanced-query-fields')).toBeHidden();}
 export async function checkNode(page:Page,name='测试分表'){await openObjects(page);const node=page.locator('.object-panel .ant-tree-treenode').filter({hasText:name});await node.locator('.ant-tree-checkbox').click();await closeObjects(page);}
 export async function query(page:Page){await closeObjects(page);await closeMoreFilters(page);await page.getByRole('button',{name:/查\s*询/}).click();await expect(page.getByRole('button',{name:'导出当前报表'})).toBeVisible();await expect(page.locator('.report-chart canvas').first()).toBeVisible();}
+
+// P01 keeps infrequent presentation/export actions behind an explicit menu.
+export async function openCockpitActions(page:Page){const menu=page.locator('.cockpit-more-tools');if(await menu.isVisible()&&await menu.getAttribute('open')===null)await menu.locator(':scope>summary').click();}

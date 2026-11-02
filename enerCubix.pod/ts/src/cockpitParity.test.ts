@@ -21,7 +21,7 @@ it('keeps legacy or not-loaded own values missing even with valid child history'
  const snapshot=structuredClone(actual) as unknown as CockpitSnapshot;delete snapshot.modules.space;
  expect(cockpitSpaceObjects(snapshot,catalog).every(node=>node.value===null&&node.reasonCodes.includes('notLoaded'))).toBe(true);
  expect(snapshot.modules.kpis!.data!.values.find(metric=>metric.id==='energy')!.value).toBe(30);
- const objects=cockpitSpaceObjects(snapshot,{...catalog,records:catalog.records.filter(row=>row.id!=='f')});expect(cockpitSpaceSites(objects)).toEqual([]);
+ const objects=cockpitSpaceObjects(snapshot,{...catalog,records:catalog.records.filter(row=>row.id!=='f')});expect(cockpitSpaceSites(objects).map(group=>[group.site.id,group.floors])).toEqual([['s',[]]]);
 });
 it('renders same-object NA, zero and missing distinctly with source evidence in both languages',()=>{
  for(const language of ['zh-CN','en-US']){initializeLocale(language);const snapshot=structuredClone(actual) as unknown as CockpitSnapshot,node=snapshot.modules.space!.data!.nodes.find(node=>node.id==='a')!;

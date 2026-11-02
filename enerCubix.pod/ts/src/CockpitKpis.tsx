@@ -21,11 +21,9 @@ export function CockpitKpis({snapshot,name}:{snapshot:CockpitSnapshot;name:(id:s
     <h3>{cockpitMetricTitle(metric.id)}</h3>
     {metric.id==='auxiliaryEnergy'&&metric.categoryId&&<p className="cockpit-card-category">{name(metric.categoryId)}</p>}
     <p className={metric.id==='energy'?'cockpit-number':'cockpit-card-number'}>{cockpitMetricValue(metric)} <small>{metric.unit==='count'?t('个'):metric.unit}</small></p>
-    <Tag color={['complete','currentState'].includes(metric.valueBasis)?'green':'gold'}>{basis(metric)}</Tag>
-    {metric.id==='cost'&&<p>{t('按当前费率分析估算，非结算账单。')}</p>}
-    {metric.id==='activeAlarms'?<p>{t('状态观察：{0}',metric.stateObservedAt?time(metric.stateObservedAt):t('暂无数据'))}</p>:<p className="cockpit-card-comparison">{cockpitComparisonText(metric)}</p>}
-    {metric.reasonCodes&&metric.reasonCodes.length>0&&<p className="cockpit-card-reasons">{[...new Set(metric.reasonCodes.map(cockpitReasonText))].join(t('；'))}</p>}
-    <details className="cockpit-card-details"><summary>{t('查看指标依据')}</summary>
+    <Tag className="cockpit-card-basis" color={['complete','currentState'].includes(metric.valueBasis)?'green':'gold'}>{basis(metric)}</Tag>
+    {metric.id!=='activeAlarms'&&metric.comparison&&<p className="cockpit-card-comparison">{cockpitComparisonText(metric)}</p>}
+    <details className="cockpit-card-details"><summary>{t('查看指标依据')}</summary>{metric.id==='activeAlarms'&&<p>{t('状态观察：{0}',metric.stateObservedAt?time(metric.stateObservedAt):t('暂无数据'))}</p>}{metric.id==='cost'&&<p>{t('按当前费率分析估算，非结算账单。')}</p>}{!!metric.reasonCodes?.length&&<p>{[...new Set(metric.reasonCodes.map(cockpitReasonText))].join(t('；'))}</p>}
      {metric.comparison&&<dl><dt>{t('本期实际区间')}</dt><dd>{time(metric.comparison.currentRange.from)} — {time(metric.comparison.currentRange.to)}</dd><dt>{t('参照实际区间')}</dt><dd>{time(metric.comparison.referenceRange.from)} — {time(metric.comparison.referenceRange.to)}</dd><dt>{t('本期数值')}</dt><dd>{cockpitMetricValue({value:metric.comparison.current,valueType:metric.comparison.current==null?'null':'number'})} {metric.unit}</dd><dt>{t('参照期数值')}</dt><dd>{cockpitMetricValue({value:metric.comparison.reference,valueType:metric.comparison.reference==null?'null':'number'})} {metric.unit}</dd><dt>{t('两期时长差（秒）')}</dt><dd>{metric.comparison.durationDifferenceSeconds}</dd></dl>}
      {!!metric.comparison?.reasonCodes.length&&<p>{metric.comparison.reasonCodes.map(cockpitReasonText).join(t('；'))}</p>}
      <dl><dt>{t('来源引用')}</dt><dd>{metric.sourceIds.map(name).join('、')||'—'}</dd></dl>

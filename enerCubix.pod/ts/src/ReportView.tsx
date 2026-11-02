@@ -22,17 +22,17 @@ import {dimensionNames,metricNames,type ReportSnapshot} from './types';
 import {forecastModels,forecastStatuses} from './forecast';
 import {comparisonRangeText} from './comparison';
 import dayjs from 'dayjs';
-import {chartOptions,shareChartOptions,loadBandNames,loadBandColors,palette,type AxisBounds} from './chartOptions';
+import {chartOptions,compactChartOptions,shareChartOptions,loadBandNames,loadBandColors,palette,type AxisBounds} from './chartOptions';
 import {isProfileReference,compactReportTime,leakGroups,numberText,profileGroups,profileStats,reportCellText,reportLabel,isReportBusinessKey} from './reportDisplay';
 import {reportQualityText,reportWarnings} from './reportQuality';
 echarts.use([BarChart,LineChart,ScatterChart,PieChart,GridComponent,LegendComponent,TooltipComponent,DataZoomComponent,ToolboxComponent,TitleComponent,MarkLineComponent,CanvasRenderer]);
 function reportCell(snapshot:ReportSnapshot,key:string,value:unknown,context?:Record<string,unknown>){if(key==='normalizationArea'&&value&&typeof value==='object'){const area=value as {value?:number;unit?:string;quality?:string};return reportCellText(snapshot,'value',area.value)+' '+(area.unit||'m²')+'（'+(area.quality?reportQualityText(snapshot,area.quality):t("未知质量"))+'）';}if(key==='counted')return value===true?t("是"):t("否");if(key==='band')return loadBandNames[value as keyof typeof loadBandNames]||cellText(value);if(key==='loadBandsAggregation'&&value==='intervalTotal')return t("查询区间总量，非日均");if(key==='aggregation'&&value==='mean energy for each hour of day')return t("按一天中相同小时的用能求平均");const id=String(context?.nodeId??context?.id??'');return <>{reportCellText(snapshot,key,value,false,context)}{(key==='name'||(key==='nodeId'&&!context?.name))&&<ReportMeterOriginBadge snapshot={snapshot} id={id}/>}</>;}
 function DataRows({rows,snapshot}:{rows:Record<string,unknown>[];snapshot:ReportSnapshot}){const keys=Array.from(new Set(rows.flatMap(row=>Object.keys(row)))).filter(key=>key!=='id'&&key!=='key'&&isReportBusinessKey(key));return <Table size="small" pagination={false} scroll={{x:'max-content'}} rowKey={(row,index)=>String(row.key??row.id??index)} dataSource={rows} columns={keys.map(key=>({key,dataIndex:key,title:reportLabel(snapshot,key),render:(value:unknown,row:Record<string,unknown>)=>reportCell(snapshot,key,value,row)}))}/>;}
-export function ReportChart({snapshot,bounds,shares=false,profileType='bar',colors,dailyColorBy='meter'}:{snapshot:ReportSnapshot;bounds?:AxisBounds;shares?:boolean;profileType?:'bar'|'line';colors?:Record<string,string>;dailyColorBy?:'meter'|'band'}){
+export function ReportChart({snapshot,bounds,shares=false,profileType='bar',colors,dailyColorBy='meter',compact=false}:{compact?:boolean;snapshot:ReportSnapshot;bounds?:AxisBounds;shares?:boolean;profileType?:'bar'|'line';colors?:Record<string,string>;dailyColorBy?:'meter'|'band'}){
  const host=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(!host.current)return;const chart=echarts.init(host.current);
- chart.setOption(shares?shareChartOptions(snapshot.result.extra?.utilityShares as Record<string,unknown>[]||[],true,snapshot.display?.objects):chartOptions(snapshot.result,bounds,{type:profileType,colors,names:snapshot.display?.objects,dailyColorBy,request:snapshot.request}));const resize=new ResizeObserver(()=>chart.resize());resize.observe(host.current);return()=>{resize.disconnect();chart.dispose();};
- },[snapshot,bounds,shares,profileType,colors,dailyColorBy,locale]);
+ const options=shares?shareChartOptions(snapshot.result.extra?.utilityShares as Record<string,unknown>[]||[],true,snapshot.display?.objects):chartOptions(snapshot.result,bounds,{type:profileType,colors,names:snapshot.display?.objects,dailyColorBy,request:snapshot.request});chart.setOption(compact&&!shares?compactChartOptions(options):options);const resize=new ResizeObserver(()=>chart.resize());resize.observe(host.current);return()=>{resize.disconnect();chart.dispose();};
+ },[snapshot,bounds,shares,profileType,colors,dailyColorBy,compact,locale]);
  return <div ref={host} className="report-chart" role="img" aria-label={t("{0}图表，详细数值见下方数据表",shares?t("分项能耗占比"):snapshot.title)}/>;
 }
 function ProfileOverview({snapshot,exporting}:{snapshot:ReportSnapshot;exporting:boolean}){

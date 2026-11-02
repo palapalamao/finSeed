@@ -2005,3 +2005,11 @@ Object.assign(englishMessages,{"实际减期间预算":"Actual minus period budg
 Object.assign(englishMessages,{"查看费用依据":"View cost evidence","已停用":"Disabled","已返回区间":"Returned range"});
 
 Object.assign(englishMessages,{"费用币种无法确认":"Cost currency cannot be confirmed"});
+
+Object.assign(englishMessages,{"FIN 项目：{0}":"FIN project: {0}","结束时间不含 · 快照 {0}":"End exclusive · Snapshot {0}","领导汇报":"Leadership brief","更多操作":"More actions","专业分析":"Professional analysis","查看事项详情":"View issue details","计量边界":"Metering boundary"});
+
+Object.assign(englishMessages,{"直属计量分支（{0} 项）":"Direct metering branches ({0})","总表与子表不重复相加；缺失分支不判为损耗。":"Parent and child meters are not added together; missing branches do not imply loss."});
+
+Object.assign(englishMessages,{"本次总表已有量":"Available parent-meter usage","分表覆盖":"Submeter coverage","{0} / {1} 个直属分表覆盖完整":"{0} / {1} direct submeters have complete coverage","快照未提供完整分表覆盖依据":"Complete submeter coverage evidence is not included","范围视图，不替代总分表覆盖校核":"Scope view; parent/submeter coverage is not established","完整差额":"Complete-period difference","无法判断":"Cannot determine","各计量边界独立展示，不将不同根对象相加。":"Metering boundaries are shown independently; separate roots are not added together."});
+
+Object.assign(englishMessages,{"范围已有量":"Available scope usage"});

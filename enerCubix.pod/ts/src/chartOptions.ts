@@ -9,6 +9,11 @@ export const palette=['#137f7a','#3976ba','#b6842c','#7865af','#60aab3','#bb7463
 export const loadBandNames=localizedRecord(()=>({sharp:t("尖时"),mixed:t("混合时段"),peak:t("峰时"),valley:t("谷时"),flat:t("平时"),unknown:t("未分类")}));
 export const loadBandColors={sharp:'#b94052',mixed:'#7865af',peak:'#dc9f36',valley:'#29a28b',flat:'#1576a7',unknown:'#8896a4'};
 export type AxisBounds=Record<string,{min?:number;max?:number}>;
+/** Compact overview presentation only; series, time coordinates and values are unchanged. */
+export function compactChartOptions(options:EChartsCoreOption):EChartsCoreOption{
+ const legend=Array.isArray(options.series)&&options.series.length>1;
+ return {...options,dataZoom:[],legend:{...(options.legend as object),show:legend,bottom:0},grid:{...(options.grid as object),left:58,top:28,bottom:legend?48:30},yAxis:(options.yAxis as Record<string,unknown>[]).map(axis=>({...axis,splitNumber:3,axisLabel:{...(axis.axisLabel as object),hideOverlap:true}}))};
+}
 export function shareChartOptions(rows:Record<string,unknown>[],groupByNode=false,names:Record<string,string>={}):EChartsCoreOption{
  const groups=new Map<string,typeof rows>();rows.forEach(row=>{const key=`${groupByNode?`${row.nodeId||''} / `:''}${row.categoryId||''} / ${row.unit||''}`;groups.set(key,[...(groups.get(key)||[]),row]);});const entries=Array.from(groups.entries());
  return {color:palette,animation:false,tooltip:{trigger:'item',valueFormatter:(value:unknown)=>`${value}%`},legend:{type:'scroll',bottom:0},series:entries.map(([,items],index)=>({name:[...(groupByNode?[names[String(items[0].nodeId)]||t("计量对象")]:[]),names[String(items[0].categoryId)]||t("能源类型"),String(items[0].unit||'')].filter(Boolean).join(' / '),type:'pie',radius:[entries.length>2?30:45,entries.length>2?65:95],center:[`${(index+.5)*100/entries.length}%`,'45%'],stillShowZeroSum:false,label:{formatter:'{b}: {c}%'},data:items.map(row=>({name:String(row.name||row.utilityName||names[String(row.utilityId)]||t("未指定分项")),value:row.percentage}))}))};
