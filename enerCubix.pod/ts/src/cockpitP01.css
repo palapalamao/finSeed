@@ -17,3 +17,10 @@
 
 @media(min-width:1200px){.cockpit-kpi .cockpit-card-comparison{padding-right:110px}}
 @media(max-width:760px){.cockpit-evidence-grid{grid-template-columns:minmax(0,1fr)}}
+
+.cockpit-reference .cockpit-budget-more{margin:10px 0 0}.cockpit-reference .cockpit-budget-more>summary{min-height:32px;padding:7px 0}.cockpit-budget-more>p{font-size:12px}@media(max-width:760px){.cockpit-reference .cockpit-budget-more>summary{min-height:44px;padding:12px 0}}
+
+.cockpit-budget-compact>h4{margin-top:8px}.cockpit-budget-compact .cockpit-budget-values{gap:8px}.cockpit-budget-compact .cockpit-budget-progress{margin:10px 0 6px}
+.cockpit-reference .cockpit-budget-compact>h4{display:none}.cockpit-reference .cockpit-budget-more{margin-top:4px}
+
+.cockpit-reference .cockpit-budget-compact .cockpit-budget-values>div{padding:6px 0}.cockpit-reference .cockpit-budget-compact .cockpit-budget-progress progress{margin:4px 0 8px}
