@@ -7,6 +7,10 @@ import {serverMessages} from './serverMessages';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 
 describe('FIN user interface language',()=>{
+ it.each(['zh-CN','en-US'])('localizes a failed native history query without disclosing source details for %s',async language=>{
+  const i18n=await import('./i18n');i18n.initializeLocale(language);
+  expect(i18n.serverMessage('cockpitHistoryReadFailed')).toBe(language==='zh-CN'?'历史读取失败，本次查询未生成新快照。请稍后重新查询。':'History could not be read. This query did not produce a new snapshot. Try again later.');
+ });
  it.each(['zh','zh-CN','zh-TW','zh-HK','zh-Hans','zh-Hant','ZH-cn'])('uses Chinese for FIN locale %s',async language=>{
   const {resolveFinLocale}=await import('./i18n');
   expect(resolveFinLocale(language)).toBe('zh-CN');

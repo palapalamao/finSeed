@@ -468,3 +468,6 @@ Object.assign(chineseServerMessages,{"BUDGET_NOT_CONFIGURED":"当前范围未配
 
 Object.assign(serverMessages,{"COST_CURRENCY_INVALID":"The cost currency is invalid or cannot be confirmed.","COST_CURRENCY_MIXED":"Cost currencies differ and cannot be added together.","COST_TARIFF_MISSING":"No tariff with a confirmed cost currency is available."});
 Object.assign(chineseServerMessages,{"COST_CURRENCY_INVALID":"费用币种无效或无法确认。","COST_CURRENCY_MIXED":"费用币种不一致，不能合计。","COST_TARIFF_MISSING":"没有可确认费用币种的适用费率。"});
+
+Object.assign(serverMessages,{cockpitHistoryReadFailed:'History could not be read. This query did not produce a new snapshot. Try again later.'});
+Object.assign(chineseServerMessages,{cockpitHistoryReadFailed:'历史读取失败，本次查询未生成新快照。请稍后重新查询。'});

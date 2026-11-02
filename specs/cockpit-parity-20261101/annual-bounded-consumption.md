@@ -246,3 +246,13 @@ nonWorking consumer 在原生主点小时帧仍活动时读取严格值及闭合
 帧消费后的来源头交接已具备：原view()不能用于已framed游标；新增withHeaderMetadata只在完整消费且无活动帧时返回8项标量/来源ID元数据，回调后立即清头Map及新ID向量，32逻辑单元在构造前准入。不返回prepared cells、样本、清洗诊断或budget，也不恢复过期reader；清洗参数另走既有withCleaningMetadata。专项2方法36检查通过，2391ms（source-header-final-tests.log），含before/active/closed拒绝、普通及清洗模式、回调失败清根、peer占满时拒绝且不改peer、无新增读取。生产方法相同的前一专项3类17方法959检查通过（source-header-green-tests.log）；新增末个测试后未重复其余两类。既有前端cockpitQuery的8项单元测试通过，含查询失败保留原快照上下文（source-session-ui-retention-tests.log），不是浏览器/FIN/PDF验收。本阶段仍未接来源session和最终共同计账。
 
 请求级控制信息也已与点头分开：显式prepared loader可返回至多一条独立_cockpitRequestMeta行（schemaVersion1、diagnostics、preparedBudget及可选streaming/配置观察时间），该行没有pointId，在任何历史元数据/数值解析前移除；普通loader、重复行、附带点字段、无效诊断预算/类型/时间均拒绝。真实diagnostics直连snapshot顶层，Diagnostics.project因此沿用已完成的公平池而不再次采样；budget仅投影为普通证据，不进入公开JSON。空point头下不会伪造源ID、已读窗口或sourceLastObservedAt，streaming可明确为0次读取。功能RED先复现控制行误作历史而抛NullErr，另复现无效诊断Map未被拒绝；字段验证后3类29方法383检查通过，5344ms（request-meta-final-tests.log）。验证前的同一正常接线另含Payload容量3方法通过（request-meta-green-tests.log），后只收紧私有元数据验证，未重复重型容量或全套。UI源码也已确认有“当前保留上次成功快照，范围和时间以此处标注为准。”提示，无需扩大前端修改。本协议仍未实例化真实来源session，外部计划与最终图/REST共同计账、未来范围、native82及实机仍待；默认native未切换。
+
+私有来源 Session 与真实读错边界（源码验证）
+
+新增私有 SourceSession：借用 Root 冻结的消费者计划及点位配置，按统一小时钟推进规范化源窗口，九个模块复用各自主点帧。输出只保留脱离源游标的头信息、清洗参数/计数及公平诊断池；清洗 reportRefs 由实际注册报告与重叠范围生成。空计划、无主点、未启历史、旧辅助归档点及可识别的不支持配置均不读历史；后者沿用原质量，不伪造成功空窗。实际原生工厂与默认 Repo 接线尚未改变。
+
+不可恢复的真实读取异常（首/中/末块）使本次查询整体失败，关闭未发布的结果与源，不重试、不补零；公开只返回 HISTORY_READ_FAILED/cockpitHistoryReadFailed，内部保留原因。包装在 IOErr 中的密度控制及全局 403/409/422/504 恢复原异常实例；不将消费者异常误标为原生读取失败。此真实 I/O 错误策略与旧 prepare 将整源降级 historyReadError 的行为有意不同，不声称异常零差异。
+
+密度夹具最初随分块起点生成不同采样钟，结果为空；改成固定原始分钟序列后，强制二分仍得到 60kWh。随后 RED 实际发现新 Session 漏掉 primaryReadAllowed；补齐后禁止旧辅助源并保留空值。5 类24方法516校验通过（source-session-foundation-tests.log，9992ms），包含全九模块+COP+规则、清洗、空/缺失/不支持、读错及关闭后借用失效。独立快照的质量线索 ID 本来包含新 boundary UUID；新夹具验证原 hash 和 topIds 顺序，再仅按语义比对这些不可重现身份，旧严格回放规范不改变。
+
+前端 i18n 与原快照保留测试共34项通过，TypeScript检查通过。仅新增中英文服务端错误词条，沿用已有“保留上次成功快照”提示。完整套件最新仍是2183fec4；本次仅上述专项。不增加版本、不部署、不重启、不访问浏览器；未来桶、配置工厂及创建时准入、最终投影/freeze/codec/REST共同存活、原生年度82点/双项目/M4/UI/PDF仍待。只读账号按用户要求暂缓。

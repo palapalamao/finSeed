@@ -127,7 +127,15 @@ internal class EnerCubixCockpitRegistry
         if(key=="face-heatmap" || key=="space-summary" || query["kind"]=="cop") return
         spec[key]=["kind":"sourceUsage","grain":"sourceRead","objectIds":query["nodeIds"],"sourceIds":sources(query),"sourceIdsComplete":true,"requestRange":["from":query["from"],"to":query["to"],"asOf":query["asOf"]],"reportRefs":[key]]
       }
-      spec.setAll(cleaningPlan)
+      cleaningPlan.each |entry,key|
+      {
+        if(entry["kind"]!="cleaningEvents" || entry["requestRange"] isnot Map) throw ArgErr("cockpitRegistryCleaningPlan")
+        scratch.hold(8+entry.size+3*queries.size)
+        range:=(Map)entry["requestRange"];a:=DateTime.fromIso(range["from"].toStr);b:=DateTime.fromIso(range["to"].toStr)
+        refs:=queries.keys.findAll |ref|
+        {query:=queries[ref];return ref!="face-heatmap" && ref!="space-summary" && query["kind"]!="cop" && DateTime.fromIso(query["from"].toStr)<b && DateTime.fromIso(query["to"].toStr)>a}
+        spec[key]=entry.dup.set("reportRefs",refs.sort)
+      }
       scratch.hold(24+20*flowMeters.size)
       flowMeters.each |m|
       {id:=m["id"].toStr;point:=m["pointId"] as Str;spec[flowPeriods[id]]=["kind":"coveragePeriods","grain":"hour","objectIds":[id],"sourceIds":point==null ? Str[,] : [point],"sourceIdsComplete":true,"requestRange":["from":q["from"],"to":q["to"],"asOf":q["asOf"]],"reportRefs":["energy-flow"]]}
@@ -270,6 +278,14 @@ internal class EnerCubixCockpitRegistry
       flowWork?.cleaning(pointId,from,to,meta,pool.diagnosticId(key))
     }
     catch(Err e) {failure=e;throw e}
+  }
+  ** A recognizable source configuration failure has no cleaning report in the
+  ** original reader. Seal the declared group without fabricating one.
+  Void omitCleaning(Str pointId,DateTime from,DateTime to)
+  {
+    check;key:=EnerCubixCockpitStream.diagnosticKey(pointId,from,to)
+    if(done || !cleaningKeys.contains(key) || attachedCleaning.containsKey(key)) throw ArgErr("cockpitRegistryCleaningPlan")
+    pool.seal(key,true);metadata.hold(1);attachedCleaning[key]=true
   }
   Str:Obj? read(Str key,Str:Obj? query)
   {
