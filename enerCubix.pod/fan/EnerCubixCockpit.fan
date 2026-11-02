@@ -4,9 +4,11 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null)
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:])
   {
     input=(Str:Obj?)input.toImmutable
+    ownedConfig=(Str:Obj?)ownedConfig.toImmutable
+    snapshotId:=Uuid().toStr
     readClock:=clock ?: |->DateTime| {DateTime.now}
     request:=query(input,project,tz,now)
     deadline?.check
@@ -133,6 +135,18 @@ class EnerCubixCockpit
         v["comparison"]=EnerCubixCockpitMetrics.comparisonValue(v,previous,comparison)
       }
     }
+    cost:=values.find |v| {v["id"] == "cost"} ?: Str:Obj?[:]
+    budgetBoundary:=EnerCubixCockpitBudget.physicalBoundary(boundary);budgetCost:=cost;canonical:=Str:Obj?[:]
+    if((kpis || enabled.contains("issues")) && !EnerCubixMath.maps(ownedConfig["budgets"]).isEmpty)
+    {
+      try {canonical=EnerCubixCockpitBudget.canonical(request,frozen,histories,boundary,reports);budgetBoundary=(Map)canonical["boundary"];budgetCost=(Map)canonical["cost"]}
+      catch(Err e) {if(!EnerCubixCockpitBudget.localError(e)) throw e;budgetCost=["value":null,"quality":"metricError"]}
+    }
+    Str:Obj? budgetResult:=[:]
+    try {budgetResult=EnerCubixCockpitBudget.project(request,frozen,ownedConfig,budgetBoundary,budgetCost)}
+    catch(Err e) {if(!EnerCubixCockpitBudget.localError(e)) throw e;budgetResult=EnerCubixBudgetMath.unavailable("BUDGET_INTERNAL_ERROR")}
+    if(budgetCost["quality"] == "metricError") budgetResult=EnerCubixBudgetMath.unavailable("BUDGET_INTERNAL_ERROR")
+    budgetResult.setAll(["comparisonFallback":cost["comparison"],"costReportRef":canonical.isEmpty ? "profile-cost" : "budget-canonical-cost","costBoundaryBasis":"canonicalOwnDeviceFrontier","viewAccountingQuality":boundary["reasonCode"],"costInputs":["request":canonical["request"],"meterIds":budgetBoundary["meterIds"],"sourcePointIds":budgetBoundary["sourcePointIds"],"valueBasis":budgetCost["valueBasis"],"coverage":budgetCost["coverage"],"sourceIds":budgetCost["sourceIds"]]])
     observation:=EnerCubixCockpitIssues.observe(kpis || enabled.contains("issues") ? activeEvents : null,ctx,ids,category,boundary,readClock,project)
     events:=EnerCubixCockpitMetrics.events(observation,category,boundary)
     carbon:=values.find |v| {v["id"] == "co2"}
@@ -141,7 +155,7 @@ class EnerCubixCockpit
     status:=complete != null ? "ok" : (known != null ? "partial" : "unavailable")
     if (values.any |v| {v["completeValue"] == null}) status=values.any |v| {v["value"] != null} ? "partial" : "unavailable"
     modules:=Str:Obj?[:]
-    if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request)]]
+    if (enabled.contains("kpis")) modules["kpis"]=["status":status,"boundaryId":boundaryId,"data":["values":values,"conclusions":EnerCubixCockpitMetrics.conclusions(values,events,request),"budget":budgetResult]]
     if (enabled.contains("trend")) modules["trend"]=["status":coverage.isEmpty ? "empty" : (coverage.all |c| {c["complete"] == true} ? "ok" : "partial"),"boundaryId":boundaryId,"data":["reportRef":"profile-energy"]]
     EnerCubixCockpitFaces.attach(enabled,request,frozen,histories,boundary,reports,modules,ctx)
     deadline?.check
@@ -163,12 +177,18 @@ class EnerCubixCockpit
     }
     if (enabled.contains("issues"))
     {
-      try {modules["issues"]=EnerCubixCockpitIssues.project(observation,events,values,request,boundary,ctx)}
+      try
+      {
+        clues:=EnerCubixCockpitRules.project(request,frozen,histories,ownedConfig,budgetBoundary,budgetResult,snapshotId)
+        modules["issues"]=EnerCubixCockpitIssues.project(observation,events,values,request,boundary,ctx,clues)
+      }
       catch (EnerCubixHttpErr e) {throw e}
-      catch (Err e) {modules["issues"]=EnerCubixCockpitFlow.error}
+      catch (Err e) {if(!EnerCubixCockpitBudget.localError(e)) throw e;modules["issues"]=EnerCubixCockpitFlow.error}
     }
     config:=EnerCubixCockpitMetrics.configuration(ctx,ids,auxiliary == null ? [category] : [category,auxiliary])
     config=config.dup.addAll(EnerCubixMath.maps(flow["configuration"])).addAll(EnerCubixMath.maps(efficiency["configuration"])).unique.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
+    ownedRefs:=kpis || enabled.contains("issues") ? EnerCubixMath.maps(ownedConfig["budgets"]).dup.addAll(EnerCubixMath.maps(ownedConfig["rules"])) : [Str:Obj?][,]
+    config.addAll(ownedRefs)
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
@@ -202,7 +222,7 @@ class EnerCubixCockpit
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
     if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
-    snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":Uuid().toStr,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
+    snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":snapshotId,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
     deadline?.check

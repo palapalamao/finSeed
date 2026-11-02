@@ -61,7 +61,7 @@ internal class EnerCubixCockpitIssues
   static Bool active(Str:Obj? event)
   {event["nativeActive"] == true || (event["nativeActive"] == null && event["recoveredAt"] == null && event["nativeRecoveredAt"] == null)}
 
-  static Str:Obj? project(Str:Obj? observation, Str:Obj? eventMetric, [Str:Obj?][] values, Str:Obj? request, Str:Obj? boundary, EnerCubixContext ctx)
+  static Str:Obj? project(Str:Obj? observation, Str:Obj? eventMetric, [Str:Obj?][] values, Str:Obj? request, Str:Obj? boundary, EnerCubixContext ctx, Str:Obj? clues := [:])
   {
     items:=[Str:Obj?][,];observed:=observation["stateObservedAt"] as Str
     EnerCubixMath.maps(observation["episodes"]).findAll |e| {active(e) && e["nativeAlarmMissing"] != true}.each |e|
@@ -91,6 +91,7 @@ internal class EnerCubixCockpitIssues
       if (value["id"] == "energy") item["evidenceTarget"]=evidence(EnerCubixMath.strings(request["nodeIds"]),item["categoryId"].toStr,request["from"].toStr,request["to"].toStr,request["asOf"].toStr,request["dimension"].toStr)
       items.add(item)
     }
+    items.addAll(EnerCubixMath.maps(clues["items"]))
     items.sort |a,b->Int|
     {
       kinds:=["energyAlarm","ruleClue","dataQuality"]
@@ -107,7 +108,7 @@ internal class EnerCubixCockpitIssues
     }
     reasons:=EnerCubixMath.strings(observation["reasonCodes"])
     eventScope:=Str:Obj?["basis":"selectedObjectsAndEffectiveMeters","objectIds":request["nodeIds"],"meterIds":boundary["meterIds"],"categoryId":((List)request["categoryIds"]).first]
-    return ["status":!reasons.isEmpty ? "partial" : (items.isEmpty ? "empty" : "ok"),"boundaryId":boundary["id"],"reasonCodes":reasons,"data":["stateObservedAt":observed,"items":items,"total":items.size,"topIds":items.map |i->Str| {i["id"].toStr}[0..<items.size.min(3)],"activeEventCount":eventMetric["value"],"eventScope":eventScope,"messageCenterTarget":["kind":"messages"]]]
+    return ["status":!reasons.isEmpty ? "partial" : (items.isEmpty ? "empty" : "ok"),"boundaryId":boundary["id"],"reasonCodes":reasons,"data":["stateObservedAt":observed,"items":items,"total":items.size,"topIds":items.map |i->Str| {i["id"].toStr}[0..<items.size.min(3)],"activeEventCount":eventMetric["value"],"eventScope":eventScope,"messageCenterTarget":["kind":"messages"],"ruleEvaluations":clues["evaluations"] ?: [Str:Obj?][,]]]
   }
 
   private static Str:Obj? evidence(Str[] ids, Str category, Str from, Str to, Str asOf, Str dimension)

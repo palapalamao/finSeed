@@ -62,7 +62,9 @@ class EnerCubixRepo
       return sources[id]
     }
     projected=EnerCubixMeterOrigin.decorate(projected,readSource,|Ref ref->Dict?| { readSource(ref.id) })
-    return ["version":EnerCubixRepo#.pod.version.toStr, "project":cx.proj.name, "user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
+    owned:=ownedSnapshot
+    refs:=EnerCubixMath.maps(owned["budgets"]).dup.addAll(EnerCubixMath.maps(owned["rules"])).findAll |r| {r["validation"] != "invalid"}.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
+    return ["version":EnerCubixRepo#.pod.version.toStr, "project":cx.proj.name, "projectRef":cx.proj.id.id,"cockpitConfigRefs":refs,"user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
   }
 
   Bool nativeModel() { EnerCubixNativeEquipRepo(this).active }
@@ -144,6 +146,7 @@ class EnerCubixRepo
     prev := stored(id)
     if (prev["enerCubixKind"] == "cleaningProfile") return EnerCubixCleaningRepo(this).remove(id,mod)
     checkMod(prev,mod)
+    if(ownedStore.referencesId(id)) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigReferenced")
     if (nativeModel && prev["enerCubixKind"] == "group") throw ArgErr("旧分组供历史报表兼容使用，不可删除")
     if (["job","alarm"].contains(prev["enerCubixKind"])) throw ArgErr("任务和报警记录应保留以供追溯")
     EnerCubixConfig.canDelete(id, prev.has("equip") ? all.findAll |r| { r["kind"] != "nativePoint" && r["nativeReadonly"] != true } : all)
@@ -214,6 +217,7 @@ class EnerCubixRepo
       plan:=EnerCubixTreePlan.deletion(deleteScope,ids)
       selected:=EnerCubixMath.maps(plan["records"])
       selected.each |r| { EnerCubixNativeSpace.mustEditable(r["id"] as Str,all) }
+      if(selected.any |r| {ownedStore.referencesId(r["id"].toStr)}) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigReferenced")
       rev:=iso(revision?.get("mod")) ?: ""
       if (action == "previewDelete")
       {
@@ -417,6 +421,8 @@ class EnerCubixRepo
       now:=DateTime.now
       tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
       prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
+      owned:=ownedSnapshot
+      owned["modelComplete"]=true;owned["modelRecords"]=prepared["scopeRecords"]
       all:=([Str:Obj?][])prepared["records"]
       if (EnerCubixMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
       normalized:=input.dup
@@ -425,11 +431,30 @@ class EnerCubixRepo
       {
         return EnerCubixCockpitIssues.readableEvents(EnerCubixNativeAlarms(this).list,cx.proj.name) |id->Bool|
         {source:=cx.db.readById(Ref(id),false);return source != null && cx.canRead(source)}
-      },null,deadline)
+      },null,deadline,owned)
       if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
       return result
     }
     finally {EnerCubixCockpitGate.leave(cx.proj.name,cx.user.username)}
+  }
+
+  [Str:Obj?] cockpitBudgets() {mustRead;return ownedStore.list("budget").set("projectRef",cx.proj.id.id)}
+  [Str:Obj?] saveCockpitBudget(Str:Obj? body) {mustWrite;return ownedStore.save("budget",body)}
+  [Str:Obj?] deleteCockpitBudget(Str:Obj? body) {mustWrite;checkOwnedDelete(body);return ownedStore.remove("budget",body["id"].toStr,body["mod"])}
+  [Str:Obj?] cockpitRuleProfiles() {mustRead;return ownedStore.list("rule").set("projectRef",cx.proj.id.id)}
+  [Str:Obj?] saveCockpitRuleProfile(Str:Obj? body) {mustWrite;return ownedStore.save("rule",body)}
+  [Str:Obj?] deleteCockpitRuleProfile(Str:Obj? body) {mustWrite;checkOwnedDelete(body);return ownedStore.remove("rule",body["id"].toStr,body["mod"])}
+  [Str:Obj?] cockpitConfigAudit(Str id) {mustRead;return ownedStore.history(id)}
+  private Void checkOwnedDelete(Str:Obj? b) {if(b.keys.any |k| {k != "id" && k != "mod"} || b["id"] isnot Str || b["mod"] isnot Str) throw ArgErr("cockpitConfigFields")}
+  private EnerCubixCockpitConfigStore ownedStore()
+  {EnerCubixCockpitConfigStore(cx.db,cx.proj.name,cx.proj.id,cx.user.username,cx.user.isAdmin,|Dict r->Bool| {cx.canRead(r)},|Dict r->Bool| {cx.canWrite(r)})}
+  private Str:Obj? ownedSnapshot()
+  {
+    before:=cx.db.readById(Ref("enerCubix-config-revision"),false)
+    store:=ownedStore;b:=store.list("budget");r:=store.list("rule")
+    after:=cx.db.readById(Ref("enerCubix-config-revision"),false)
+    if(before?.get("mod") != after?.get("mod")) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigConflict")
+    return ["projectRef":cx.proj.id.id,"budgets":b["records"],"budgetsComplete":b["complete"],"rules":r["records"],"rulesComplete":r["complete"]]
   }
 
   ** Existing report and cockpit share native mapping and configuration preparation.
@@ -448,19 +473,28 @@ class EnerCubixRepo
     request.remove("leakSegment")
     request.remove("_comparisonScope")
     if (nativeModel) request=EnerCubixNativeEquip.request(request,EnerCubixNativeEquipRepo(this).mapping)
-    all:=[Str:Obj?][,]
+    all:=[Str:Obj?][,];scopeRecords:=[Str:Obj?][,]
     if (cockpit)
     {
       source:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
       all=EnerCubixNativeSpace.load(cx).project(EnerCubixCockpitEfficiency.visible(source.findAll |r| {r["_comparisonReadable"] != false},source))
       EnerCubixCockpit.guardVisibleScope(request,all,source)
+      // Private completeness proof; never serialized. Preserve hidden/unplaced
+      // members so a readable subset cannot masquerade as a project budget.
+      index:=Str:[Str:Obj?][:];source.each |r| {index[r["id"].toStr]=r};all.each |r| {index[r["id"].toStr]=r}
+      scopeRecords=index.vals.map |r->[Str:Obj?]|
+      {
+        out:=r.dup;pointId:=r["pointId"] as Str
+        if(pointId != null) {point:=cx.db.readById(Ref(pointId),false);if(point == null || !cx.canRead(point)) out["_comparisonPointReadable"]=false}
+        return out
+      }
     }
     else all=input["perArea"] == true || ((input["dimension"] == "space" || input["scopeDimension"] == "space") && input["spaceSource"] == "fin") ? liveRecords : records
     all=EnerCubixNativeEquipRepo(this).validateRead(all)
     if (request["kind"] == "energyFlow") all=flowRecords(all)
     if (EnerCubixComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
     request=EnerCubixEngine.flowScope(request,all)
-    return ["request":request,"records":all]
+    return ["request":request,"records":all,"scopeRecords":scopeRecords]
   }
 
   private [Str:Obj?][] flowRecords([Str:Obj?][] visible)
@@ -647,7 +681,7 @@ class EnerCubixRepo
     ids:=after.map |r->Str| { r["id"].toStr }
     candidate:=all.findAll |r| { !ids.contains(r["id"]) }.dup.addAll(before)
     removed:=ids.findAll |key| { !before.any |r| { r["id"] == key } }
-    removed.each |key| { EnerCubixConfig.canDelete(key,candidate) }
+    removed.each |key| {if(ownedStore.referencesId(key)) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigReferenced");EnerCubixConfig.canDelete(key,candidate)}
     candidate.findAll |r| { !["job","alarm"].contains(r["kind"]) }.each |r| { EnerCubixConfig.validate(r,candidate) }
     diffs:=after.map |r->Diff|
     {
