@@ -167,3 +167,13 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 专项5类88方法2455校验通过，24255ms（shared-catalog-final-tests.log）。1000无关点+三view的新容器图下界21061，model准入23122，峰24102；81焦点+18主点+1000catalog+24h含真实新model后的私有联合峰144530，输出图下界15228、输出准入74087、model23513，非之前借入目录峰。实际捕获main的profile9顶层+5extra/summary三组/热图2328格209排除日均等冻结旧结果；含model峰109365/29421/55882，385回调/12094捕获样本、raw691、unprepared0、关闭raw/temporary0，有限35源元数据仍计账，model关闭前23838/23838/23832。无FIN I/O。默认8必需provenance与12报告59实有组仍相等，原缺省flow coverage保留，仅periodsCaptureId归一化。
 
 证据shared-catalog-evidence.json/native-parity.json/default-parity.json，冻结离线包shared-catalog-offline-test.pod SHAF19946408CA33078A11591679C36F7C9951AC21E32D572333FED31FA816C4934。本增量未重复完整套件，最近完整93类730方法261166校验明确对应d9f40154。原冻结请求目录作为明确借入输入，图遍历仍只是新容器下界，不作JVM heap证明。尚未将全九模块注册及公平1000诊断接通；flow/COP的特殊记录集不能未经兼容性证明便套用同一规范化目录。仍无部署/默认切换，原保护不放宽，只读账号继续暂缓。
+
+请求级诊断池私有核心与报告/清洗适配已接，尚未接默认9模块调度。所有group在IO前声明；来源读数及嵌套区间、清洗、校核时段都按行计入同一1000上限，样本图与描述图深度detach并在复制前准入；每个样本有独立owner，淘汰尾部后清图、释放自身额度。后到组可取回超额组尾样本，但捐出整个parent+children后不得低于接收组当前权重，修正了确定排序暴露的饥饿/过量淘汰用例，没有放松原公平断言。采样可能不连续，returnedRange仅为边界，不等于完整覆盖；父切片再次裁剪使用各自opaque ID，保留上游与本包截断原因及未知计数。
+
+已复现“提前完成报告的截断状态被后到组淘汰后失真”的功能RED，改为登记envelope，到所有group seal后冻结并回填最终标记，移除_capturePending；输出owner过期时禁止冻结。报告开启池后不再保留各自1000条evidence Map，关闭报告也不清池拥有的行。清洗仅保留全量计数和物理计算，事件采样在生成时进入同池，拒绝的简单事件不构造副本；原每source副本保持为空。普通whole准备不能带此池，未声明源/foreign budget在IO前拒绝。最终清洗标记通过borrowed metadata hook在池冻结后读取，再由调用方另行拥有快照；这不是新的历史事实库。
+
+本批精确源码完整97类749方法266054校验通过，296789ms（diagnostic-full-fantom.log），旧显式1800秒容量用例不作为原生30秒证明。18源100小时两个真实消费者的profile+daily全summary/series/rows/warnings/coverage/details/loadBands等原整段，联合峰123044/raw1457、36回调/1818样本、unprepared0、关闭temp/raw0，有限108元数据仍计账。两源20小时管理清洗混合有效/异常区间：各已有量独立预期400、各400拒绝事件，全业务组等原prepare+Engine，联合峰48313/raw4806、2回调/2402样本、unprepared0、关闭temp/raw0，有限12元数据仍计账。三类9方法4720专项在最终no-read guard之前通过，guard已包含本轮完整套件。
+
+捕获真实main的私有单profile+五源清洗离线回放（非FIN IO）：9必需顶层+5extra业务组等冻结旧值，诊断总1000=897来源读数+98区间+5清洗；联合峰140113/raw691、385回调/12094捕获样本、unprepared0，关闭temp/raw0，有限30源元数据仍计账（旧5条单独清洗采样改由池owner持有）。默认整包8必需provenance+12报告60槽59实有组仍等原结果，原缺省能流coverage保留，仅periodsCaptureId归一化。证据diagnostic-pool-evidence.json/native-parity.json/default-parity.json；冻结离线包diagnostic-pool-offline-test.pod SHA9D1D794290F3B0DAC582E01FCF0618A6FBB2047EA6876C227FFFF9D3E189EB4A。
+
+剩余：实际全模块metadata-driven注册及完整客户端诊断描述、flow periods/COP/规则适配、最终输出/codec同时存活准入及现场82源年度；不得用空历史演算来伪造计划。当前原默认/安装不变，FIN site年度422尚未以新候选解决；只读账号按用户暂缓，浏览器/PDF仍保留既定验证边界。

@@ -3,10 +3,13 @@
 internal class EnerCubixReportConsumer
 {
   new make(EnerCubixContext ctx,EnerCubixReport report,EnerCubixLineCursor[] cursors,
-    DateTime from,DateTime to,Str gran,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output)
+    DateTime from,DateTime to,Str gran,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,EnerCubixCockpitCapture? diagnostics := null,Str? diagnosticKey := null)
   {
     if(!report.acceptsFrames || !report.ownedFrameCatalog(state) || state === output || state.budget !== output.budget || !ctx.ownedCatalog(state.budget) || cursors.any |c| {c.watermark != from || !c.line.ticks.isEmpty}) throw ArgErr("reportConsumerPlan")
     if(report.summaryFrames && cursors.any |c| {c.line.ratio || c.line.gauge || c.line.reference}) throw ArgErr("summaryFrameLine")
+    if((diagnostics==null)!=(diagnosticKey==null) || (diagnostics!=null && (report.summaryFrames || diagnostics.budget!==state.budget))) throw ArgErr("reportDiagnosticPlan")
+    diagnostics?.expect(diagnosticKey,"sourceUsage")
+    this.diagnostics=diagnostics;this.diagnosticKey=diagnosticKey
     this.ctx=ctx;this.report=report;this.cursors=cursors.dup;this.to=to;this.at=from;this.output=output
     state.watch |->Void| {closeState};state.hold(20+5*cursors.size)
     definitions:=EnerCubixLine[,]
@@ -16,6 +19,7 @@ internal class EnerCubixReportConsumer
       definitions.each |EnerCubixLine line| {if(line.outputOwnsArea) EnerCubixArea.clearResult(line.normalizationArea);line.consumedTotals?.clear;line.consumedTotals=null}
       definitions.clear;if(!sharedBorrowed) borrowed.clear
     }
+    diagnostics?.bind(output)
     if(ctx.sharedCatalog!=null) {ctx.sharedCatalog.bind(output);borrowed=ctx.sharedCatalog.protectedRoots;sharedBorrowed=true}
     ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
     // Only new DTO containers are reserved here. The frozen input catalog is
@@ -69,6 +73,8 @@ internal class EnerCubixReportConsumer
   private Str:Obj? result := [:]
   private Obj[] borrowed := [,]
   private Bool sharedBorrowed := false
+  private EnerCubixCockpitCapture? diagnostics
+  private Str? diagnosticKey
   private EnerCubixValue[] frozenMeters := [,]
   private Int finishScratch := 0
   private Int readCount := 0
@@ -139,13 +145,18 @@ internal class EnerCubixReportConsumer
         if(!working.isEmpty) workingData[line.id]=working[i].finish
       }
       meters.each |fold,key| {output.hold(6+fold.sourceCount);value:=fold.finish;totals[key]=value;frozenMeters.add(value)}
-      omitted:=readCount>evidence.size || emptyOmitted || unpreparedOmitted
-      output.hold(14+evidence.size)
-      captured:=evidence.vals
+      captured:=diagnostics==null ? evidence.vals : diagnostics.rows(diagnosticKey)
+      omitted:=readCount>captured.size || emptyOmitted || unpreparedOmitted
+      output.hold(14+(diagnostics==null ? evidence.size : 0))
       // capture already enforces the report-wide child limit. Reuse those owned
       // maps instead of making a second shallow map/list graph with evidence().
       known:=Str:Obj?["basis":"closedSourceIntervals","sourceUsage":captured,"detailsTruncated":omitted || captured.any |r| {r["detailsTruncated"] == true}]
-      if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
+      if(diagnostics!=null)
+      {
+        diagnostics.knownEnvelope(diagnosticKey,known,output,readCount,emptyOmitted,unpreparedOmitted)
+        diagnostics.seal(diagnosticKey,emptyOmitted || unpreparedOmitted)
+      }
+      else if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
       scratch:=EnerCubixPreparedOwner(output.budget)
       try
       {
@@ -165,6 +176,7 @@ internal class EnerCubixReportConsumer
     reads.each |row|
     {
       readCount++
+      if(diagnostics!=null) {diagnostics.put(diagnosticKey,row);return}
       if(evidence.size>=1000) return
       intervals:=EnerCubixMath.maps(row["intervals"]);keep:=intervals.size.min((1000-detailCount).max(0))
       // Admit the complete detached graph before duplicating borrowed maps.
@@ -198,6 +210,7 @@ internal class EnerCubixReportConsumer
   {
     if(value isnot Map && value isnot List) return
     if(borrowed.any |item| {item === value}) return
+    if(diagnostics?.protectedRoots?.any |item| {item===value} == true) return
     // Clear before visiting children: repeated aliases and cycles terminate,
     // without mutating configuration containers borrowed from the catalog.
     if(value is Map) {children:=((Map)value).vals;((Map)value).clear;children.each |child| {dropGraph(child)}}
@@ -211,6 +224,6 @@ internal class EnerCubixReportConsumer
   {
     dropGraph(result);dropGraph(evidence)
     frozenMeters.each |value| {if(!value.sources.isEmpty) value.sources.clear;value.value=null;value.quality="ownerExpired"}
-    frozenMeters.clear;periods.clear;closed=true
+    frozenMeters.clear;periods.clear;diagnostics=null;diagnosticKey=null;closed=true
   }
 }

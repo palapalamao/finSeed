@@ -6,6 +6,7 @@ using skyarcd
 internal class EnerCubixCockpitStream
 {
   static Str key(DateTime a, DateTime b) { "${a.ticks}|${b.ticks}" }
+  internal static Str diagnosticKey(Str id,DateTime from,DateTime to) {"cleaning|$id|${from.ticks}|${to.ticks}"}
 
   static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs)
   {
@@ -20,6 +21,7 @@ internal class EnerCubixCockpitStream
   static [Str:Obj?][] prepare(Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs,
     |Dict,Span,|HisItem|->Void| read, EnerCubixStreamBudget budget)
   {
+    if(budget.diagnosticCapture!=null) throw ArgErr("diagnosticsRequireCursorFrames")
     if(budget.cursorActive) throw ArgErr("cursorBudgetAlreadyActive")
     out:=[Str:Obj?][,]
     ranges:=EnerCubixMath.maps(request["_cockpitRanges"])
@@ -345,6 +347,11 @@ internal class EnerCubixCockpitStream
     queryEnds=queries.map |q->DateTime| {end:=DateTime.fromIso(q["to"].toStr);return end < cutoff ? end : cutoff}.unique
     cleaned=point["hisFunc"] == "enerCubixCleanHis" && request["raw"] != true
     if (cleaned && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
+    if(budget.diagnosticCapture!=null)
+    {
+      if(budget.diagnosticCapture.budget!==budget.state) throw ArgErr("sourceDiagnosticBudget")
+      if(cleaned) {diagnosticGroup=diagnosticKey(point.id.id,this.from,this.to);budget.diagnosticCapture.expect(diagnosticGroup,"cleaningEvents")}
+    }
     modes:=records.findAll |r| {r["pointId"] == point.id.id && r["historyMode"] != null && r["historyMode"] != "auto"}.map |r->Str| {r["historyMode"].toStr}.unique
     if (modes.size > 1) throw ArgErr("Conflicting EnerCubix history modes")
     mode=modes.first ?: (point.has("hisTotalized") ? "cumulative" : (point["hisMode"]?.toStr == "consumption" ? "interval" : (point["hisMode"]?.toStr ?: "sampled")))
@@ -381,6 +388,7 @@ internal class EnerCubixCockpitStream
   private HisItem[] raw := [,]
   private EnerCubixInterval[] intervals := [,]
   private [Str:Obj?][] diagnostics := [,]
+  private Str? diagnosticGroup
   private Str:Obj? reads := [:]
   private [Str:Obj?][] emptyDomains := [,]
   private Str:Obj? meta
@@ -532,13 +540,21 @@ internal class EnerCubixCockpitStream
     else if (d["emitted"] == true) increment("rejectedCount")
     if (d["reason"] == "removedNA") increment("removedNACount")
     if (d["substituted"] == true) increment("substitutedCount")
-    if (diagnostics.size < 1000)
+    capture:=cursorMode ? budget.diagnosticCapture : null
+    if(capture!=null && !capture.canPutSimple(diagnosticGroup)) {capture.skipSimple(diagnosticGroup);return}
+    if (capture!=null || diagnostics.size < 1000)
     {
+      scratch:=capture==null ? null : EnerCubixPreparedOwner(budget.state)
+      try
+      {
+      scratch?.hold(32+2*d.size)
       event:=EnerCubixHistory.nativeDetail(d).setAll(["pointId":point.id.id,"unit":point["unit"],"profileId":meta["profileId"],"profileVersion":meta["profileVersion"],"parameters":meta["parameters"]])
       reason:=d["reason"].toStr
       event["rule"]=reason == "rollover" || reason == "rolloverOutOfRange" ? "hisTotalizedRollover" : (["deltaMin","deltaMax","derivMin","derivMax","timeMax"].contains(reason) ? reason : null)
-      if(cursorMode) budget.state.reserveOwned(1)
-      diagnostics.add(event)
+      if(capture!=null) capture.put(diagnosticGroup,event)
+      else {if(cursorMode) budget.state.reserveOwned(1);diagnostics.add(event)}
+      }
+      finally {scratch?.close}
     }
   }
 
@@ -671,11 +687,25 @@ internal class EnerCubixCockpitStream
     out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":lastObserved?.toIso]
     if (cleaned)
     {
-      meta["details"]=diagnostics;meta["detailsTruncated"]=eventCount > diagnostics.size
-      meta["summary"]=["filteredCount":filtered,"substitutedCount":substituted,"naCount":naCount,"intervalCount":meta["outputCount"],"coverage":validTicks.toFloat/(to-from).ticks.toFloat]
+      refreshCleaningMeta
       out["cleaning"]=meta
     }
     return out
+  }
+  ** Borrowed counters/configuration only. Call after the global pool freezes to
+  ** read final truncation flags; retaining a snapshot requires caller ownership.
+  internal Void withCleaningMetadata(|Str:Obj?| consume)
+  {
+    if(!cursorMode || cursorFrameActive || !cleaned) throw ArgErr("sourceCleaningMetadata")
+    refreshCleaningMeta;consume(meta)
+  }
+  private Void refreshCleaningMeta()
+  {
+    capture:=cursorMode ? budget.diagnosticCapture : null
+    details:=capture==null ? diagnostics : capture.rows(diagnosticGroup)
+    meta["details"]=details;meta["detailsTruncated"]=eventCount>details.size
+    if(capture!=null && eventCount>details.size) {meta["detailsCaptureId"]=capture.captureId(diagnosticGroup);meta["detailsTruncationReason"]="snapshotDiagnosticBudget"}
+    meta["summary"]=["filteredCount":filtered,"substitutedCount":substituted,"naCount":naCount,"intervalCount":meta["outputCount"],"coverage":validTicks.toFloat/(to-from).ticks.toFloat]
   }
 }
 
@@ -687,6 +717,7 @@ internal class EnerCubixStreamBudget
   new make(Int blockLimit := 50000, Int heldLimit := 200000, Int scanLimit := 20000000, Duration timeout := 30sec, EnerCubixCockpitDeadline? deadline := null)
   {this.blockLimit=blockLimit;this.heldLimit=heldLimit;this.scanLimit=scanLimit;this.timeout=timeout;state=EnerCubixPreparedBudget(deadline ?: EnerCubixCockpitDeadline(timeout))}
   EnerCubixPreparedBudget state
+  EnerCubixCockpitCapture? diagnosticCapture
   Int blockLimit
   Int heldLimit
   Int scanLimit
