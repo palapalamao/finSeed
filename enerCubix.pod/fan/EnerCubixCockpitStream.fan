@@ -293,7 +293,10 @@ internal class EnerCubixCockpitStream
       }
       values[name]=["strict":["value":strict.value,"quality":strict.quality],"known":known]
     }
-    if(values.vals.all |v| {emptyPair((Map)v)}) emptyUntil(end)
+    // A closed interval crossing an hour can have no attributed usage there.
+    // Keep its strict incompleteInterval state distinct from missing history.
+    qualities:=values.vals.map |v->Str| {((Map)((Map)v)["strict"])["quality"].toStr}.unique
+    if(qualities.size == 1 && values.vals.all |v| {emptyPair((Map)v)}) emptyUntil(end,qualities.first)
     else values.each |v,k| {budget.cell(2+queryEnds.size);budget.materializedPairs++;reads[k]=v}
     hour=end
     raw=raw.size > 2 ? raw[-2..-1] : raw
@@ -325,19 +328,24 @@ internal class EnerCubixCockpitStream
   private static Bool emptyPair(Map pair)
   {
     strict:=(Map)pair["strict"]
-    return strict["value"] == null && strict["quality"] == "missing" && ((Map)pair["known"]).vals.all |v|
+    return strict["value"] == null && ["missing","incompleteInterval"].contains(strict["quality"]) && ((Map)pair["known"]).vals.all |v|
     {
       r:=(Map)v
       return r["knownValue"] == null && r["knownValueType"] == "null" && r["knownQuality"] == "missing" && r["coveredSeconds"] == 0f && r["intervalCount"] == 0 && r["intervalStart"] == null && r["intervalEnd"] == null && EnerCubixMath.maps(r["intervals"]).isEmpty && r["detailsTruncated"] == false
     }
   }
 
-  private Void emptyUntil(DateTime end)
+  private Void emptyUntil(DateTime end, Str strictQuality := "missing")
   {
     if(end <= hour) return
     last:=emptyDomains.last
-    if(last != null && last["to"] == hour) last["to"]=end
-    else {budget.cell(2);budget.sparseDomains++;emptyDomains.add(["from":hour,"to":end])}
+    if(last != null && last["to"] == hour && (last["strictQuality"] ?: "missing") == strictQuality) last["to"]=end
+    else
+    {
+      domain:=Str:Obj?["from":hour,"to":end]
+      if(strictQuality != "missing") domain["strictQuality"]=strictQuality
+      budget.cell(domain.size);budget.sparseDomains++;emptyDomains.add(domain)
+    }
     hour=end
   }
 

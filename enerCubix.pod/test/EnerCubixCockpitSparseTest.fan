@@ -58,6 +58,44 @@ class EnerCubixCockpitSparseTest : Test
     verifyEq(actual.knownUsage(at+1hr,at+2hr,at+2hr)["knownValue"],null)
   }
 
+  Void testClosedLongIntervalKeepsIncompleteQualityWithoutDenseNullHours()
+  {
+    finish:=at+300day
+    raw:=[HisItem(at,Number(10)),HisItem(finish,Number(24))]
+    cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"deltaMax":Number(10000)])
+    points:=Str:Dict[:];configs:=Str:Dict[:];records:=[Str:Obj?][,]
+    (0..<82).each |i|
+    {
+      id:="p"+i
+      points[id]=Etc.makeDict(Etc.dictToMap(point(id)).set("hisFunc","enerCubixCleanHis"));configs[id]=cfg
+      records.add(["id":"m"+i,"kind":"meter","pointId":id])
+    }
+    q:=Str:Obj?["from":at.toIso,"to":(finish+2hr).toIso,"asOf":(finish+2hr).toIso]
+    budget:=EnerCubixStreamBudget()
+    hs:=EnerCubixCockpitStream.prepare(q,records,points,configs,|Dict p,Span span,|HisItem| sink|
+      {raw.each |r| {if(r.ts>=span.start && r.ts<span.end) sink(r)}},budget)
+    verify(budget.cells < 3000)
+    actual:=EnerCubixHistoryData(hs.first)
+    whole:=EnerCubixHistory.normalizeClean(points["p0"],EnerCubixCleaning.clean(points["p0"],raw,cfg),at,finish+2hr)
+    expected:=EnerCubixHistoryData(whole)
+    (0..<300*24+2).each |i|
+    {
+      a:=at+Duration(i*1hr.ticks);b:=a+1hr
+      one:=actual.read(a,b);two:=expected.read(a,b)
+      verifyEq(one.value,two.value);verifyEq(one.quality,two.quality)
+      av:=actual.knownUsage(a,b,finish+2hr);ev:=expected.knownUsage(a,b,finish+2hr)
+      av.remove("value");ev.remove("value");verifyEq(av,ev)
+    }
+    verifyEq(actual.read(at+1hr,at+2hr).quality,"incompleteInterval")
+    verifyEq(actual.knownUsage(at,at+1hr,finish+2hr)["knownValue"],14f)
+    verifyEq(actual.knownUsage(at,at+1hr,finish+2hr)["coveredSeconds"],300day.toSec.toFloat)
+    verifyNull(actual.knownUsage(at+1hr,at+2hr,finish+2hr)["knownValue"])
+    verifyNull(actual.read(finish+1hr,finish+2hr).value)
+    verifyEq(actual.read(finish+1hr,finish+2hr).quality,"missing")
+    verifyEq(actual.read(finish+2hr,finish+3hr).quality,"streamingReadNotPrepared")
+    verifyEq(budget.state.unprepared.val,1)
+  }
+
   Void testPreparedStorageEqualityAndNextEntry()
   {
     budget:=EnerCubixStreamBudget();budget.cells=199998

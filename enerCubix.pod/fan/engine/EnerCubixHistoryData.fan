@@ -114,7 +114,14 @@ internal class EnerCubixHistoryData
       preparedBudget?.lookup
       row:=prepared.isEmpty ? null : (Map?)prepared[EnerCubixCockpitStream.key(start,end)]
       v:=row?.get(raw ? "raw" : "strict") as Map
-      if(v == null && !raw && sparsePair(start,end)) {preparedBudget?.sparseHits?.increment;return emptyValue}
+      if(v == null && !raw && sparsePair(start,end))
+      {
+        preparedBudget?.sparseHits?.increment
+        hour:=EnerCubixMath.floorHour(start)
+        domain:=sparseDomains.find |r| {hour >= (DateTime)r["from"] && hour+1hr <= (DateTime)r["to"]}
+        q:=domain?.get("strictQuality") as Str ?: "missing"
+        return q == "missing" ? emptyValue : EnerCubixValue(null,q,sources)
+      }
       if(v == null) preparedBudget?.unprepared?.increment
       return v == null ? EnerCubixValue(null,"streamingReadNotPrepared",sources) : EnerCubixValue(EnerCubixMath.num(v["value"]),v["quality"].toStr,sources)
     }
