@@ -38,7 +38,7 @@ class EnerCubixCockpitPayloadTest : Test
     verifyNull(report["payloadEncoding"]);verifyNotNull(report["rows"])
   }
 
-  Void testAnnualNineMeterNineModuleWireKeepsEveryPeriodAndTotal()
+  Void testAnnualNineMeterNineModuleWireKeepsBusinessResultsAndBoundsDiagnostics()
   {
     from:=DateTime.fromIso("2025-01-01T00:00:00Z");to:=DateTime.fromIso("2026-01-01T00:00:00Z");reference:=DateTime.fromIso("2024-01-01T00:00:00Z")
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space","name":"Site","nativeSourceKind":"site","nativeSourceId":"s"],["id":"f","kind":"space","name":"Floor","nativeSourceKind":"floor","nativeSourceId":"f","parentId":"s"],["id":"sub","kind":"subcategory","categoryId":"c","co2Factor":0.5f],["id":"tariff","kind":"tariff","mode":"flat","rate":2f]]
@@ -64,12 +64,27 @@ class EnerCubixCockpitPayloadTest : Test
     if (fixture != null) File.os(fixture).out.writeChars(JsonOutStream.writeJsonToStr(snapshot)).close
     codec:=Type.find("enerCubix::EnerCubixCockpitPayload",false)
     verifyNotNull(codec,"compact payload implementation missing")
-    encodeBegan:=Duration.nowTicks
-    wire:=codec.method("encode").call(snapshot)
-    encodeMs:=(Duration.nowTicks-encodeBegan)/1ms.ticks
+    // The response limit applies to the negotiated pipeline, not a raw codec
+    // invocation over the complete, unnegotiated diagnostic archive.
+    bounded:=EnerCubixCockpitDiagnostics.project(snapshot)
+    verifyEq(bounded["modules"],snapshot["modules"])
+    ((Map)snapshot["reports"]).each |original,key|
+    {
+      report:=(Map)original;actual:=(Map)((Map)bounded["reports"])[key]
+      verifyEq(actual["summary"],report["summary"]);verifyEq(actual["series"],report["series"])
+    }
+    verify(((Int)((Map)bounded["diagnostics"])["returnedCount"]) <= 1000)
+    rawWire:=codec.method("encode").call(snapshot)
+    if(fixture != null) File.os(fixture+".raw.wire.json").out.writeChars(JsonOutStream.writeJsonToStr(rawWire)).close
+    // Exercise the actual negotiated entry, including producer capture. Keep
+    // the unnegotiated fixture above for independent legacy/codec comparison.
+    negotiatedBegan:=Duration.nowTicks
+    wire:=EnerCubixCockpit.execute(q.dup.set("payloadEncoding","compact-v1"),rs,|rq,saved->[Str:Obj?][]| {calls++;return hs},"test",TimeZone.utc,to)
+    verifyEq(calls,2);verifyEq(wire["payloadEncoding"],"compact-v1")
+    negotiatedMs:=(Duration.nowTicks-negotiatedBegan)/1ms.ticks
     serializeBegan:=Duration.nowTicks
     wireBytes:=JsonOutStream.writeJsonToStr(["ok":true,"data":wire]).toBuf.size
-    echo("ANNUAL_NINE wireBytes=$wireBytes encodeMs=$encodeMs serializeMs=${(Duration.nowTicks-serializeBegan)/1ms.ticks}")
+    echo("ANNUAL_NINE wireBytes=$wireBytes negotiatedExecuteMs=$negotiatedMs serializeMs=${(Duration.nowTicks-serializeBegan)/1ms.ticks}")
     verify(wireBytes <= 8388608)
     if (fixture != null) File.os(fixture+".wire.json").out.writeChars(JsonOutStream.writeJsonToStr(wire)).close
   }

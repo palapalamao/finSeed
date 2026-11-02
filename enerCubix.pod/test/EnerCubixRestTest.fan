@@ -30,6 +30,6 @@ class EnerCubixRestTest : Test
   Void testOnlyExplicitReadPostsBypassWritePermission()
   {
     ["report","cockpit","cleaning/preview"].each |route| { verify(EnerCubixRest.readPost(route)) }
-    ["records","records/delete","tasks","alarms/ack","tree/manage","cockpit/save"].each |route| { verify(!EnerCubixRest.readPost(route)) }
+    ["records","records/delete","tasks","alarms/ack","tree/manage","cockpit/save","cockpit/budgets/save","cockpit/budgets/delete","cockpit/rule-profiles/save","cockpit/rule-profiles/delete"].each |route| { verify(!EnerCubixRest.readPost(route)) }
   }
 }

@@ -13,7 +13,7 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image"].contains(route)
+      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
@@ -28,6 +28,13 @@ const class EnerCubixRest : WebMod
       Obj? data
       switch (route)
       {
+        case "cockpit/budgets": data=repo.cockpitBudgets
+        case "cockpit/budgets/save": data=repo.saveCockpitBudget(body)
+        case "cockpit/budgets/delete": data=repo.deleteCockpitBudget(body)
+        case "cockpit/rule-profiles": data=repo.cockpitRuleProfiles
+        case "cockpit/rule-profiles/save": data=repo.saveCockpitRuleProfile(body)
+        case "cockpit/rule-profiles/delete": data=repo.deleteCockpitRuleProfile(body)
+        case "cockpit/config-audit": data=repo.cockpitConfigAudit(req.uri.query["targetId"] ?: "")
         case "cockpit/assets": data=EnerCubixCockpitAssets(repo).list
         case "cockpit/assets/upload": data=EnerCubixCockpitAssets(repo).upload(body)
         case "cockpit/assets/save": data=EnerCubixCockpitAssets(repo).save(body)
