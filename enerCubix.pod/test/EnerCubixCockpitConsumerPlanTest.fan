@@ -4,6 +4,37 @@ using util
 ** no native source factory, streaming admission or live FIN proof is claimed.
 class EnerCubixCockpitConsumerPlanTest : Test
 {
+  Void testRequestMetadataIsSeparatedBeforeHistoryParsingEvenWithoutPoints()
+  {
+    rs:=records;rs.find |r| {r["id"]=="d"}.remove("pointId")
+    rq:=input;rq["modules"]=["trend"]
+    budget:=EnerCubixStreamBudget()
+    diagnostics:=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":0,"returnedByKind":[:],"truncated":false,"entries":Obj?[,]].toImmutable
+    meta:=Str:Obj?["_cockpitRequestMeta":["schemaVersion":1,"diagnostics":diagnostics,"preparedBudget":budget.state,"streaming":budget.evidence]]
+    actual:=EnerCubixCockpit.execute(rq,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {[meta]},"test",TimeZone.utc,end,true,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {EnerCubixHistory.report(q,rs,[Str:Obj?][,])})
+    verifyEq(actual["diagnostics"],diagnostics)
+    proof:=(Map)actual["provenance"];verifyEq(proof["preparedRuntime"],budget.state.evidence)
+    verifyEq(((Map)((List)proof["streaming"]).first)["nativeReadCount"],0)
+    verifyNull(proof["sourceLastObservedAt"]);verify(EnerCubixMath.maps(proof["historyPlan"]).isEmpty)
+    json:=JsonOutStream.writeJsonToStr(actual)
+    ["_cockpitRequestMeta","preparedBudget","EnerCubixPreparedBudget"].each |privateName| {verify(!json.contains(privateName))}
+    projected:=0
+    verifyErr(ArgErr#) {EnerCubixCockpit.execute(rq,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {[meta,meta]},"test",TimeZone.utc,end,true,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {projected++;return EnerCubixHistory.report(q,rs,[Str:Obj?][,])})}
+    verifyEq(projected,0)
+    verifyErr(ArgErr#) {EnerCubixCockpit.execute(input,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {[meta]},"test",TimeZone.utc,end)}
+  }
+  Void testMalformedRequestMetadataRejectsBeforeReportProjection()
+  {
+    budget:=EnerCubixStreamBudget()
+    diagnostics:=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":0,"returnedByKind":[:],"truncated":false,"entries":Obj?[,]]
+    base:=Str:Obj?["schemaVersion":1,"diagnostics":diagnostics,"preparedBudget":budget.state]
+    [base.dup.set("diagnostics",[:]),base.dup.set("diagnostics",diagnostics.dup.set("returnedCount",1001)),base.dup.set("preparedBudget",null),base.dup.set("streaming","invalid"),base.dup.set("historyConfigObservedFrom","invalid")].each |candidate|
+    {
+      projected:=0
+      verifyErr(ArgErr#) {EnerCubixCockpit.execute(input,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {[Str:Obj?][["_cockpitRequestMeta":candidate]]},"test",TimeZone.utc,end,true,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {projected++;return EnerCubixHistory.report(q,records,histories)})}
+      verifyEq(projected,0)
+    }
+  }
   Void testFrozenPrivatePlanIsReadyBeforeLoadAndAbsentFromSnapshot()
   {
     rs:=records;hs:=histories;rq:=input

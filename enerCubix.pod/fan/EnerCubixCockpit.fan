@@ -98,6 +98,26 @@ class EnerCubixCockpit
     observedFrom:=readClock()
     deadline?.check
     histories:=plan.isEmpty && preparedReport==null ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
+    Str:Obj? requestMeta:=[:]
+    if(histories.any |h| {h.containsKey("_cockpitRequestMeta")})
+    {
+      metadataRows:=histories.findAll |h| {h.containsKey("_cockpitRequestMeta")}
+      if(preparedReport==null || metadataRows.size!=1 || metadataRows.first.size!=1) throw ArgErr("cockpitPreparedRequestMeta")
+      candidate:=metadataRows.first["_cockpitRequestMeta"] as Map
+      if(candidate==null || candidate["schemaVersion"]!=1 || candidate["diagnostics"] isnot Map || candidate["preparedBudget"] isnot EnerCubixPreparedBudget || (candidate["streaming"]!=null && candidate["streaming"] isnot Map) || candidate.keys.any |key| {!["schemaVersion","diagnostics","preparedBudget","streaming","historyConfigObservedFrom","historyConfigObservedTo"].contains(key)}) throw ArgErr("cockpitPreparedRequestMeta")
+      diagnostic:=(Map)candidate["diagnostics"];count:=diagnostic["returnedCount"] as Int
+      if(diagnostic["schemaVersion"]!=1 || diagnostic["rowBudget"]!=1000 || count==null || count<0 || count>1000 || diagnostic["entries"] isnot List) throw ArgErr("cockpitPreparedRequestMeta")
+      if(candidate.containsKey("historyConfigObservedFrom") || candidate.containsKey("historyConfigObservedTo"))
+      {
+        observedA:=DateTime.fromIso(candidate["historyConfigObservedFrom"] as Str ?: "",false);observedB:=DateTime.fromIso(candidate["historyConfigObservedTo"] as Str ?: "",false)
+        if(observedA==null || observedB==null || observedA>observedB) throw ArgErr("cockpitPreparedRequestMeta")
+      }
+      if(deadline!=null && ((EnerCubixPreparedBudget)candidate["preparedBudget"]).deadline!==deadline) throw ArgErr("cockpitPreparedRequestMeta")
+      requestMeta=(Str:Obj?)candidate
+      // This control envelope has no point identity and is never parsed as a
+      // history, including when there are no point headers at all.
+      histories=histories.exclude |h| {h.containsKey("_cockpitRequestMeta")}
+    }
     if(input["payloadEncoding"] == "compact-v1") histories=histories.map |h->[Str:Obj?]|
     {
       meta:=h["cleaning"] as Map
@@ -199,13 +219,15 @@ class EnerCubixCockpit
     config.addAll(ownedRefs)
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     proof:=historyMeta.snapshot
+    if(requestMeta["streaming"] is Map) proof=proof.dup.set("streaming",[requestMeta["streaming"]])
+    ["historyConfigObservedFrom","historyConfigObservedTo"].each |key| {if(requestMeta[key] is Str) proof=proof.dup.set(key,requestMeta[key])}
     refs.addAll(EnerCubixMath.maps(proof["configRefs"]))
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
     appliedCleaning:=proof["appliedCleaning"]
     cutoff:=DateTime.fromIso(request["asOf"].toStr)
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
     provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
-    budget:=histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget
+    budget:=(requestMeta["preparedBudget"] as EnerCubixPreparedBudget) ?: (histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget)
     if(budget != null) provenance["preparedRuntime"]=budget.evidence
     limitations:=Str[,]
     if (complete == null) limitations.add(known == null ? "ENERGY_UNAVAILABLE" : "PARTIAL_USAGE")
@@ -216,7 +238,9 @@ class EnerCubixCockpit
     if (histories.any |h| {h["quality"] == "historyReadError"}) limitations.add("HISTORY_READ_ERROR")
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
     if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
-    snapshot:=(Str:Obj?)["schemaVersion":1,"snapshotId":snapshotId,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations].toImmutable
+    snapshotData:=Str:Obj?["schemaVersion":1,"snapshotId":snapshotId,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations]
+    if(!requestMeta.isEmpty) snapshotData["diagnostics"]=requestMeta["diagnostics"]
+    snapshot:=(Str:Obj?)snapshotData.toImmutable
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
     deadline?.check
