@@ -44,6 +44,15 @@ internal class EnerCubixBudgetMath
       first:=Date(cursor.year,cursor.month,1);next:=nextMonth(first)
       key:=first.toStr[0..<7];days:=(next-first).toDay;monthDays+=days
       finish:=next.toDateTime(Time.defVal,tz);if(finish > end) finish=end
+      // Calendar progress describes elapsed local days, independent of whether
+      // the corresponding month has usable budget configuration.
+      dayCursor:=cursor
+      while(dayCursor < finish)
+      {
+        dayStart:=dayCursor.date.toDateTime(Time.defVal,tz);dayEnd:=(dayCursor.date+1day).toDateTime(Time.defVal,tz)
+        sliceEnd:=dayEnd < finish ? dayEnd : finish
+        selectedDays+=(sliceEnd-dayCursor).ticks.toFloat/(dayEnd-dayStart).ticks.toFloat;dayCursor=sliceEnd
+      }
       found:=budgets.findAll |b| {b["month"] == key}
       if(found.size != 1)
       {
@@ -60,17 +69,18 @@ internal class EnerCubixBudgetMath
         dayStart:=day.toDateTime(Time.defVal,tz);partEnd:=nextDay < finish ? nextDay : finish
         fraction:=(partEnd-cursor).ticks.toFloat/(nextDay-dayStart).ticks.toFloat
         daily:=b["distribution"] == "daily" ? number(((List)b["dailyAmounts"])[day.day-1]) : amount/days.toFloat
-        value:=daily*fraction;subtotal+=value;periodBudget+=value;selectedDays+=fraction
+        value:=daily*fraction;subtotal+=value;periodBudget+=value
         curve.add(["ts":partEnd.toIso,"month":key,"periodBudget":value,"cumulativeBudget":periodBudget,"dayBudget":daily,"actualDaySeconds":(nextDay-dayStart).toSec,"from":cursor.toIso,"to":partEnd.toIso])
         cursor=partEnd
       }
       months.add(["month":key,"status":"ok","configRef":b["id"],"version":b["version"],"mod":b["mod"],"amount":amount,"periodAmount":subtotal,"distribution":b["distribution"]])
     }
+    configured:=reasons.isEmpty
     if(actualCost == null) reasons.add("BUDGET_COST_INCOMPLETE")
-    if(periodBudget <= 0f) reasons.add("BUDGET_ZERO_PERIOD")
-    valid:=reasons.isEmpty
-    return ["status":valid ? "ok" : "unavailable","reasonCodes":reasons.unique,"monthBudget":reasons.any |r| {r == "BUDGET_MONTH_MISSING" || r == "BUDGET_CONFLICT" || r == "BUDGET_CONFIG_INVALID"} ? null : monthBudget,"periodBudget":valid ? periodBudget : null,"periodActualCost":actualCost,"deviationAmount":valid ? actualCost-periodBudget : null,"variancePct":valid ? (actualCost-periodBudget)/periodBudget*100f : null,"monthUsagePct":valid && monthBudget > 0f ? actualCost/monthBudget*100f : null,"calendarProgressPct":monthDays > 0 ? selectedDays/monthDays.toFloat*100f : null,"calendarProgressBasis":"selectedLocalDayFractionsOverInvolvedNaturalMonthDays","months":months,"curve":valid ? curve : [Str:Obj?][,],"from":from.toIso,"to":to.toIso,"effectiveTo":end.toIso,"asOf":asOf.toIso,"timeZone":tz.name,"formulas":["periodBudget":"sum(dailyBudget * overlapSeconds / actualLocalDaySeconds)","variancePct":"(periodActualCost - periodBudget) / periodBudget * 100","monthUsagePct":"periodActualCost / sum(involvedFullMonthAmounts) * 100","calendarProgressPct":"sum(selectedLocalDayFractions) / sum(involvedMonthDays) * 100"]]
+    if(configured && periodBudget <= 0f) reasons.add("BUDGET_ZERO_PERIOD")
+    valid:=configured && actualCost != null;comparable:=valid && periodBudget > 0f
+    return ["status":valid ? "ok" : "unavailable","budgetStatus":configured ? "ok" : "unavailable","comparisonStatus":comparable ? "ok" : "unavailable","reasonCodes":reasons.unique,"monthBudget":configured ? monthBudget : null,"periodBudget":configured ? periodBudget : null,"periodActualCost":actualCost,"deviationAmount":valid ? actualCost-periodBudget : null,"variancePct":comparable ? (actualCost-periodBudget)/periodBudget*100f : null,"monthUsagePct":valid && monthBudget > 0f ? actualCost/monthBudget*100f : null,"calendarProgressPct":monthDays > 0 ? selectedDays/monthDays.toFloat*100f : null,"calendarProgressBasis":"selectedLocalDayFractionsOverInvolvedNaturalMonthDays","months":months,"curve":configured ? curve : [Str:Obj?][,],"from":from.toIso,"to":to.toIso,"effectiveTo":end.toIso,"asOf":asOf.toIso,"timeZone":tz.name,"formulas":["periodBudget":"sum(dailyBudget * overlapSeconds / actualLocalDaySeconds)","variancePct":"(periodActualCost - periodBudget) / periodBudget * 100","monthUsagePct":"periodActualCost / sum(involvedFullMonthAmounts) * 100","calendarProgressPct":"sum(selectedLocalDayFractions) / sum(involvedMonthDays) * 100"]]
   }
   static Str:Obj? unavailable(Str reason)
-  {["status":"unavailable","reasonCodes":[reason],"monthBudget":null,"periodBudget":null,"periodActualCost":null,"variancePct":null,"deviationAmount":null,"monthUsagePct":null,"calendarProgressPct":null,"months":[Str:Obj?][,],"curve":[Str:Obj?][,],"fallback":"comparison"]}
+  {["status":"unavailable","budgetStatus":"unavailable","comparisonStatus":"unavailable","reasonCodes":[reason],"monthBudget":null,"periodBudget":null,"periodActualCost":null,"variancePct":null,"deviationAmount":null,"monthUsagePct":null,"calendarProgressPct":null,"months":[Str:Obj?][,],"curve":[Str:Obj?][,],"fallback":"comparison"]}
 }

@@ -36,6 +36,38 @@ class EnerCubixCockpitBudgetTest : Test
     r=EnerCubixCockpitBudget.project(query,records,owned,boundary,m)
     verifyEq(r["status"],"unavailable");verifyNull(r["variancePct"])
   }
+  Void testProvablyUnrelatedInvalidConfigurationsDoNotPoisonCurrentBudget()
+  {
+    owned:=info
+    invalid:=Str:Obj?["id":"old-invalid","mod":"v1","validation":"invalid","reasonCodes":["OWNED_REFERENCE_INVALID"]]
+    owned["budgets"]=[budget("project","p:test","2026-10"),invalid]
+    owned["budgetAttribution"]=["old-invalid":["month":"2026-09","categoryRef":"c","scopeKind":"project","scopeRef":"p:test","scopeReadable":true]]
+    r:=EnerCubixCockpitBudget.project(query,records,owned,boundary,metric)
+    verifyEq(r["status"],"ok");verifyEq(EnerCubixMath.maps(r["configRefs"]).size,1)
+    ((Map)owned["budgetAttribution"])["old-invalid"]=["month":"2026-10","categoryRef":"other"]
+    verifyEq(EnerCubixCockpitBudget.project(query,records,owned,boundary,metric)["status"],"ok")
+    owned["budgetAttribution"]=["old-invalid":["month":"2026-10","categoryRef":"c","scopeKind":"project","scopeRef":"p:test","scopeReadable":true]]
+    verifyEq(EnerCubixCockpitBudget.project(query,records,owned,boundary,metric)["reasonCodes"],["BUDGET_CONFIG_INVALID"])
+    owned.remove("budgetAttribution")
+    verifyEq(EnerCubixCockpitBudget.project(query,records,owned,boundary,metric)["reasonCodes"],["BUDGET_CONFIG_INVALID"])
+    rs:=records;rs.addAll([["id":"other-space","kind":"space","nativeSourceKind":"site"],["id":"other-meter","kind":"meter","nativeEquip":true,"pointId":"other-point","categoryId":"c","spaceId":"other-space"]])
+    owned["budgets"]=[budget("space","s","2026-10"),invalid]
+    owned["budgetAttribution"]=["old-invalid":["month":"2026-10","categoryRef":"c","scopeKind":"space","scopeRef":"other-space","scopeReadable":true]]
+    verifyEq(EnerCubixCockpitBudget.project(query,rs,owned,boundary,metric)["status"],"ok")
+    ((Map)((Map)owned["budgetAttribution"])["old-invalid"])["scopeReadable"]=false
+    verifyEq(EnerCubixCockpitBudget.project(query,rs,owned,boundary,metric)["reasonCodes"],["BUDGET_CONFIG_INVALID"])
+  }
+  Void testOtherMonthAttributionUsesProjectCalendarAcrossDstOffsetChange()
+  {
+    q:=query;q.setAll(["from":"2026-11-01T00:00:00-04:00","to":"2026-12-01T00:00:00-05:00","asOf":"2026-12-01T00:00:00-05:00","tz":"New_York"])
+    owned:=info;owned["budgets"]=[budget("project","p:test","2026-11"),["id":"december-invalid","validation":"invalid"]]
+    owned["budgetAttribution"]=["december-invalid":["month":"2026-12","categoryRef":"c","scopeKind":"project","scopeRef":"p:test","scopeReadable":true]]
+    verifyEq(EnerCubixCockpitBudget.project(q,records,owned,boundary,metric)["status"],"ok")
+    q.setAll(["from":"2026-12-01T00:00:00-05:00","to":"2027-01-01T00:00:00-05:00","asOf":"2027-01-01T00:00:00-05:00"])
+    owned["budgets"]=[budget("project","p:test","2026-12"),["id":"january-invalid","validation":"invalid"]]
+    owned["budgetAttribution"]=["january-invalid":["month":"2027-01","categoryRef":"c","scopeKind":"project","scopeRef":"p:test","scopeReadable":true]]
+    verifyEq(EnerCubixCockpitBudget.project(q,records,owned,boundary,metric)["status"],"ok")
+  }
   private Str:Obj? budget(Str kind,Str scope,Str month) {["id":kind+month,"version":1,"scopeKind":kind,"scopeRef":scope,"categoryRef":"c","month":month,"currency":"CNY","amount":310000f,"distribution":"uniform","enabled":true]}
   private Str:Obj? info() {["projectRef":"p:test","modelComplete":true,"budgetsComplete":true]}
   private Str:Obj? query() {["dimension":"space","nodeIds":["s"],"categoryIds":["c"],"from":"2026-10-01T00:00:00Z","to":"2026-10-25T00:00:00Z","asOf":"2026-10-25T00:00:00Z","tz":"UTC"]}

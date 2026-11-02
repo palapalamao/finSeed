@@ -143,6 +143,32 @@ class EnerCubixCockpitConfigStoreTest : Test
     }
     finally {if(db != null) db.close;pool.stop.join;if(dir.parent.normalize == Env.cur.tempDir.normalize && dir.name.startsWith("enerCubix-owned-reopen-")) dir.delete}
   }
+  Void testUnrelatedDanglingNativeBudgetIsLocalAndPrivateAttributionDoesNotLeak()
+  {
+    fixture |db,store|
+    {
+      current:=store.save("budget",budget)
+      old:=db.commit(Diff.makeAdd(Etc.makeDict(["site":Marker.val,"dis":"Old scope"]),Ref("old"))).newRec
+      stale:=budget;stale["month"]="2026-09";stale["scopeRef"]=old.id.id
+      store.save("budget",stale)
+      db.commit(Diff(old,null,Diff.remove))
+      captured:=store.capture("budget")
+      owned:=Str:Obj?["projectRef":"p:budgetFixture","modelComplete":true,"budgetsComplete":captured["complete"],"budgets":captured["records"],"budgetAttribution":captured["attribution"]]
+      prefix:="p:budgetFixture:r:"
+      rs:=[Str:Obj?][["id":prefix+"c","kind":"category","unit":"kWh"],["id":prefix+"s","kind":"space","nativeSourceKind":"site"],["id":prefix+"m","kind":"meter","nativeEquip":true,"pointId":prefix+"p","categoryId":prefix+"c","spaceId":prefix+"s"]]
+      q:=Str:Obj?["categoryIds":[prefix+"c"],"nodeIds":[prefix+"s"],"dimension":"space","from":"2026-10-01T00:00:00Z","to":"2026-10-02T00:00:00Z","asOf":"2026-10-02T00:00:00Z","tz":"UTC"]
+      boundary:=Str:Obj?["id":"boundary","meterIds":[prefix+"m"],"aggregateAllowed":true]
+      cost:=Str:Obj?["value":10f,"completeValue":10f,"valueBasis":"complete","unit":"CNY","coverage":[["complete":true]],"details":["tariffs":[["id":"tariff"]]]]
+      result:=EnerCubixCockpitBudget.project(q,rs,owned,boundary,cost)
+      verifyEq(result["status"],"ok");verifyEq(EnerCubixMath.maps(result["configRefs"]).first["id"],current["id"])
+      publicList:=JsonOutStream.writeJsonToStr(store.list("budget"))
+      verify(!publicList.contains("attribution"));verify(!publicList.contains(old.id.id))
+      serialized:=JsonOutStream.writeJsonToStr(result)
+      verify(!serialized.contains("Attribution"));verify(!serialized.contains(old.id.id))
+      output:=Env.cur.vars["ENERCUBIX_M4_LOCALITY_FIXTURE"]
+      if(output != null) File.os(output).out.writeChars(JsonOutStream.writeJsonToStr(["evidenceLevel":"actualTemporaryFolio3","budget":result,"publicList":store.list("budget")])).close
+    }
+  }
   private Str:Obj? budget() {["name":"Monthly test","scopeKind":"space","scopeRef":"s","categoryRef":"c","enabled":true,"month":"2026-10","currency":"CNY","amount":310000f,"distribution":"uniform"]}
   private Void fixture(|Folio,EnerCubixCockpitConfigStore| work)
   {

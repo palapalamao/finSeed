@@ -3,6 +3,43 @@
 internal class EnerCubixCockpitBudget
 {
   static Bool localError(Err e) {[Err#,NullErr#,CastErr#,IndexErr#].contains(e.typeof) && (e.cause == null || localError(e.cause))}
+  ** Exclude only provably unrelated configurations. Invalid public DTOs remain
+  ** sanitized; private attribution is read solely from the server capture.
+  static [Str:Obj?][] related(Str type,Str:Obj? q,[Str:Obj?][] records,Str:Obj? owned,Str:Obj? boundary)
+  {
+    category:=EnerCubixMath.strings(q["categoryIds"]).first
+    rows:=EnerCubixMath.maps(owned[type == "budget" ? "budgets" : "rules"])
+    Map attribution:=(owned[type == "budget" ? "budgetAttribution" : "ruleAttribution"] as Map) ?: Str:Obj?[:]
+    model:=EnerCubixMath.maps(owned["modelRecords"]);if(model.isEmpty) model=records
+    months:=Str[,]
+    if(type == "budget")
+    {
+      tz:=TimeZone(q["tz"].toStr)
+      cursor:=EnerCubixMath.bucket(DateTime.fromIso(q["from"].toStr).toTimeZone(tz),"month")
+      to:=DateTime.fromIso(q["to"].toStr).toTimeZone(tz);asOf:=DateTime.fromIso(q["asOf"].toStr).toTimeZone(tz);end:=to < asOf ? to : asOf
+      while(cursor < end) {months.add(cursor.date.toStr[0..<7]);cursor=EnerCubixMath.nextBucket(cursor,"month")}
+    }
+    return rows.findAll |r|
+    {
+      invalid:=r["validation"] == "invalid"
+      Map? basis:=invalid ? (attribution[r["id"]] as Map) : r
+      if(basis == null) return true
+      if(basis["categoryRef"] is Str && basis["categoryRef"] != category) return false
+      month:=basis["month"] as Str
+      if(type == "budget" && month != null && !months.isEmpty)
+      {
+        try {EnerCubixBudgetMath.monthStart(month);if(!months.contains(month)) return false}
+        catch(ArgErr e) {} // Malformed attribution cannot establish irrelevance.
+      }
+      if(owned["modelComplete"] != true || (invalid && basis["scopeReadable"] != true) || basis["categoryRef"] != category || basis["scopeKind"] isnot Str || basis["scopeRef"] isnot Str) return true
+      try
+      {
+        match:=EnerCubixBudgetScope.match(basis["scopeKind"].toStr,basis["scopeRef"].toStr,category,q,boundary,model,owned["projectRef"] as Str)
+        return !EnerCubixMath.strings(match["reasonCodes"]).contains("BUDGET_SCOPE_MISMATCH")
+      }
+      catch(ArgErr e) {return true}
+    }
+  }
   ** A view's ownership warning is not a different physical expense boundary.
   ** Explicit overlap and all physical/source errors remain disqualifying.
   static Str:Obj? canonical(Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? boundary,Str:Obj? reports)
@@ -30,7 +67,7 @@ internal class EnerCubixCockpitBudget
   static Str:Obj? project(Str:Obj? q,[Str:Obj?][] records,Str:Obj? owned,Str:Obj? boundary,Str:Obj? cost)
   {
     category:=EnerCubixMath.strings(q["categoryIds"]).first
-    configs:=EnerCubixMath.maps(owned["budgets"])
+    configs:=related("budget",q,records,owned,boundary)
     configRefs:=configs.map |b->[Str:Obj?]| {["id":b["id"],"mod":b["mod"],"version":b["version"]]}
     result:=EnerCubixBudgetMath.unavailable("BUDGET_NOT_CONFIGURED")
     result.setAll(["boundaryId":boundary["id"],"periodActualCost":cost["value"],"costValueBasis":cost["valueBasis"],"costQuality":cost["quality"],"currency":cost["unit"],"comparisonFallback":cost["comparison"],"costReportRef":"profile-cost","configRefs":configRefs,"configuration":configs])
@@ -42,7 +79,8 @@ internal class EnerCubixCockpitBudget
     if(currency["status"] != "ok") return fail(result,currency["reason"].toStr)
     result["currencyBasis"]=currency["basis"];result["currencySources"]=currency["sources"]
     result["tariffSnapshot"]=((Map)cost["details"])["tariffs"]
-    from:=DateTime.fromIso(q["from"].toStr);to:=DateTime.fromIso(q["to"].toStr);asOf:=DateTime.fromIso(q["asOf"].toStr)
+    tz:=TimeZone(q["tz"].toStr)
+    from:=DateTime.fromIso(q["from"].toStr).toTimeZone(tz);to:=DateTime.fromIso(q["to"].toStr).toTimeZone(tz);asOf:=DateTime.fromIso(q["asOf"].toStr).toTimeZone(tz)
     end:=to < asOf ? to : asOf
     months:=Str[,];cursor:=EnerCubixMath.bucket(from,"month")
     while(cursor < end) {months.add(cursor.date.toStr[0..<7]);cursor=EnerCubixMath.nextBucket(cursor,"month")}

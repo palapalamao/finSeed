@@ -34,7 +34,7 @@ class EnerCubixBudgetTest : Test
     months:=EnerCubixMath.maps(r["months"]);verifyEq(months.map |m->Str| {m["mod"].toStr},["a1","b2"])
     a["distribution"]="daily";a["dailyAmounts"]=(0..<31).map |i->Float| {i == 30 ? 310000f : 0f}
     r=EnerCubixBudgetMath.period([a],from,from+1day,from+1day,0f,TimeZone.utc)
-    verifyEq(r["status"],"unavailable");verifyNull(r["variancePct"])
+    verifyEq(r["status"],"ok");verifyEq(r["periodBudget"],0f);verifyNull(r["variancePct"])
   }
   Void testDailyValidationAndMissingMonthAreExplicit()
   {
@@ -55,6 +55,29 @@ class EnerCubixBudgetTest : Test
     from=DateTime.fromIso("2026-10-31T00:00:00Z");to:=DateTime.fromIso("2026-11-03T00:00:00Z")
     r=EnerCubixBudgetMath.period([budget("2026-10",310000f),budget("2026-11",600000f)],from,to,to,26000f,TimeZone.utc)
     near(r["periodBudget"],50000f)
+  }
+  Void testCalendarProgressIsIndependentOfMissingOrInvalidBudgetMonths()
+  {
+    from:=DateTime.fromIso("2026-10-01T00:00:00Z");to:=DateTime.fromIso("2026-12-01T00:00:00Z")
+    missing:=EnerCubixBudgetMath.period([budget("2026-10",310000f)],from,to,to,0f,TimeZone.utc)
+    complete:=EnerCubixBudgetMath.period([budget("2026-10",310000f),budget("2026-11",300000f)],from,to,to,0f,TimeZone.utc)
+    near(missing["calendarProgressPct"],100f);verifyEq(missing["calendarProgressPct"],complete["calendarProgressPct"])
+    invalid:=budget("2026-11",0f)
+    r:=EnerCubixBudgetMath.period([budget("2026-10",310000f),invalid],from,to,to,0f,TimeZone.utc)
+    near(r["calendarProgressPct"],100f);verifyEq(r["status"],"unavailable")
+  }
+  Void testLegalZeroTargetPreservesAmountCurveAndActualWithoutPercentageDivision()
+  {
+    from:=DateTime.fromIso("2026-10-01T00:00:00Z")
+    b:=budget("2026-10",310000f);b["distribution"]="daily";b["dailyAmounts"]=(0..<31).map |i->Float| {i == 30 ? 310000f : 0f}
+    [0f,5f].each |actual|
+    {
+      r:=EnerCubixBudgetMath.period([b],from,from+1day,from+1day,actual,TimeZone.utc)
+      verifyEq(r["status"],"ok");verifyEq(r["budgetStatus"],"ok");verifyEq(r["comparisonStatus"],"unavailable")
+      verifyEq(r["periodBudget"],0f);verifyEq(r["periodActualCost"],actual);verifyEq(r["deviationAmount"],actual)
+      verifyNull(r["variancePct"]);verify(EnerCubixMath.strings(r["reasonCodes"]).contains("BUDGET_ZERO_PERIOD"))
+      curve:=EnerCubixMath.maps(r["curve"]);verifyEq(curve.size,2);verifyEq(curve.last["cumulativeBudget"],0f)
+    }
   }
   private Str:Obj? budget(Str month,Float amount) {["id":"b-"+month,"version":1,"month":month,"amount":amount,"distribution":"uniform","currency":"CNY"]}
   private Void near(Obj? v,Float expected) {verifyNotNull(v);verify(((Float)v-expected).abs < 0.0000001f)}

@@ -26,12 +26,18 @@ internal class EnerCubixCockpitConfigStore
   private static const Str[] persisted := ["scopeKind","scopeRef","categoryRef","enabled","month","currency","amount","distribution","dailyAmounts","ruleType","calendarRef","threshold","thresholdUnit","version","createdAt","updatedAt","effectiveAt","actor"]
 
   Str:Obj? list(Str type)
+  {readRecords(type,false)}
+  ** Server-only context for proving an invalid configuration unrelated. Native
+  ** references in this context must never be returned by the public list DTO.
+  Str:Obj? capture(Str type)
+  {readRecords(type,true)}
+  private Str:Obj? readRecords(Str type,Bool privateAttribution)
   {
     marker(type)
     manifest:=db.readById(manifestId,false)
     if(manifest == null) return ["records":[Str:Obj?][,],"complete":true,"canWrite":manage]
     requireManifest(manifest,false)
-    complete:=true;out:=[Str:Obj?][,]
+    complete:=true;out:=[Str:Obj?][,];attributions:=Str:Obj?[:]
     owned(manifest).each |ref|
     {
       r:=db.readById(ref,false)
@@ -42,10 +48,11 @@ internal class EnerCubixCockpitConfigStore
         requireOwned(r,type,manifest)
         dto:=dto(r,type)
         try {v:=dto.dup;references(v,type);validateValue(v,type)}
-        catch(ArgErr e) {dto=invalidDto(r,type,"OWNED_REFERENCE_INVALID")}
+        catch(ArgErr e) {if(privateAttribution) attributions[r.id.id]=attributionOf(r);dto=invalidDto(r,type,"OWNED_REFERENCE_INVALID")}
         catch(EnerCubixHttpErr e)
         {
           if(e.status == 403) {complete=false;return}
+          if(privateAttribution) attributions[r.id.id]=attributionOf(r)
           dto=invalidDto(r,type,"OWNED_REFERENCE_INVALID")
         }
         out.add(dto)
@@ -53,7 +60,9 @@ internal class EnerCubixCockpitConfigStore
       catch(ArgErr e) {complete=false}
       catch(EnerCubixHttpErr e) {complete=false}
     }
-    return ["records":out,"complete":complete,"canWrite":manage]
+    result:=Str:Obj?["records":out,"complete":complete,"canWrite":manage]
+    if(privateAttribution) result["attribution"]=attributions
+    return result
   }
 
   Str:Obj? save(Str type,Str:Obj? input)
@@ -225,6 +234,23 @@ internal class EnerCubixCockpitConfigStore
   }
   private Str:Obj? invalidDto(Dict r,Str type,Str reason)
   {["id":r.id.id,"mod":EnerCubixRepo.iso(r["mod"]),"type":type,"name":r.dis,"validation":"invalid","reasonCodes":[reason]]}
+  private Str:Obj? attributionOf(Dict r)
+  {
+    out:=Str:Obj?[:];month:=r["month"] as Str
+    if(month != null) {try {EnerCubixBudgetMath.monthStart(month);out["month"]=month} catch(ArgErr e) {}}
+    category:=attributionRef(r["categoryRef"])
+    if(category != null) out["categoryRef"]=category.id
+    scope:=attributionRef(r["scopeRef"],true);kind:=r["scopeKind"] as Str
+    if(scope != null && (kind == "project" || kind == "space"))
+    {
+      out["scopeRef"]=scope.id;out["scopeKind"]=kind
+      if(kind == "project") out["scopeReadable"]=scope == projectRef
+      else {source:=db.readById(scope,false);out["scopeReadable"]=source != null && readable(source) && (source.has("site") || source.has("floor"))}
+    }
+    return out
+  }
+  private Ref? attributionRef(Obj? v,Bool projectScope := false)
+  {if(v isnot Ref) return null;try {return ref(((Ref)v).id,projectScope)} catch(ArgErr e) {return null}}
   internal static Obj? nativeJson(Obj? v)
   {
     if(v is Ref) return ((Ref)v).id

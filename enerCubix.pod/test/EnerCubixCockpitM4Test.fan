@@ -103,6 +103,61 @@ class EnerCubixCockpitM4Test : Test
     file:=Env.cur.vars["ENERCUBIX_M4_PRESSURE_FIXTURE"]
     if(file != null) File.os(file).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
   }
+  Void testUnrelatedConfigurationDoesNotChangeFingerprintOrExposePrivateAttribution()
+  {
+    base:=EnerCubixCockpit.execute(input,records,|q,rs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,config)
+    owned:=config
+    ((List)owned["budgets"]).add(["id":"old-invalid-budget","mod":"old-v1","validation":"invalid"])
+    ((List)owned["rules"]).add(["id":"old-invalid-rule","mod":"old-r1","validation":"invalid"])
+    owned["budgetAttribution"]=["old-invalid-budget":["month":"2026-09","categoryRef":"c","scopeRef":"private-missing-scope"]]
+    owned["ruleAttribution"]=["old-invalid-rule":["categoryRef":"other-category","scopeRef":"private-missing-scope"]]
+    result:=EnerCubixCockpit.execute(input,records,|q,rs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+    verifyEq(((Map)result["provenance"])["configFingerprint"],((Map)base["provenance"])["configFingerprint"])
+    serialized:=JsonOutStream.writeJsonToStr(result)
+    ["old-invalid-budget","old-invalid-rule","private-missing-scope","Attribution"].each |secret| {verify(!serialized.contains(secret))}
+  }
+  Void testZeroTargetSnapshotRetainsCurveAndNeverTriggersBudgetPercentageRule()
+  {
+    owned:=config;b:=EnerCubixMath.maps(owned["budgets"]).first
+    b["distribution"]="daily";b["dailyAmounts"]=(0..<31).map |i->Float| {i == 30 ? 310000f : 0f}
+    ((List)owned["rules"]).add(["id":"pressure","version":1,"name":"Explicit pressure","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","ruleType":"budgetVariance","threshold":0f,"thresholdUnit":"%","currency":"CNY","enabled":true])
+    result:=EnerCubixCockpit.execute(input,records,|q,rs->[Str:Obj?][]| {history},"test",TimeZone.utc,end,true,null,null,null,null,owned)
+    budget:=(Map)((Map)((Map)((Map)result["modules"])["kpis"])["data"])["budget"]
+    verifyEq(budget["status"],"ok");verifyEq(budget["periodBudget"],0f);verifyEq(budget["deviationAmount"],10f);verifyNull(budget["variancePct"])
+    issues:=(Map)((Map)((Map)result["modules"])["issues"])["data"]
+    verifyEq(EnerCubixMath.maps(issues["ruleEvaluations"]).find |r| {r["id"] == "pressure"}["status"],"unavailable")
+    verify(!EnerCubixMath.maps(issues["items"]).any |i| {i["id"] == "rule:pressure"})
+    file:=Env.cur.vars["ENERCUBIX_M4_ZERO_TARGET_FIXTURE"]
+    if(file != null) File.os(file).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
+  }
+  Void testP27AndP29UseComplete576HourOwnHistoryForHeadlineReportsAndBudget()
+  {
+    start:=DateTime.fromIso("2026-10-01T00:00:00Z");finish:=start+24day
+    [224600f,260000f].each |total|
+    {
+      owned:=config
+      ((List)owned["rules"]).add(["id":"pressure","mod":"pressure-v1","version":1,"name":"Explicit fixture budget pressure","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","ruleType":"budgetVariance","threshold":5f,"thresholdUnit":"%","currency":"CNY","enabled":true])
+      q:=input;q["time"]=["preset":"custom","period":"day","from":start.toIso,"to":finish.toIso];q["asOf"]=finish.toIso
+      base:=total == 224600f ? 390f : 450f
+      samples:=(0..<576).map |i->[Str:Obj?]| {["ts":(start+Duration(i*1hr.ticks)).toIso,"value":i == 575 ? total-base*575f : base]}
+      hs:=[Str:Obj?][["pointId":"p","unit":"kWh","mode":"interval","samples":samples]]
+      reads:=0
+      result:=EnerCubixCockpit.execute(q,records,|rq,rs->[Str:Obj?][]| {reads++;return hs},"test",TimeZone.utc,finish,true,null,|->[Str:Obj?][]| {[Str:Obj?][,]},null,null,owned)
+      verifyEq(reads,1)
+      b:=(Map)((Map)((Map)((Map)result["modules"])["kpis"])["data"])["budget"]
+      verifyEq(b["status"],"ok");verifyEq(b["monthBudget"],310000f);verifyEq(b["periodBudget"],240000f);verifyEq(b["periodActualCost"],total)
+      verify(((Float)b["variancePct"]-(total-240000f)/240000f*100f).abs < 0.0000001f)
+      report:=(Map)((Map)result["reports"])[b["costReportRef"]]
+      selection:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).first
+      verifyEq(selection["value"],total)
+      curve:=EnerCubixMath.maps(b["curve"]);verifyEq(curve.size,25);verifyEq(curve.last["cumulativeBudget"],240000f)
+      issues:=(Map)((Map)((Map)result["modules"])["issues"])["data"]
+      pressure:=EnerCubixMath.maps(issues["ruleEvaluations"]).find |r| {r["id"] == "pressure"}
+      verifyEq(pressure["status"],total == 260000f ? "triggered" : "notTriggered")
+      folder:=Env.cur.vars["ENERCUBIX_M4_24DAY_FIXTURE_DIR"]
+      if(folder != null) File.os(folder+(total == 224600f ? "/p27-24day-224600.json" : "/p29-24day-260000.json")).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
+    }
+  }
   private DateTime end() {DateTime.fromIso("2026-10-01T01:00:00Z")}
   private Str:Obj? input() {["schemaVersion":1,"requestId":"m4-controlled","reportScope":["dimension":"space","nodeIds":["s"],"selectionIntent":"range"],"focusCategoryId":"c","time":["preset":"custom","period":"hour","from":"2026-10-01T00:00:00Z","to":end.toIso],"asOf":end.toIso,"modules":["kpis","trend","issues"],"comparison":["mode":"none"]]}
   private Str:Obj? config() {["projectRef":"p:test","modelComplete":true,"budgetsComplete":true,"rulesComplete":true,"budgets":[["id":"budget","mod":"b1","version":1,"name":"Controlled monthly budget","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","month":"2026-10","currency":"CNY","amount":310000f,"distribution":"uniform","enabled":true]],"rules":[["id":"rule","mod":"r1","version":1,"name":"Controlled non-working clue","scopeKind":"project","scopeRef":"p:test","categoryRef":"c","calendarRef":"cal","ruleType":"nonWorkingHighUsage","threshold":5f,"thresholdUnit":"kWh","enabled":true]]]}

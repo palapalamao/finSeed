@@ -451,10 +451,10 @@ class EnerCubixRepo
   private Str:Obj? ownedSnapshot()
   {
     before:=cx.db.readById(Ref("enerCubix-config-revision"),false)
-    store:=ownedStore;b:=store.list("budget");r:=store.list("rule")
+    store:=ownedStore;b:=store.capture("budget");r:=store.capture("rule")
     after:=cx.db.readById(Ref("enerCubix-config-revision"),false)
     if(before?.get("mod") != after?.get("mod")) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigConflict")
-    return ["projectRef":cx.proj.id.id,"budgets":b["records"],"budgetsComplete":b["complete"],"rules":r["records"],"rulesComplete":r["complete"]]
+    return ["projectRef":cx.proj.id.id,"budgets":b["records"],"budgetsComplete":b["complete"],"budgetAttribution":b["attribution"],"rules":r["records"],"rulesComplete":r["complete"],"ruleAttribution":r["attribution"]]
   }
 
   ** Existing report and cockpit share native mapping and configuration preparation.

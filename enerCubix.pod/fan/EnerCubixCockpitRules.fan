@@ -6,7 +6,7 @@ internal class EnerCubixCockpitRules
   {
     evaluations:=[Str:Obj?][,];items:=[Str:Obj?][,]
     if(owned["rulesComplete"] == false) return ["evaluations":[["status":"unavailable","reasonCodes":["RULE_CONFIG_UNREADABLE"]]],"items":items]
-    profiles:=EnerCubixMath.maps(owned["rules"])
+    profiles:=EnerCubixCockpitBudget.related("rule",q,records,owned,boundary)
     category:=EnerCubixMath.strings(q["categoryIds"]).first
     model:=EnerCubixMath.maps(owned["modelRecords"]);if(model.isEmpty) model=records
     profiles.each |p|
@@ -45,7 +45,7 @@ internal class EnerCubixCockpitRules
       }
       items.add(item)
     }
-    return ["evaluations":evaluations,"items":items]
+    return ["evaluations":evaluations,"items":items,"configuration":profiles]
   }
   private static Void nonWorking(Str:Obj? out,Str:Obj? profile,Str:Obj? q,[Str:Obj?][] records,[Str:Obj?][] histories,Str:Obj? boundary,Float threshold)
   {

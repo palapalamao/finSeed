@@ -175,11 +175,13 @@ class EnerCubixCockpit
       if (efficiency["error"] == true) modules["efficiency"]=EnerCubixCockpitFlow.error
       else EnerCubixCockpitEfficiency.attach(efficiency,histories,boundary,reports,modules)
     }
+    ruleConfiguration:=[Str:Obj?][,]
     if (enabled.contains("issues"))
     {
       try
       {
         clues:=EnerCubixCockpitRules.project(request,frozen,histories,ownedConfig,budgetBoundary,budgetResult,snapshotId)
+        ruleConfiguration=EnerCubixMath.maps(clues["configuration"])
         modules["issues"]=EnerCubixCockpitIssues.project(observation,events,values,request,boundary,ctx,clues)
       }
       catch (EnerCubixHttpErr e) {throw e}
@@ -187,7 +189,7 @@ class EnerCubixCockpit
     }
     config:=EnerCubixCockpitMetrics.configuration(ctx,ids,auxiliary == null ? [category] : [category,auxiliary])
     config=config.dup.addAll(EnerCubixMath.maps(flow["configuration"])).addAll(EnerCubixMath.maps(efficiency["configuration"])).unique.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
-    ownedRefs:=kpis || enabled.contains("issues") ? EnerCubixMath.maps(ownedConfig["budgets"]).dup.addAll(EnerCubixMath.maps(ownedConfig["rules"])) : [Str:Obj?][,]
+    ownedRefs:=kpis || enabled.contains("issues") ? EnerCubixMath.maps(budgetResult["configuration"]).dup.addAll(ruleConfiguration) : [Str:Obj?][,]
     config.addAll(ownedRefs)
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     histories.each |h| {refs.addAll(EnerCubixMath.maps(h["configRefs"]))}
