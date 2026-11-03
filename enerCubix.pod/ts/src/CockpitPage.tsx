@@ -103,7 +103,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
      issues={<CockpitIssues key={"issues-"+snapshot.snapshotId} snapshot={snapshot} compact name={name} canEvidence={item=>!!cockpitIssueNavigation(snapshot,item,currentView())} onEvidence={item=>{const view=currentView(),navigation=cockpitIssueNavigation(snapshot,item,view);if(navigation)onDrill(navigation,snapshot,view);}}/>}/>
     <div className="cockpit-evidence-grid">
     {face!=='balance'&&snapshot.modules.balance&&<CockpitFlow key={"flow-"+snapshot.snapshotId} snapshot={snapshot} focusObjectId={selectedFocusId} compact onOpen={()=>drill('energyFlow')}/>}
-    <section className="cockpit-trend" aria-labelledby="cockpit-trend-title"><h3 id="cockpit-trend-title">{t('用量趋势')}</h3>{report&&hasChart?<ReportChart snapshot={report} profileType="line" compact/>:<Empty description={t('此范围没有可绘制的有效时序数据')}/>}<p>{t('缺测与 NA 保留为空；已有用量不代表完整区间。')}</p></section>
+    <section className="cockpit-trend" aria-labelledby="cockpit-trend-title"><h3 id="cockpit-trend-title">{t('用量趋势')}</h3>{report&&hasChart?<ReportChart snapshot={report} profileType="bar" compact/>:<Empty description={t('此范围没有可绘制的有效时序数据')}/>}<p>{t('缺测与 NA 保留为空；已有用量不代表完整区间。')}</p></section>
     {presentationMode&&<CockpitNextSteps snapshot={snapshot}/>}
     </div>
     {snapshot.diagnostics&&<DiagnosticNotice metadata={snapshot.diagnostics} snapshotId={snapshot.snapshotId} objects={Object.fromEntries(catalog.records.filter(row=>row.id).map(row=>[row.id!,row.name]))}/>}
