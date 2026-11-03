@@ -296,3 +296,11 @@ cockpit-wire-final-tests.log 1类4方法45检查通过，2319ms；新helper未�
 6类29方法625检查通过，7356ms（cockpit-request-joint-tests.log），含REST既有body/readPost约束、旧入口可执行符号、Gate/peer、Wire字节限额、全九模块Root+Session+compact+最终wire受控联合（50kWh/2源读取/unprepared0，发送期间Gate仍占有，关闭只剩scope额度后最终归零）。大字符串夹具最初被Fantom编译期常量折叠成8MiB字面量，触发FTable UTF长度限制；改为运行时夹具生成后，SDK包重建且实际测试加载通过，未改编译器或运行环境。
 
 年度捕获加scope/最终wire另存cockpit-scoped-session-main前缀：16.083秒，30秒时限不提高，8provenance/58业务组与5行窄诊断差异校验继续通过，发送回调Gate已核查占有。462回调/12094样本/44010小时，已接入峰158502（含scope基本对象），raw/temporary关闭0，prepared48不重置；响应497574B，SHA256 59873507530D96743320D5073A7112E4907AF35C5DCF8BB0808CF4B9C0173C67。不是HTTP/FIN I/O或完整输入/投影/codec多图共同准入证明。架构师只读核对本批接线未见阻断冲突，未额外跑测试/FIN；全部未部署，不关闭ALL-59。
+
+共享图冻结基础（尚未代替Root默认冻结）
+
+在本机FIN SDK实际执行确认：默认toImmutable把同一可变Map的两次引用复制成不同Map；新冻结器用JDK IdentityHashMap保留真实对象别名，内容相等但对象不同的Map仍分开。逐个容器在dup和最终浅不可变副本创建前准入，父构建器/已完成子图/身份索引同时存活时均保留对应lease；不可变输入只借用，循环和不支持的可变对象拒绝。原Map/List类型、顺序、null、数值和JSON输出保持，源对象不改；原owner的生命周期必须覆盖借用，不等于把不可变输入视为免费内存。
+
+3类13方法112检查通过，2476ms（cockpit-freeze-final-tests.log）。覆盖500次引用1000行同一证据只复制一次，独立相等Map不误合并，明确null与0，复制中限额/统一期限失败及peer保护。首轮真实复现Fantom默认List泛型对null强制非空，改用Obj?[]及Obj:Obj?容器视图后保留null，未改数据。冻结器此批还未挂到Root，完整请求创建时准入仍待；不是JVM堆或FIN实机证明。
+
+补充入站边界的准确单位：既有cockpit readBody的2097152限制按StrBuf.size计字符，默认不启用UTF-8字节限制；字节限制仅用于既有素材上传分支。前文“2MiB入站”应以此为准，不能当作cockpit的2MiB UTF-8保证。此次保持原readBody与其他route行为；最终响应的8388608限制则已按完整UTF-8信封字节测试。
