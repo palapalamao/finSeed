@@ -89,6 +89,8 @@ internal class EnerCubixContext
   private EnerCubixPreparedOwner? frameOwner
   private Bool framed := false
   private Bool transientContext := false
+  private Bool frameConstantEmpty := false
+  private Bool? tariffConfigured
   private [Str:Int[]]? warningRanks
   private Int warningPhase := 0
   private Int warningLine := 0
@@ -107,7 +109,7 @@ internal class EnerCubixContext
     owner.watch |->Void| {dropPersistent};owner.hold(index+3)
     persistentOwner=owner;preparedBudget=owner.budget;deadline=owner.budget.deadline;tariffBaseline.ordered=true
   }
-  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
+  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories,Bool constantEmpty := false)
   {
     if(persistentOwner == null || frameOwner != null || owner === persistentOwner || owner.budget !== preparedBudget) throw ArgErr("preparedContextOwner")
     histories.each |h,id| {if(h.id != id || !h.ownedFrame(owner.budget)) throw ArgErr("preparedContextSourceFrame")}
@@ -118,7 +120,7 @@ internal class EnerCubixContext
     owner.watch |->Void| {dropFrame}
     if(strictContext == null) {owner.hold(1+histories.size);byPoint=histories.dup}
     else byPoint=strictContext.byPoint
-    frameOwner=owner
+    frameOwner=owner;frameConstantEmpty=constantEmpty
   }
   private Void inheritOwners(EnerCubixContext source,Bool temporary)
   {
@@ -139,7 +141,7 @@ internal class EnerCubixContext
   private Void dropFrame()
   {
     cache.clear;knownReads.clear;knownCharges.clear;knownScratch=0;byPoint=Str:EnerCubixHistoryData[:]
-    knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null
+    knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null;frameConstantEmpty=false
     if(transientContext)
     {
       tariffBaseline.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
@@ -369,7 +371,23 @@ internal class EnerCubixContext
       return EnerCubixValue(null,"invalidConfiguration")
     }
     stable:=emptyKey(r,category,from,to,metric)
+    if(stable!=null && frameOwner!=null && metric=="cost") stable+="|${from.ticks}|${to.ticks}"
     if(stable != null && cache.containsKey(stable)) {preparedBudget.contextEmptyHits.increment;return cache[stable]}
+    // A device always reads its own primary history. Reuse that exact result
+    // within this borrowed frame, including recursive scope/detail visits.
+    // Pricing retains its independent tariff/baseline execution path.
+    ownKey:=frameOwner!=null && utility==null && metric!="cost" && ["meter","totalMeter"].contains(r["kind"]) ? "own|$id|$category|${from.ticks}|${to.ticks}|$metric" : null
+    if(frameConstantEmpty && timeInvariantEmpty(metric))
+    {
+      if(ownKey!=null) ownKey="emptyOwn|$id|$category|$metric"
+      else if(path.isEmpty) ownKey="emptyScope|$id|$category|$metric|$utility|$useMaster"
+    }
+    if(ownKey!=null && cache.containsKey(ownKey))
+    {
+      cached:=cache[ownKey]
+      if(cached.value==null) {label:=r["name"] ?: id;warn("$label : ${cached.quality}")}
+      return cached
+    }
     nextPath := path.dup.add(id)
     EnerCubixValue result := EnerCubixValue()
     if (dimension?.scope(id) == true)
@@ -447,6 +465,7 @@ internal class EnerCubixContext
     if (path.isEmpty && preparedBudget == null) cache[key]=result
     if(stable != null && result.value == null)
     {if(!cache.containsKey(stable)) retain(2);cache[stable]=result}
+    else if(ownKey!=null) {retain(2);cache[ownKey]=result}
     return result
   }
 
@@ -468,6 +487,15 @@ internal class EnerCubixContext
     domain:=h.emptyDomain(from,to,knownEnd)
     if(domain == null && !h.unpreparedPair(from,to,knownEnd)) return null
     return "constant|"+r["id"]+"|"+category+"|"+metric+"|"+(domain?.toStr ?: "notPrepared")
+  }
+
+  private Bool timeInvariantEmpty(Str metric)
+  {
+    if(metric!="cost") return true
+    // Missing tariff configuration is a frozen fact. Any configured tariff,
+    // even an unused one, keeps pricing on its original hourly path.
+    if(tariffConfigured==null) tariffConfigured=byId.any |record| {record["kind"]=="tariff"}
+    return !tariffConfigured
   }
 
   DateTime? constantEnd(Str id,Str category,DateTime from,DateTime to,Str metric)

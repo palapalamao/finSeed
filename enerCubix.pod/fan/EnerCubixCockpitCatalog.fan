@@ -2,7 +2,7 @@
 ** Its owner outlives every bound calculation/output owner; it owns no histories.
 internal class EnerCubixCockpitCatalog
 {
-  new make([Str:Obj?][] source,TimeZone tz,EnerCubixPreparedOwner owner,Str:Str units := [:],Bool originalContext := false)
+  new make([Str:Obj?][] source,TimeZone tz,EnerCubixPreparedOwner owner,Str:Str units := [:],Bool originalContext := false,Bool borrowMetadata := false)
   {
     if(!source.isImmutable) throw ArgErr("catalogSourceNotFrozen")
     this.tz=tz;this.owner=owner
@@ -16,7 +16,7 @@ internal class EnerCubixCockpitCatalog
     }
     owner.hold(18)
     owner.hold(1+units.size);pointUnits=units.dup
-    projection=EnerCubixDimension.owned("metering",source,false,owner)
+    projection=EnerCubixDimension.owned("metering",source,false,owner,borrowMetadata)
     if(originalContext)
     {
       // The ordinary COP context indexes original frozen records, independently

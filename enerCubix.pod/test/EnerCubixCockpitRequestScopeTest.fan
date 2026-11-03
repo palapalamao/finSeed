@@ -3,6 +3,33 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testExactInputModelFactsShareOneFrozenCopyWithinTheOriginalBudget()
+  {
+    rs:=[Str:Obj?][,];500.times |i| {r:=Str:Obj?["id":"r$i","kind":"meter"];18.times |j| {r["field$j"]="value$j"};rs.add(r)}
+    model:=rs.map |r->Str:Obj?| {r.dup};scope:=EnerCubixCockpitRequestScope("input-facts","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(177000)
+    try
+    {
+      frozen:=scope.freezeInputs([:],["modelRecords":model],rs);rows:=(List)frozen["records"];models:=(List)((Map)frozen["owned"])["modelRecords"]
+      verifyEq(rows.typeof,rs.typeof);verifyEq(models.typeof,model.typeof);verify(rows!==models)
+      500.times |i| {verify(rows[i]===models[i])}
+      verifyEq(rs.size,500);verifyEq(model.size,500);verifyEq(budgetValue(scope),scope.entries+peer.entries)
+      scope.close;verifyEq(budgetValue(scope),peer.entries)
+    }
+    finally {scope.close;peer.close}
+  }
+  private Int budgetValue(EnerCubixCockpitRequestScope scope) {scope.stream.state.temporary.val}
+  Void testInputFactsWithDifferentFieldsOrContainerOrderingStaySeparate()
+  {
+    record:=Str:Obj?["id":"m","kind":"meter","name":"original"]
+    changed:=record.dup.set("name","changed");ordered:=Str:Obj?[:];ordered.ordered=true;ordered.setAll(record)
+    scope:=EnerCubixCockpitRequestScope("different-input-facts","a")
+    try
+    {
+      frozen:=scope.freezeInputs([:],["modelRecords":[changed,ordered]],[record]);row:=((List)frozen["records"]).first;models:=(List)((Map)frozen["owned"])["modelRecords"]
+      verify(row!==models.first);verify(row!==models.last);verifyEq(((Map)models.first)["name"],"changed");verify(((Map)models.last).ordered)
+    }
+    finally {scope.close}
+  }
   Void testPreparationLivesUntilTheCompositeInputIsFrozen()
   {
     scope:=EnerCubixCockpitRequestScope("preparation","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)

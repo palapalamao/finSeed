@@ -48,6 +48,9 @@ internal class EnerCubixReport
   private Str:Str:Obj? finalSelections := [:]
   private Bool finalMetadataFrozen := false
   private Int finalDepth := 0
+  private EnerCubixPreparedOwner? metadataPlanOwner
+  private EnerCubixLine[] metadataPlanLines := [,]
+  private [Str:Int]? metadataPlanShape
   internal const Bool summaryFrames
 
   ** Membership, topology quality and service area depend only on the frozen
@@ -55,14 +58,20 @@ internal class EnerCubixReport
   ** whole-catalog candidate/area graphs at the simultaneous output peak.
   internal Str:Int freezeFrameMetadata(EnerCubixLine[] lines,EnerCubixPreparedOwner output)
   {
-    if(catalogOwner==null || finalMetadataFrozen || output.budget!==catalogOwner.budget) throw ArgErr("frameMetadataPlan")
+    if(catalogOwner==null || output.budget!==catalogOwner.budget) throw ArgErr("frameMetadataPlan")
+    if(metadataPlanShape!=null)
+    {
+      if(metadataPlanOwner!==output || metadataPlanLines.size!=lines.size || !lines.all |line,i| {line===metadataPlanLines[i]}) throw ArgErr("frameMetadataPlan")
+      return metadataPlanShape
+    }
+    if(finalMetadataFrozen) throw ArgErr("frameMetadataPlan")
     scratch:=EnerCubixPreparedOwner(output.budget)
     try
     {
       ctx.deadline?.check
       scratch.hold(64*(ctx.byId.size+lines.size+1))
       shape:=frameShape(lines)
-      if(summaryFrames) return shape
+      if(summaryFrames) return rememberFrameMetadata(shape,lines,output)
       scratch.hold(64*(shape["members"]+shape["details"]+lines.size+1))
       output.hold(8)
       lines.each |line|
@@ -96,9 +105,15 @@ internal class EnerCubixReport
         output.hold(16+selected.size+candidates.size+meters.size)
         finalSelections[category]=["selected":selected.dup,"candidates":candidates.dup,"meters":meters.dup,"quality":quality,"area":area]
       }
-      ctx.deadline?.check;finalMetadataFrozen=true;return shape
+      ctx.deadline?.check;finalMetadataFrozen=true;return rememberFrameMetadata(shape,lines,output)
     }
     finally {scratch.close}
+  }
+  private Str:Int rememberFrameMetadata(Str:Int shape,EnerCubixLine[] lines,EnerCubixPreparedOwner output)
+  {
+    output.hold(7+lines.size);metadataPlanOwner=output;metadataPlanLines=lines.dup;metadataPlanShape=shape
+    output.watch |->Void| {metadataPlanLines.clear;metadataPlanShape?.clear;metadataPlanShape=null;metadataPlanOwner=null}
+    return shape
   }
   internal Int frameFinalDepth() {finalMetadataFrozen ? finalDepth : ctx.byId.size}
   internal [Str:Obj?][] frameScope(EnerCubixLine line)
@@ -119,6 +134,7 @@ internal class EnerCubixReport
 
   internal Bool acceptsFrames()
   { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
+  internal Bool frameSharesBase(EnerCubixLine line) {request["perArea"]!=true && !line.gauge && !line.ratio && !line.leak && !line.reference}
   internal Bool dailyFrames() {kind == "daily"}
   internal Bool workingFrames() {["workingHours","workingDays"].contains(kind)}
   internal Bool frameWorking(EnerCubixTick tick) {ctx.working(tick.ts,kind == "workingHours",request["workHours"])}
@@ -149,8 +165,8 @@ internal class EnerCubixReport
   internal Void clearFrames()
   {consumedPeriods.clear;consumedMeters?.clear;consumedCoverage?.clear;consumedEvidence?.clear;consumedDaily.clear;consumedWorking.clear;series.clear;rows.clear;summary.clear;extra.clear;clearFrameMetadata;if(!sharedAreas) areas.clear}
 
-  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories)
-  {ctx.beginFrame(owner,histories);knownCtx?.beginFrame(owner,histories)}
+  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories,Bool constantEmpty := false)
+  {ctx.beginFrame(owner,histories,constantEmpty);knownCtx?.beginFrame(owner,histories,constantEmpty)}
 
   EnerCubixLine line(Str id, Str category, Str? utility := null, DateTime start := from, DateTime end := to)
   {
@@ -161,22 +177,30 @@ internal class EnerCubixReport
 
   internal EnerCubixLineCursor openLine(Str id,Str category,Str? utility := null,DateTime start := from,DateTime end := to)
   {
+    needsArea:=catalogOwner==null || request["perArea"]==true
     if(catalogOwner != null)
     {
-      // A single explicit area source is bounded; organization service area may
-      // contain all participating meters. Admit its metadata before resolving it.
-      members:=ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id) ? ctx.scopeMeters(id,category).size : 0
-      catalogOwner.hold(128+64*members)
+      // Retain the cursor/definition envelope separately from optional area
+      // graphs. Non-normalized owned reports never consume those graphs.
+      catalogOwner.hold(64)
+      if(needsArea)
+      {
+        members:=ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id) ? ctx.scopeMeters(id,category).size : 0
+        catalogOwner.hold(64+64*members)
+      }
     }
     r:=ctx.byId[id]
     name:=r?.get("name")?.toStr ?: id
     if (utility != null) name+=" / "+(ctx.byId[utility]?.get("name")?.toStr ?: (ctx.dimension == null ? "Unassigned" : "未指定分项"))
     out:=EnerCubixLine("$id|$category"+(utility == null ? "" : "|$utility"),id,name,category,ctx.unit(id,category,metric))
     out.utility=utility
-    out.normalizationArea=areas.node(id)
-    if (ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id))
-      out.normalizationArea=areas.selection([id],ctx.dimension,ctx.selectionMeters(ctx.scopeMeters(id,category)).map |m->Str| {m["id"].toStr})
-    catalogOwner?.watch |->Void| {if(!out.outputOwnsArea) EnerCubixArea.clearResult(out.normalizationArea)}
+    if(needsArea)
+    {
+      out.normalizationArea=areas.node(id)
+      if (ctx.dimension?.dimension == "organization" && ctx.dimension.scope(id))
+        out.normalizationArea=areas.selection([id],ctx.dimension,ctx.selectionMeters(ctx.scopeMeters(id,category)).map |m->Str| {m["id"].toStr})
+      catalogOwner?.watch |->Void| {if(!out.outputOwnsArea) EnerCubixArea.clearResult(out.normalizationArea)}
+    }
     activeKnown:=knownCtx
     if (knownCtx != null && end != to) activeKnown=EnerCubixContext.known(ctx,end < dataCutoff ? end : dataCutoff)
     out.gauge=r?.get("kind") == "sensor"
@@ -476,6 +500,9 @@ internal class EnerCubixReport
   ** detail membership as normal finalization; this is not a history read plan.
   internal [Str:Obj?][] frameLedger(EnerCubixLine[] lines)
   {
+    // Focus summaries consume line totals and coverage only; they never read
+    // selection/detail meter totals from finishFrames.
+    if(summaryFrames) return [Str:Obj?][,]
     out:=[Str:Obj?][,];seen:=Str:Bool[:];order:=0
     add:=|Str id,Str category,Int phase|
     {

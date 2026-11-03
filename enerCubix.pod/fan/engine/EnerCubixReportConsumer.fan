@@ -30,7 +30,7 @@ internal class EnerCubixReportConsumer
     // 40 per period covers point+detail maps/links; 32 per membership covers
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
     // envelope includes totals, utility groups and shallow tariff map heads.
-    output.hold(2048+128*(ledger.size+cursors.size)+40*n*cursors.size+32*(shape["members"]+shape["details"]))
+    finalEntries=2048+128*(ledger.size+cursors.size)+40*n*cursors.size+32*(shape["members"]+shape["details"])
     // Keep cleanup workspace until output expires, so dropGraph can still clear
     // aliased lists/maps when another owner has filled the remaining budget.
     maxList:=(n*cursors.size).max(shape["details"]).max(shape["members"]).max(ctx.byId.size).max(1000)
@@ -44,13 +44,13 @@ internal class EnerCubixReportConsumer
     // finalizers use actual member/detail vectors and one real ancestor path.
     finishScratch=report.summaryFrames ? 64*(cursors.size+shape["maxMembers"]+1) : 64*(report.frameFinalDepth+shape["members"]+shape["details"]+cursors.size+1)
     if(!sharedBorrowed) ctx.byId.each |record| {protect(record)}
-    // Area graphs were created under the calculation owner. They remain linked
-    // from definitions (even perArea=false), so transfer their actual graph too.
+    // Requested area graphs remain linked from definitions; non-normalized
+    // owned reports carry only an empty placeholder. Transfer the actual graph.
     definitions.addAll(cursors.map |c->EnerCubixLine| {c.line})
     cursors.each |cursor| {output.hold(ownedMetadata(cursor.line.normalizationArea));cursor.line.outputOwnsArea=true}
     cursors.each |cursor|
     {
-      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames))
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames,report.frameSharesBase(line)))
       if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
       if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,state,output))
       points:=report.frameScope(line).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
@@ -82,6 +82,7 @@ internal class EnerCubixReportConsumer
   private Str? diagnosticKey
   private EnerCubixValue[] frozenMeters := [,]
   private Int finishScratch := 0
+  private Int finalEntries := 0
   private Int readCount := 0
   private Int detailCount := 0
   private Bool emptyOmitted := false
@@ -92,12 +93,20 @@ internal class EnerCubixReportConsumer
   private Err? failure
 
   Void addFrame(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {addFrames(histories,frame,EnerCubixMath.floorHour(at)+1hr)}
+  Void addFrames(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame,DateTime through,Bool constantEmpty := false)
   {
     check
     if(done || at>=to || frame.budget !== output.budget) throw ArgErr("reportConsumerFrame")
     try
     {
-      report.beginFrame(frame,histories)
+      report.beginFrame(frame,histories,constantEmpty)
+      while(at<to && at<through) addHour(frame)
+    }
+    catch(Err e) {failure=e;throw e}
+  }
+  private Void addHour(EnerCubixPreparedOwner frame)
+  {
       end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
       cursors.each |cursor,i|
       {
@@ -110,8 +119,6 @@ internal class EnerCubixReportConsumer
       // Detail-only meters must not appear in that earlier evidence snapshot.
       freezeEvidence(frame)
       consumeMeters(3,end);at=end
-    }
-    catch(Err e) {failure=e;throw e}
   }
   private Void freezeEvidence(EnerCubixPreparedOwner frame)
   {
@@ -138,6 +145,9 @@ internal class EnerCubixReportConsumer
     if(at!=to) throw ArgErr("reportConsumerIncomplete")
     try
     {
+      // Final report DTOs do not exist while frames are being reduced. Admit
+      // their unchanged envelope immediately before the first final allocation.
+      output.hold(finalEntries)
       totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:];dailyData:=Str:[Str:Obj?][:];workingData:=Str:[Str:Obj?][][:]
       periods.each |consumer,i|
       {

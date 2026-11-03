@@ -240,6 +240,30 @@ internal class EnerCubixCockpitRegistry
     }
     catch(Err e) {failure=e;throw e}
   }
+  Void prepareMetadata()
+  {check;works.each |work| {work.prepareMetadata}}
+  Bool canGroupEmpty() {check;return billing.isEmpty}
+  Void addEmptyFrames(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {
+    check
+    if(!canGroupEmpty || done || frame.budget!==budget.state || a!=EnerCubixMath.floorHour(a) || b<=a || b>a+24hr || b!=EnerCubixMath.floorHour(b) || (watermark!=null && a<watermark)) throw ArgErr("cockpitRegistryEmptyFrames")
+    try
+    {
+      works.each |work| {work.finishReady};flowWork?.finishReady
+      works.each |work| {withConsumerFrame |local| {work.addFrames(a,b,histories,local,true)}}
+      at:=a
+      while(at<b)
+      {
+        budget.check;end:=at+1hr
+        if(flowWork!=null) withConsumerFrame |local| {flowWork.addFrame(at,end,histories,local)}
+        copWorks.each |work| {withConsumerFrame |local| {work.addFrame(at,end,histories,local)}}
+        ruleWorks.each |work| {withConsumerFrame |local| {work.addFrame(at,end,histories,local)}}
+        at=end
+      }
+      watermark=b
+    }
+    catch(Err e) {failure=e;throw e}
+  }
   private Void withConsumerFrame(|EnerCubixPreparedOwner| consume)
   {
     local:=EnerCubixPreparedOwner(budget.state)
@@ -370,6 +394,7 @@ internal class EnerCubixCockpitReportWork
   private DateTime next
   private EnerCubixPreparedOwner? state
   private EnerCubixPreparedOwner? output
+  private EnerCubixContext? context
   private EnerCubixReport? report
   private EnerCubixReportConsumer? consumer
   private EnerCubixLineCursor[] cursors := [,]
@@ -377,18 +402,19 @@ internal class EnerCubixCockpitReportWork
   internal Str:Obj? result := [:] {private set}
   private Bool done := false
 
-  private Void open()
+  private Void open(Bool metadataOnly := false)
   {
     state=EnerCubixPreparedOwner(budget.state);output=EnerCubixPreparedOwner(budget.state)
-    state.watch |->Void| {cursors.clear;report=null;consumer=null}
+    state.watch |->Void| {cursors.clear;report=null;consumer=null;context=null}
     state.hold(10);output.hold(4)
-    ctx:=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",state);ctx.orderWarnings
+    ctx:=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",state);context=ctx;ctx.orderWarnings
     if(q["metric"]=="cost") tariffs.each |cursor,id| {ctx.bindTariffCursor(id,cursor,state)}
     if(ctx.dimension.nativeSpace) ctx.byId.each |r| {if(r["nativeSourceMissing"]==true) {label:=r["name"] ?: r["id"];ctx.warn("$label : nativeSourceMissing")}}
     state.hold(4+q.size+2*EnerCubixMath.strings(q["nodeIds"]).size)
     request:=ctx.dimension.normalizeRequest(q)
     kind:=request["kind"] as Str ?: "profile";period:=request["period"] as Str ?: "day";metric:=request["metric"] as Str ?: "energy"
     report=EnerCubixReport(ctx,request,from,to,kind,period,metric,state,key=="space-summary")
+    created:=report;output.watch |->Void| {created.clearFrames}
     selected:=EnerCubixMath.strings(request["nodeIds"]).unique
     if(kind=="utility") EnerCubixEndUse.resolve(ctx,selected).each |meter| {state.hold(1);cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
     else selected.each |id|
@@ -406,23 +432,40 @@ internal class EnerCubixCockpitReportWork
       output.hold(4);catalog.bind(output)
       cursors.each |cursor| {state.hold(1);heatmaps.add(EnerCubixHeatmapConsumer(cursor.line,from,to,DateTime.fromIso(request["asOf"].toStr),state,output))}
     }
+    else if(metadataOnly) report.freezeFrameMetadata(cursors.map |c->EnerCubixLine| {c.line},output)
     else consumer=EnerCubixReportConsumer(ctx,report,cursors,from,to,period,state,output,key=="space-summary" ? null : pool,key=="space-summary" ? null : key)
     output.watch |->Void| {result.clear;heatmaps.clear}
   }
+  Void prepareMetadata() {if(state==null) open(true)}
+  private Void activate()
+  {
+    if(state==null) open
+    if(key!="face-heatmap" && consumer==null)
+    {
+      try {consumer=EnerCubixReportConsumer(context,report,cursors,from,to,q["period"] as Str ?: "day",state,output,key=="space-summary" ? null : pool,key=="space-summary" ? null : key)}
+      catch(EnerCubixHttpErr e) {Log.get("enerCubix").err("Cockpit report activation rejected: $key (state=${state.entries}, output=${output.entries})",e);throw e}
+    }
+  }
   Void addFrame(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {addFrames(a,b,histories,frame)}
+  Void addFrames(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame,Bool constantEmpty := false)
   {
     if(done || next>=to || next>=b || next<a) return
-    if(state==null) open
+    activate
     if(key=="face-heatmap")
-    {report.beginFrame(frame,histories);cursors.each |cursor,i| {heatmaps[i].add(cursor.next)}}
-    else consumer.addFrame(histories,frame)
-    next=EnerCubixMath.floorHour(next)+1hr;if(next>to) next=to
+    {
+      report.beginFrame(frame,histories,constantEmpty)
+      while(next<to && next<b)
+      {cursors.each |cursor,i| {heatmaps[i].add(cursor.next)};next=EnerCubixMath.floorHour(next)+1hr;if(next>to) next=to}
+    }
+    else {consumer.addFrames(histories,frame,b,constantEmpty);next=b<to ? b : to}
     // State is closed by the next call/finish, after the borrowed frame expires.
   }
   Void finish()
   {
     if(done) return
-    if(next!=to || state==null) throw ArgErr("cockpitRegistryIncomplete")
+    if(next!=to) throw ArgErr("cockpitRegistryIncomplete")
+    activate
     if(key=="face-heatmap")
     {
       cells:=[Str:Obj?][,];excluded:=[Str:Obj?][,]

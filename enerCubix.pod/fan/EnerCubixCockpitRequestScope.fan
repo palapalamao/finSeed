@@ -94,7 +94,7 @@ internal class EnerCubixCockpitRequestScope
     checkContext(project,user)
     if(planningModel!=null) throw ArgErr("cockpitPlanningAlreadyCreated")
     planningModel=EnerCubixPreparedOwner(stream.state)
-    catalog:=EnerCubixCockpitCatalog(records,tz,planningModel);planningCatalog=catalog;planningRecords=records
+    catalog:=EnerCubixCockpitCatalog(records,tz,planningModel,[:],false,inputs?.get("records")===records);planningCatalog=catalog;planningRecords=records
     planningState=EnerCubixPreparedOwner(stream.state)
     return EnerCubixContext.shared(catalog,dimension,nativeSpace,planningState)
   }
@@ -117,13 +117,28 @@ internal class EnerCubixCockpitRequestScope
     checkContext(project,user)
     if(inputs!=null) throw ArgErr("cockpitRequestInputsAlreadyFrozen")
     if(inputOwner==null) inputOwner=EnerCubixPreparedOwner(stream.state)
-    scratch:=EnerCubixPreparedOwner(stream.state);Map? bundle
+    scratch:=EnerCubixPreparedOwner(stream.state);Map? bundle;[Str:Map]? facts;Map? normalizedOwned;List? model
     try
     {
-      scratch.hold(4);bundle=["input":input,"owned":owned,"records":records]
+      configuration:=owned;source:=owned["modelRecords"] as List
+      if(source!=null && source!==records)
+      {
+        // Both are private copies of the same catalogue. Only complete typed
+        // business facts with matching ID, fields and ordering may be shared.
+        scratch.hold(3+records.size+source.size+owned.size)
+        facts=Str:Map[:];records.each |r| {id:=r["id"] as Str;if(id!=null) facts[id]=r}
+        model=source.dup
+        source.each |v,i|
+        {
+          deadline.check;row:=v as Map;id:=row?.get("id") as Str;fact:=id==null ? null : facts[id]
+          if(fact!=null && row.typeof==fact.typeof && row.ordered==fact.ordered && row==fact) model[i]=fact
+        }
+        normalizedOwned=owned.dup.set("modelRecords",model);configuration=normalizedOwned
+      }
+      scratch.hold(4);bundle=["input":input,"owned":configuration,"records":records]
       inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);finishPreparation;return inputs
     }
-    finally {bundle?.clear;scratch.close}
+    finally {bundle?.clear;facts?.clear;model?.clear;normalizedOwned?.clear;scratch.close}
   }
   Str:Obj? freezeSnapshot(Str:Obj? source)
   {

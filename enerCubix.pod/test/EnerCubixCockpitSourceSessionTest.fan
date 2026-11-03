@@ -4,6 +4,55 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testGroupedEmptyFramesKeepHourlyBusinessAndFirstReadingBoundaries()
+  {
+    ["empty","future","bridge","na","partial","zero","dst","noTariff","timed"].each |mode|
+    {
+      expected:=emptySnapshot(mode,false);actual:=emptySnapshot(mode,true)
+      verifyEq(normalize(actual["modules"],actual),normalize(expected["modules"],expected),mode)
+      a:=(Map)actual["reports"];e:=(Map)expected["reports"];verifyEq(a.keys.sort,e.keys.sort)
+      a.each |Map report,Str key|
+      {
+        ["summary","series","rows","warnings"].each |field|
+        {
+          left:=report[field];right:=((Map)e[key])[field]
+          if(key=="energy-flow" && field=="rows")
+          {
+            left=EnerCubixMath.maps(left).map |r->Str:Obj?| {r.findAll |v,k| {k!="periodsCaptureId"}}
+            right=EnerCubixMath.maps(right).map |r->Str:Obj?| {r.findAll |v,k| {k!="periodsCaptureId"}}
+          }
+          verifyEq(left,right,mode+"/"+key+"/"+field)
+        }
+        verifyEq(((Map)report["extra"])["usageCoverage"],((Map)((Map)e[key])["extra"])["usageCoverage"],mode+"/coverage")
+      }
+    }
+  }
+  private Str:Obj? emptySnapshot(Str mode,Bool grouped)
+  {
+    start:=DateTime.fromIso(mode=="dst" ? "2026-10-31T00:00:00-04:00" : "2026-10-01T00:00:00Z");end:=start+49hr;request:=input
+    if(mode=="partial") {start+=20min;end-=10min}
+    tz:=mode=="dst" ? TimeZone("New_York") : TimeZone.utc
+    request["time"]=["preset":"custom","period":"hour","from":start.toIso,"to":end.toIso];request["asOf"]=end.toIso
+    rs:=records;points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    if(mode=="noTariff") rs=rs.findAll |r| {r["kind"]!="tariff"}
+    if(mode=="timed") rs.find |r| {r["kind"]=="tariff"}.setAll(["mode":"weekly","rules":[["startHour":0,"endHour":12,"rate":1f],["startHour":12,"endHour":24,"rate":2f]]])
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    rows:=HisItem[,]
+    if(mode=="bridge") rows=[HisItem(start-1hr,Number(0)),HisItem(end+1hr,Number(100))]
+    else if(!["empty","partial","dst"].contains(mode)) rows=[HisItem(start+47hr+30min,mode=="na" ? NA.val : Number(100)),HisItem(start+48hr+30min,Number(mode=="zero" ? 100 : 110))]
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+    try
+    {
+      result:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {rows.each |row| {if(row.ts>=span.start && row.ts<span.end) sink(row)}});return session.load(grouped)},"test",tz,end,true,|->DateTime| {end},null,null,null,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+      count:=(Int)EnerCubixCockpitSourceSession#.field("emptyGroups").get(session)
+      if(grouped && mode!="bridge") verify(count>0,"Fixture must exercise grouping: "+mode)
+      else verifyEq(count,0)
+      return result
+    }
+    finally {session?.close;verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0);verifyEq(budget.state.unprepared.val,0)}
+  }
   Void testFinalSnapshotCopyMustBeAdmittedBeforeExecuteCanReturn()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");request:=input;request["modules"]=["trend"]
@@ -324,6 +373,28 @@ class EnerCubixCockpitSourceSessionTest : Test
     }
   }
   Void testCleaningCountersParametersAndPooledRowsStaySeparateFromHeaders() {cleaning(false)}
+  Void testAllReportMetadataIsAdmittedBeforeAnyNativeHistoryRead()
+  {
+    rs:=records;700.times |i| {rs.add(["id":"unselected$i","kind":"nativePoint","name":"Unused $i"])}
+    request:=input;request["modules"]=["trend"];a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":Str:Dict["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][][:]].toImmutable
+    budget:=EnerCubixStreamBudget();peer:=EnerCubixPreparedOwner(budget.state);EnerCubixCockpitSourceSession? session;reads:=0;held:=0
+    try
+    {
+      verifyErr(EnerCubixHttpErr#)
+      {
+        unexpected:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {
+          session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink|
+          {reads++;(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i)))}})
+          peer.hold(budget.state.remaining-40000);held=peer.entries;return session.load
+        },"test",TimeZone.utc,b,false,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)})
+      }
+      verifyEq(reads,0);verifyEq(budget.state.temporary.val,held);verifyEq(budget.residentRaw,0)
+    }
+    finally {session?.close;peer.close}
+  }
   Void testScopedCleaningCopAndRulesSurviveSourceRelease() {cleaning(true)}
   private Void cleaning(Bool scoped)
   {

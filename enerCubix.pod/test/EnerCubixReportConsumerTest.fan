@@ -3,6 +3,23 @@ using haystack
 ** Full report DTOs from original leaf math; controlled sources, not FIN acceptance.
 class EnerCubixReportConsumerTest : Test
 {
+  Void testOwnedReportsBuildAreaMetadataOnlyForNormalization()
+  {
+    source:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","categoryId":"c","pointId":"p","area":120f]].toImmutable
+    start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+1hr;budget:=EnerCubixStreamBudget().state;state:=EnerCubixPreparedOwner(budget)
+    dim:=EnerCubixDimension("metering",source);ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state)
+    q:=Str:Obj?["from":start.toIso,"to":end.toIso,"asOf":end.toIso,"perArea":false,"metric":"energy"]
+    try
+    {
+      plain:=EnerCubixReport(ctx,q,start,end,"profile","hour","energy",state).openLine("m","c").line
+      verify(plain.normalizationArea.isEmpty)
+      normalized:=EnerCubixReport(ctx,q.dup.set("perArea",true),start,end,"profile","hour","energy",state).openLine("m","c").line
+      verifyEq(normalized.normalizationArea["value"],120f);verifyEq(normalized.unit,"kWh/m²");verifyEq(source.last["area"],120f)
+    }
+    finally {state.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testProfileMixedSelectionAndDetailsMatchOriginalReport()
   {
     [false,true].each |area|
@@ -195,6 +212,7 @@ class EnerCubixReportConsumerTest : Test
       actual:=consumer.finish
       if(summaryOnly)
       {
+        verify(report.frameLedger(cursors.map |c->EnerCubixLine| {c.line}).isEmpty)
         verify(!actual.containsKey("series"));verify(!actual.containsKey("rows"))
         ["totals","knownTotals"].each |field|
         {xs:=EnerCubixMath.maps(((Map)actual["summary"])[field]);verifyEq(xs.size,81);verify(xs.all |x| {x["value"]==432f && ((List)x["sourceIds"]).size==18})}

@@ -4,13 +4,13 @@ using [java] java.util::IdentityHashMap
 ** before allocation; existing immutable values remain borrowed from their owner.
 internal const class EnerCubixCockpitFreeze
 {
-  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null)
+  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null,|Obj|? consume := null)
   {
     if(source==null || source.isImmutable) return source
     work:=EnerCubixPreparedOwner(output.budget);EnerCubixCockpitFreezer? freezer
     try
     {
-      work.hold(16);freezer=EnerCubixCockpitFreezer(output,work,borrow)
+      work.hold(16);freezer=EnerCubixCockpitFreezer(output,work,borrow,consume)
       result:=freezer.copy(source)
       output.hold(2);roots:=Obj?[result]
       output.watch |->Void| {roots.clear}
@@ -22,10 +22,11 @@ internal const class EnerCubixCockpitFreeze
 
 internal class EnerCubixCockpitFreezer
 {
-  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow)
-  {this.output=output;this.work=work;this.borrow=borrow}
+  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow,|Obj|? consume)
+  {this.output=output;this.work=work;this.borrow=borrow;this.consume=consume}
   private EnerCubixPreparedOwner output
   private EnerCubixPreparedOwner work
+  private |Obj|? consume
   private |Obj->Obj?|? borrow
   private IdentityHashMap memo := IdentityHashMap()
   Obj? copy(Obj? source)
@@ -63,7 +64,7 @@ internal class EnerCubixCockpitFreezer
       // All children are now immutable. This final shallow copy preserves the
       // input's map/list types and ordering without recopying shared children.
       output.hold(1+size);result:=builder.toImmutable
-      memo.put(source,result);return result
+      memo.put(source,result);consume?.call(source);return result
     }
     finally {node.close}
   }

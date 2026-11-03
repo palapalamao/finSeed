@@ -105,6 +105,7 @@ internal class EnerCubixCockpitSourceSession
   private DateTime clockFrom := DateTime.defVal
   private DateTime clockTo := DateTime.defVal
   private Bool started := false
+  private Int emptyGroups := 0
   private Bool done := false
   private Bool closed := false
   private Err? failure
@@ -121,11 +122,12 @@ internal class EnerCubixCockpitSourceSession
     {budget.check;if(!windows.any |w| {w.id==id && w.from<=left && w.to>=right}) throw ArgErr("cockpitSourceSessionHistoricalPlan")}
   }
 
-  [Str:Obj?][] load()
+  [Str:Obj?][] load(Bool groupEmpty := true)
   {
     check;if(started) throw ArgErr("cockpitSourceSessionAlreadyRead");started=true
     try
     {
+      registry.prepareMetadata
       windows.each |w|
       {
         if(w.unavailable!=null) return
@@ -149,6 +151,17 @@ internal class EnerCubixCockpitSourceSession
           try
           {
             active.each |w| {w.cursor?.advance(next)}
+            if(groupEmpty && registry.canGroupEmpty)
+            {
+              through:=at+24hr;if(through>clockTo) through=clockTo
+              windows.each |w| {if(w.from>at && w.from<through) through=w.from}
+              active.each |w|
+              {
+                end:=w.unavailable!=null ? w.to : (w.cursor?.confirmedEmptyThrough ?: next)
+                if(end<through) through=end;if(w.to<through) through=w.to
+              }
+              if(through>next) {emptyGroups++;next=through;active.each |w| {w.cursor?.advance(next)}}
+            }
             EnerCubixCockpitStream.withFrames(streams,budget.state) |h,frame|
             {
               missing:=0;active.each |w| {if(w.unavailable!=null) missing++}
@@ -156,7 +169,8 @@ internal class EnerCubixCockpitSourceSession
               try
               {
                 active.each |w| {if(w.unavailable!=null) h[w.id]=EnerCubixHistoryData(w.unavailable.dup.set("_preparedBudget",budget.state).set("_preparedFrame",unavailableFrame))}
-                registry.addFrame(at,next,h,frame)
+                if(next>at+1hr) registry.addEmptyFrames(at,next,h,frame)
+                else registry.addFrame(at,next,h,frame)
               }
               finally {unavailableFrame.expire}
             }

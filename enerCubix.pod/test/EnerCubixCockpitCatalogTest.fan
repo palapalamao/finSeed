@@ -1,5 +1,15 @@
 class EnerCubixCockpitCatalogTest : Test
 {
+  Void testOnlyRequestOwnedNonBusinessMetadataCanShareFrozenMapHeads()
+  {
+    rows:=records;rows.add(["id":"rawPoint","kind":"nativePoint","name":"Raw metadata"]);source:=rows.toImmutable
+    budget:=EnerCubixStreamBudget().state;owner:=EnerCubixPreparedOwner(budget)
+    dim:=EnerCubixDimension.owned("metering",source,false,owner,true)
+    verify(dim.byId["rawPoint"]===source.last);verify(dim.byId["a"]!==source[1])
+    verifyEq(((Map)dim.byId["expression"]["variables"])["x"],"a")
+    copied:=dim.byId["a"];owner.close;verify(copied.isEmpty);verifyEq(source.last["name"],"Raw metadata");verifyEq(budget.temporary.val,0)
+  }
+
   Void testProjectionMapCopiesAreAdmittedAndClearedWithoutTouchingSource()
   {
     source:=records.toImmutable

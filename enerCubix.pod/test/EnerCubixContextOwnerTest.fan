@@ -50,8 +50,12 @@ class EnerCubixContextOwnerTest : Test
       before:=budget.state.temporary.val;frame:=EnerCubixPreparedOwner(budget.state)
       verifyErr(ArgErr#) {ctx.beginFrame(frame,["wrong":h])}
       ctx.beginFrame(frame,["p":h]);known.beginFrame(frame,["p":h])
-      verifyEq(ctx.node("m","c",at,at+1hr).value,10f)
-      verifyEq(known.node("m","c",at,at+1hr).value,10f);verify(!known.knownReads.isEmpty)
+      strictValue:=ctx.node("m","c",at,at+1hr);knownValue:=known.node("m","c",at,at+1hr)
+      verifyEq(strictValue.value,10f);verifyEq(knownValue.value,10f);verify(!known.knownReads.isEmpty)
+      verify(ctx.node("m","c",at,at+1hr)===strictValue)
+      verify(known.node("m","c",at,at+1hr)===knownValue)
+      // Recursive scope visits reuse this device's own result in this frame.
+      verify(ctx.node("m","c",at,at+1hr,"energy",["group"])===strictValue)
       bound:=EnerCubixContext.bound(ctx,"m",ctx.byId["m"].dup.set("maximum",5f))
       verifyEq(bound.node("m","c",at,at+1hr).quality,"maximum")
       observedBound:=EnerCubixContext.known(bound,at+4hr)

@@ -3,6 +3,49 @@ using concurrent
 
 class EnerCubixCockpitPayloadTest : Test
 {
+  Void testOwnedEncodingReusesOnlyTheSameFrozenSharedValueAndField()
+  {
+    rows:=[Str:Obj?][,];100.times |i| {rows.add(["index":i,"value":i==1 ? null : i.toFloat])}
+    immutable:=rows.toImmutable
+    source:=Str:Obj?["a":["sourceUsage":immutable],"b":["sourceUsage":immutable],"periods":immutable,"sourceUsage":immutable].toImmutable
+    expected:=JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source));budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget)
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)
+      verifyEq(JsonOutStream.writeJsonToStr(actual),expected)
+      body:=(Map)actual["snapshot"];verify(((Map)body["a"])["sourceUsage"]===((Map)body["b"])["sourceUsage"])
+      verifyEq(((List)source["sourceUsage"]).size,100);verifyEq(budget.temporary.val,output.entries)
+    }
+    finally {output.close}
+  }
+  Void testFailureDuringCodecTransferPublishesNothingAndPreservesInputAndPeer()
+  {
+    rows:=[Str:Obj?][,];5000.times |i| {rows.add(["index":i,"value":i.toFloat])}
+    source:=Str:Obj?["rows":rows];before:=JsonOutStream.writeJsonToStr(source)
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(173000);held:=peer.entries
+    try
+    {
+      verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)}
+      verify(output.entries>4);verifyEq(JsonOutStream.writeJsonToStr(source),before);verifyEq(peer.entries,held)
+      output.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {output.close;peer.close}
+  }
+  Void testOwnedCodecTransfersItsBuilderBeforeDuplicatingTheWholePayload()
+  {
+    rows:=[Str:Obj?][,];5000.times |i| {rows.add(["index":i,"value":i==1 ? null : i.toFloat])}
+    source:=Str:Obj?["rows":rows];before:=JsonOutStream.writeJsonToStr(source)
+    expected:=JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source))
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(149000)
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)
+      verifyEq(JsonOutStream.writeJsonToStr(actual),expected);verifyEq(JsonOutStream.writeJsonToStr(source),before)
+      verify(budget.peak.val<=200000);verifyEq(budget.temporary.val,output.entries+peer.entries)
+      output.close;verifyEq(budget.temporary.val,peer.entries)
+    }
+    finally {output.close;peer.close}
+  }
   Void testNonSharedCodecObjectsCannotBypassTheRequestBudget()
   {
     source:=Str:Obj?[:];(0..<300).each |i| {source["field$i"]=i}

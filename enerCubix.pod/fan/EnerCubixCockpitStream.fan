@@ -164,6 +164,19 @@ internal class EnerCubixCockpitStream
 
   internal DateTime watermark() {hour < to ? hour : to}
   internal Bool scanComplete() {cursorEof && cursorFailure == null}
+  ** Only actual cursor contents prove this empty prefix; never hisStart tags.
+  internal DateTime? confirmedEmptyThrough()
+  {
+    cursorCheck
+    if(cursorFrameActive || !intervals.isEmpty) return null
+    if(cursorEof && raw.isEmpty) return to
+    if(raw.size==1 && raw.first.ts>hour)
+    {
+      end:=EnerCubixMath.floorHour(raw.first.ts)
+      return end>to ? to : end
+    }
+    return null
+  }
   ** Borrowed data must be consumed before returning. Retained reductions and
   ** copied diagnostic evidence belong to the consumer's separately charged state.
   internal Void withFrame(|EnerCubixHistoryData| consume)

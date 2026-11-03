@@ -1,4 +1,5 @@
 using util
+using [java] java.util::IdentityHashMap
 
 ** Negotiated, lossless representation of one cockpit response. It does not
 ** alter reports, arithmetic, source identity or the legacy /report contract.
@@ -16,14 +17,23 @@ internal class EnerCubixCockpitPayload
     deadline?.check;EnerCubixPreparedOwner? work;EnerCubixCockpitPayload? codec;Obj? body;Map? envelope
     try
     {
-      if(output!=null) {work=EnerCubixPreparedOwner(budget);work.hold(8)}
+      if(output!=null) {work=EnerCubixPreparedOwner(budget);work.hold(10)}
       codec=EnerCubixCockpitPayload();codec.work=work;codec.deadline=deadline;codec.budget=budget
       body=codec.value(snapshot,"")
       codec.hold(5);envelope=["payloadEncoding":"compact-v1","codecVersion":1,"snapshot":body,"evidence":codec.entries]
-      return output==null ? (Str:Obj?)envelope.toImmutable : (Str:Obj?)EnerCubixCockpitFreeze.value(envelope,output)
+      return output==null ? (Str:Obj?)envelope.toImmutable : (Str:Obj?)EnerCubixCockpitFreeze.value(envelope,output,null,|Obj value|
+      {
+        // Only the codec's newly admitted builder is consumed. The immutable
+        // business snapshot and borrowed values are never changed or released.
+        count:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+        if(value is Map) ((Map)value).clear;else ((List)value).clear
+        // The empty container remains referenced by the freezer memo.
+        work.release(count-1)
+      })
     }
-    finally {clear(body);clear(codec?.entries);envelope?.clear;work?.close}
+    finally {clear(body);clear(codec?.entries);codec?.sharedMemo?.clear;envelope?.clear;work?.close}
   }
+  private IdentityHashMap sharedMemo := IdentityHashMap()
   private Str:Obj? entries := [:]
   private EnerCubixCockpitDeadline? deadline
   private EnerCubixPreparedBudget? budget
@@ -43,6 +53,9 @@ internal class EnerCubixCockpitPayload
   {
     check
     if(input isnot Map && input isnot List) return input
+    memoize:=work!=null && input.isImmutable && shared.contains(key)
+    memo:=memoize ? (sharedMemo.get(input) as Map) : null
+    if(memo!=null && memo.containsKey(key)) return memo[key]
     local:=work==null ? null : EnerCubixPreparedOwner(work.budget)
     try
     {
@@ -92,12 +105,18 @@ internal class EnerCubixCockpitPayload
         id:=hash.sha256
         if (!entries.containsKey(id)) {hold(1);entries[id]=out}
         hold(2)
-        return ["\$cockpitRef":id]
+        result:=Str:Obj?["\$cockpitRef":id];remember(input,key,result,memoize,memo);return result
       }
     }
-    return out
+    remember(input,key,out,memoize,memo);return out
     }
     finally {local?.close}
+  }
+  private Void remember(Obj input,Str key,Obj? encoded,Bool enabled,Map? memo)
+  {
+    if(!enabled) return
+    if(memo==null) {hold(4);memo=Str:Obj?[:];sharedMemo.put(input,memo)}
+    hold(1);memo[key]=encoded
   }
   private Bool sameKeys(Map row,Str[] columns)
   {

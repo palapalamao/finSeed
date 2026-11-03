@@ -1,6 +1,41 @@
 ** Period and full-range reductions visit original ticks independently.
 class EnerCubixPeriodConsumerTest : Test
 {
+  Void testUnnormalizedBaseFoldsShareStateWithoutChangingAnyResult()
+  {
+    budget:=EnerCubixStreamBudget().state;a:=EnerCubixPreparedOwner(budget);ao:=EnerCubixPreparedOwner(budget);b:=EnerCubixPreparedOwner(budget);bo:=EnerCubixPreparedOwner(budget)
+    expected:=EnerCubixPeriodConsumer(line,at,at+3hr,"hour",a,ao)
+    actual:=EnerCubixPeriodConsumer(line,at,at+3hr,"hour",b,bo,true,true)
+    try
+    {
+      [2f,null,0f].each |Float? number,Int i|
+      {
+        value:=EnerCubixValue(number,i==1 ? "na" : "ok",["p"]);item:=EnerCubixTick(at+1hr*i,at+1hr*(i+1),value);item.known=EnerCubixValue(number,i==1 ? "na" : "ok",["p"]);item.baseValue=item.value;item.baseKnown=item.known
+        expected.add(item);actual.add(item)
+      }
+      expected.finish;actual.finish
+      ["value","known","baseValue","baseKnown"].each |mode|
+      {
+        x:=expected.total(mode);y:=actual.total(mode);verifyEq(y.value,x.value);verifyEq(y.quality,x.quality);verifyEq(y.sources,x.sources)
+        expected.periods.each |row,i| {xv:=(EnerCubixValue)row[mode];yv:=(EnerCubixValue)actual.periods[i][mode];verifyEq(yv.value,xv.value);verifyEq(yv.quality,xv.quality);verifyEq(yv.sources,xv.sources)}
+      }
+      verify(actual.total("value")===actual.total("baseValue"));verify(actual.total("known")===actual.total("baseKnown"))
+      verify(b.entries<a.entries);verify(bo.entries<ao.entries)
+      a.close;b.close;verifyEq(actual.total.value,expected.total.value)
+    }
+    finally {a.close;ao.close;b.close;bo.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testSharedBaseContractRejectsDifferentBaseValues()
+  {
+    budget:=EnerCubixStreamBudget().state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixPeriodConsumer(line,at,at+1hr,"hour",state,output,true,true)
+    item:=tick(at,1hr,1f);item.baseValue=EnerCubixValue(2f,"ok",["p"])
+    try {verifyErr(ArgErr#) {consumer.add(item)};verifyErr(ArgErr#) {consumer.finish}}
+    finally {state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testPeriodSubtotalsCannotReplaceOriginalWholeRangeFloatOrder()
   {
     start:=DateTime.fromIso("2026-01-31T23:00:00Z");end:=start+3hr

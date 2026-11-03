@@ -4,15 +4,22 @@
 internal class EnerCubixPeriodConsumer
 {
   new make(EnerCubixLine definition,DateTime from,DateTime to,Str gran,
-    EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,Bool emitPeriods := true)
+    EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,Bool emitPeriods := true,Bool sharedBase := false)
   {
     if(state.budget !== output.budget || to<=from || !definition.ticks.isEmpty || !["hour","day","week","month","year"].contains(gran)) throw ArgErr("periodConsumerPlan")
+    if(sharedBase && (definition.gauge || definition.ratio || definition.leak || definition.reference)) throw ArgErr("periodSharedBasePlan")
+    this.sharedBase=sharedBase
     this.definition=definition;this.to=to;this.gran=gran;at=from;stateOwner=state;outputOwner=output;this.emitPeriods=emitPeriods
     state.watch |->Void| {closeState};output.watch |->Void| {closeOutput}
     state.hold(26);output.hold(2)
-    modes.each |mode| {all[mode]=EnerCubixLineFold(definition,mode,state)}
+    initializeFolds(all,state)
   }
   private static const Str[] modes := ["value","known","baseValue","baseKnown"].toImmutable
+  private static const Str[] primaryModes := ["value","known"]
+  private const Bool sharedBase
+  private Str[] reductionModes() {sharedBase ? primaryModes : modes}
+  private Void initializeFolds(Str:EnerCubixLineFold folds,EnerCubixPreparedOwner owner)
+  {reductionModes.each |mode| {folds[mode]=EnerCubixLineFold(definition,mode,owner)};if(sharedBase) {folds["baseValue"]=folds["value"];folds["baseKnown"]=folds["known"]}}
   private EnerCubixLine? definition
   private const DateTime to
   private const Str gran
@@ -41,6 +48,7 @@ internal class EnerCubixPeriodConsumer
     if(tick.ts != at || tick.end<=tick.ts || tick.end>to) throw ArgErr("periodConsumerTick")
     try
     {
+      if(sharedBase && ((tick.baseValue!=null && tick.baseValue!==tick.value) || (tick.baseKnown!=null && tick.baseKnown!==tick.known))) throw ArgErr("periodSharedBaseTick")
       if(emitPeriods)
       {
         next:=EnerCubixMath.bucket(tick.ts,gran)
@@ -48,11 +56,11 @@ internal class EnerCubixPeriodConsumer
         if(bucket == null)
         {
           periodOwner=EnerCubixPreparedOwner(stateOwner.budget);periodOwner.hold(4)
-          modes.each |mode| {active[mode]=EnerCubixLineFold(definition,mode,periodOwner)}
+          initializeFolds(active,periodOwner)
           bucket=next;firstAt=tick.ts;samples=0;knownSamples=0
         }
       }
-      modes.each |mode| {all[mode].add(tick);if(emitPeriods) active[mode].add(tick)}
+      reductionModes.each |mode| {all[mode].add(tick);if(emitPeriods) active[mode].add(tick)}
       if(emitPeriods) {samples++;if(tick.known?.value != null) knownSamples++;lastAt=tick.end}
       at=tick.end
     }
@@ -93,9 +101,10 @@ internal class EnerCubixPeriodConsumer
     try
     {
       temporary:=5;retained:=entries
-      modes.each |mode| {temporary+=folds[mode].outputScratchEntries;retained+=folds[mode].outputEntries}
+      reductionModes.each |mode| {temporary+=folds[mode].outputScratchEntries;retained+=folds[mode].outputEntries}
       scratch.hold(temporary);outputOwner.hold(retained)
-      modes.each |mode| {values[mode]=folds[mode].finish}
+      reductionModes.each |mode| {values[mode]=folds[mode].finish}
+      if(sharedBase) {values["baseValue"]=values["value"];values["baseKnown"]=values["known"]}
       consume(values)
     }
     finally {values.clear;scratch.close}
