@@ -15,6 +15,23 @@ export function cockpitSpaceSites(nodes:CockpitSpaceNode[]){
  const sites=nodes.filter(node=>node.nodeKind==='site');
  return sites.map(site=>({site,floors:nodes.filter(node=>node.nodeKind==='floor'&&node.parentId===site.id)}));
 }
+/** Choose only objects in this observation. Catalogue ancestors never supply site totals. */
+export function cockpitDefaultSpaceFocus(snapshot:CockpitSnapshot,catalog:Catalog,current?:string):string|undefined{
+ if(!snapshot.capabilities.canRead)return;
+ const nodes=cockpitSpaceObjects(snapshot,catalog);
+ if(current&&nodes.some(node=>node.id===current))return current;
+ if(!snapshot.modules.space?.data)return;
+ const readable=nodes.filter(node=>node.quality!=='notLoaded'&&!node.reasonCodes.some(code=>code==='notLoaded'||code==='FOCUS_NOT_LOADED'));
+ const sites=readable.filter(node=>node.nodeKind==='site').sort((a,b)=>a.id.localeCompare(b.id,'en'));
+ const scope=snapshot.context.reportScope.nodeIds;
+ const scopeSite=scope.flatMap(id=>{const chain:string[]=[];let node=nodes.find(node=>node.id===id);while(node&&!chain.includes(node.id)){chain.push(node.id);node=nodes.find(parent=>parent.id===node?.parentId);}return chain;});
+ return sites.find(node=>scopeSite.includes(node.id))?.id||sites[0]?.id||readable.find(node=>scope.includes(node.id))?.id||readable.sort((a,b)=>a.id.localeCompare(b.id,'en'))[0]?.id;
+}
+export function cockpitSpaceUsage(node:CockpitSpaceNode){
+ const complete=node.valueBasis==='complete'&&node.completeValue!=null;
+ const value=node.valueType==='na'?null:complete?node.completeValue:node.value??node.knownValue;
+ return {complete,value,valueType:node.valueType==='na'?'na' as const:value==null?'null' as const:'number' as const};
+}
 export function cockpitSpaceIssues(snapshot:CockpitSnapshot,node:CockpitSpaceNode){
  const ids=new Set([node.id,node.nativeId,...node.meterIds]);return (snapshot.modules.issues?.data?.items||[]).filter(item=>ids.has(item.objectId)||item.sourceIds.some(id=>node.sourceIds.includes(id)));
 }

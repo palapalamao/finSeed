@@ -29,6 +29,9 @@ class EnerCubixCockpitRulesTest : Test
     r:=EnerCubixCockpitRules.project(query,records,history,info([p]),boundary,budget,"snapshot")
     verifyEq(EnerCubixMath.maps(r["evaluations"]).first["status"],"triggered")
     budget["status"]="unavailable"
+    budget["referenceVariancePct"]=12f;budget["variancePct"]=null
+    verifyEq(EnerCubixMath.maps(EnerCubixCockpitRules.project(query,records,history,info([p]),boundary,budget,"snapshot")["evaluations"]).first["status"],"unavailable")
+    budget["status"]="ok"
     verifyEq(EnerCubixMath.maps(EnerCubixCockpitRules.project(query,records,history,info([p]),boundary,budget,"snapshot")["evaluations"]).first["status"],"unavailable")
   }
   Void testUnitsCalendarExceptionsAndDisabledProfilesAreExplicit()

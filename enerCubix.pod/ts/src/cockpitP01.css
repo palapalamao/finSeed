@@ -27,3 +27,5 @@
 
 .cockpit-kpi .cockpit-value{display:inline-block;max-width:100%;overflow-x:auto;white-space:nowrap;vertical-align:bottom}
 @media(max-width:390px){.cockpit-kpi .cockpit-number,.cockpit-kpi .cockpit-card-number{font-size:clamp(14px,5vw,20px)}.cockpit-kpi .cockpit-value,.cockpit-kpi small{display:block}}
+
+.cockpit-focus-panel{padding-top:3px;margin-top:3px}.cockpit-focus-panel>summary{cursor:pointer}.cockpit-focus-panel>summary .cockpit-focus-title{display:inline;margin:0}

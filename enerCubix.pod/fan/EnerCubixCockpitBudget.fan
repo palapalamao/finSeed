@@ -108,6 +108,16 @@ internal class EnerCubixCockpitBudget
     result["configRefs"]=sameCurrency.map |b->[Str:Obj?]| {["id":b["id"],"mod":b["mod"],"version":b["version"]]}
     result["configuration"]=sameCurrency
     if(!validCost) {result["periodActualCost"]=cost["value"];result["costValueBasis"]=cost["valueBasis"]}
+    // References reuse the already observed expense, never coverage-scaled or
+    // substituted history. Strict eligibility above remains the rule input.
+    known:=cost["valueType"] == "na" ? null : EnerCubixMath.num(cost["value"])
+    if(result["budgetStatus"] == "ok" && known != null && ["complete","knownSubtotal"].contains(cost["valueBasis"]))
+    {
+      period:=EnerCubixMath.num(result["periodBudget"]);month:=EnerCubixMath.num(result["monthBudget"])
+      result["referenceVariancePct"]=period != null && period > 0f ? (known-period)/period*100f : null
+      result["referenceMonthUsagePct"]=month != null && month > 0f ? known/month*100f : null
+      result["referenceBasis"]=["actualCost":known,"valueBasis":cost["valueBasis"],"quality":cost["quality"],"reasonCodes":EnerCubixMath.strings(cost["reasonCodes"]),"from":result["from"],"effectiveTo":result["effectiveTo"],"asOf":result["asOf"],"currency":cost["unit"],"method":"observedCostWithoutExtrapolation"]
+    }
     return result
   }
   internal static Str:Obj? currency(Str:Obj? cost)

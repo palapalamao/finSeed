@@ -19,7 +19,7 @@ import {CockpitFlow} from './CockpitFlow';
 import {CockpitSpace} from './CockpitSpace';
 import {CockpitReference} from './CockpitReference';
 import {CockpitBrief,CockpitNextSteps} from './CockpitBrief';
-import {cockpitSpaceObjects} from './cockpitSpaceProjection';
+import {cockpitSpaceObjects,cockpitDefaultSpaceFocus} from './cockpitSpaceProjection';
 import {cockpitCopNavigation} from './cockpitEfficiencyProjection';
 import {CockpitIssues} from './CockpitIssues';
 import {CockpitPresentation} from './CockpitPresentation';
@@ -58,6 +58,8 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
  const apply=()=>{const request=makeRequest();if(request)void query.apply(request);};
  useEffect(()=>{if(restored){query.restore(restored.snapshot);requestAnimationFrame(()=>window.scrollTo(0,restored.view.scrollY));}else if(initialRequest){void query.apply({...initialRequest,requestId:'restore-'+(++sequence.current)});}else if(selection&&query.getSnapshot().phase==='idle'){void query.apply({schemaVersion:1,requestId:'initial-'+(++sequence.current),reportScope:selection.scope,focusCategoryId:selection.categoryId,...(auxiliaryCategoryId?{auxiliaryCategoryId}:{}),time:{preset:'thisMonth',period:'day'},comparison:{mode:'presetDefault'},modules:[...cockpitModules]});}return()=>query.cancel();},[query]);
  const snapshot=state.snapshot,report=useMemo(()=>snapshot?cockpitProfileSnapshot(snapshot):undefined,[snapshot,locale]);
+ // Once per observation: clearing focus is retained until another snapshot arrives.
+ useEffect(()=>{if(snapshot)setFocusObjectId(current=>cockpitDefaultSpaceFocus(snapshot,catalog,current));},[snapshot,catalog]);
  useEffect(()=>{if(snapshot)setDates(current=>current.from&&current.to?current:{...current,from:snapshot.context.time.from,to:snapshot.context.time.to});},[snapshot]);
  const dateInvalid=preset==='custom'&&(!dates.from||!dates.to||Date.parse(dates.from)>=Date.parse(dates.to))||dates.comparison.mode==='custom'&&(!dates.comparison.from||!dates.comparison.to||Date.parse(dates.comparison.from)>=Date.parse(dates.comparison.to));
  const loading=state.phase==='loading'||state.phase==='refreshing';

@@ -2013,3 +2013,15 @@ Object.assign(englishMessages,{"直属计量分支（{0} 项）":"Direct meterin
 Object.assign(englishMessages,{"本次总表已有量":"Available parent-meter usage","分表覆盖":"Submeter coverage","{0} / {1} 个直属分表覆盖完整":"{0} / {1} direct submeters have complete coverage","快照未提供完整分表覆盖依据":"Complete submeter coverage evidence is not included","范围视图，不替代总分表覆盖校核":"Scope view; parent/submeter coverage is not established","完整差额":"Complete-period difference","无法判断":"Cannot determine","各计量边界独立展示，不将不同根对象相加。":"Metering boundaries are shown independently; separate roots are not added together."});
 
 Object.assign(englishMessages,{"范围已有量":"Available scope usage"});
+
+Object.assign(englishMessages,{
+ '用量截止：{0}':'Usage cutoff: {0}',
+ '参考偏差':'Reference variance',
+ '已统计费用占月预算':'Observed cost / monthly budget',
+ '已统计费用小计':'Observed cost subtotal',
+ '参考比例依据':'Reference rate basis',
+ '已有用量小计':'Known usage subtotal',
+ '已有费用含不完整或估算数据；比例仅供参考，不作达标判断。':'Observed cost includes incomplete or estimated data. These rates are references and do not determine budget compliance.',
+ '参考偏差 =（同截止已有费用 − 期间预算）÷ 期间预算 × 100%；已统计费用占月预算 = 同截止已有费用 ÷ 涉及月份预算合计 × 100%。不按覆盖比例放大费用。':'Reference variance = (observed cost at the same cutoff − period budget) / period budget × 100%; observed cost / monthly budget = observed cost at the same cutoff / involved full-month budgets × 100%. Cost is not scaled by coverage.',
+ '当前快照未加载可用站点用量，保留当前范围对象，不推算站点总量。':'Site usage is not loaded in this snapshot. The current scope object is retained without inferring a site total.'
+});
