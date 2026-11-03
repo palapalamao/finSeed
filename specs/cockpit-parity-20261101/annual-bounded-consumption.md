@@ -334,3 +334,9 @@ cockpit-report-lifetime-tests.log：4类32方法850检查通过，6445ms，含�
 源准备配置是借用调用者提供的不可变输入，其owner仍须存活到最终发送；toImmutable不代表可免计账。此批未声称解决History配置生成、Root历史元数据及全部投影的创建计账。4类33方法891检查通过，7562ms（cockpit-source-release-final-tests.log）；含清洗+COP+规则全模块对原路径核对、非空配置refs和fingerprint、清洗计数及诊断ref、关闭后JSON稳定、冻结失败不提前关源。
 
 捕获cockpit-source-release-main：11.591秒，峰188853、462读/12094样本/unprepared0，关闭raw/temporary0；497573B，SHA256 133B7468C403099F5FDE3B08B4D15BF862AAD805150841B732160F41DF29D300。12报告解码及8+58+5既定比较通过。仍不是native FIN/HTTP/完整请求准入；未部署。
+
+内部指纹流式计算
+
+Root配置指纹与compact证据hash复用精确JSON UTF-8流式SHA-256，不再持有整段JSON Str和重复Buf。先在相同SDK执行JDK MessageDigest逐字节适配，随后与原JsonOutStream.writeJsonToStr(...).toBuf的中英文、emoji及转义字节/摘要对照；摘要一致。内部未压缩hash超过8MiB仍可处理，最终HTTP信封的8MiB限制保持独立。带scope时hash小工作区预先准入，并沿用同一deadline；限额/超时清理仅释放自己，不清peer。
+
+cockpit-digest-final-tests.log 4类21方法613检查通过，7761ms；年度九模块旧路径测试也在先前批次执行通过（同批唯一失败为新增时钟夹具捕获可变Int，改用AtomicInt后单独重跑相关检查，未改生产计时）。完整suite仍以11939ed3证据为准；此批不声称已完成codec全部图所有权。

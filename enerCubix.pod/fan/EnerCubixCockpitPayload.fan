@@ -4,15 +4,16 @@ using util
 ** alter reports, arithmetic, source identity or the legacy /report contract.
 internal class EnerCubixCockpitPayload
 {
-  static Str:Obj? encode(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null)
+  static Str:Obj? encode(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null,EnerCubixPreparedBudget? budget := null)
   {
     codec:=EnerCubixCockpitPayload()
-    codec.deadline=deadline;deadline?.check
+    codec.deadline=deadline;codec.budget=budget;deadline?.check
     body:=codec.value(snapshot,"")
     return (Str:Obj?)["payloadEncoding":"compact-v1","codecVersion":1,"snapshot":body,"evidence":codec.entries].toImmutable
   }
   private Str:Obj? entries := [:]
   private EnerCubixCockpitDeadline? deadline
+  private EnerCubixPreparedBudget? budget
   private Int visited := 0
   private Void check() {if(++visited % 256 == 0) deadline?.check}
   private static const Str[] shared := ["periods","sourceUsage","cleaning","usageCoverage","tariffSnapshot","energyFlow"]
@@ -49,10 +50,10 @@ internal class EnerCubixCockpitPayload
     }
     if (shared.contains(key) && (out is Map || out is List))
     {
-      json:=JsonOutStream.writeJsonToStr(out)
-      if (json.toBuf.size > 512)
+      hash:=EnerCubixCockpitDigest.json(out,deadline,budget)
+      if (hash.size > 512)
       {
-        id:=json.toBuf.toDigest("SHA-256").toHex
+        id:=hash.sha256
         if (!entries.containsKey(id)) entries[id]=out
         return ["\$cockpitRef":id]
       }

@@ -232,7 +232,7 @@ class EnerCubixCockpit
     appliedCleaning:=proof["appliedCleaning"]
     cutoff:=DateTime.fromIso(request["asOf"].toStr)
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
-    provenance:=Str:Obj?["configFingerprint":JsonOutStream.writeJsonToStr(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning]).toBuf.toDigest("SHA-256").toHex,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
+    provenance:=Str:Obj?["configFingerprint":EnerCubixCockpitDigest.json(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning],deadline,requestScope?.stream?.state).sha256,"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
     budget:=(requestMeta["preparedBudget"] as EnerCubixPreparedBudget) ?: (histories.find |h| {h["_preparedBudget"] is EnerCubixPreparedBudget}?.get("_preparedBudget") as EnerCubixPreparedBudget)
     if(budget != null) provenance["preparedRuntime"]=budget.evidence
     limitations:=Str[,]
@@ -254,7 +254,7 @@ class EnerCubixCockpit
     releaseSources:=requestMeta["releaseSources"] as |->Void|
     releaseSources?.call
     deadline?.check
-    result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
+    result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline,requestScope?.stream?.state) : snapshot
     deadline?.check
     return result
   }
