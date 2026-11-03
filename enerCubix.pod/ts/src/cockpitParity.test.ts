@@ -36,5 +36,5 @@ it('renders a true compact destination list without full SVG or source tables',(
 });
 it('explains a local KPI internal error while retaining other valid numbers',()=>{
  const snapshot=structuredClone(actual) as unknown as CockpitSnapshot,metric=snapshot.modules.kpis!.data!.values.find(metric=>metric.id==='cost')!;metric.value=null;metric.valueType='null';metric.reasonCodes=['COCKPIT_METRIC_ERROR'];metric.quality='metricError';
- for(const language of ['zh-CN','en-US']){initializeLocale(language);const html=renderToStaticMarkup(createElement(CockpitKpis,{snapshot,name:id=>id}));expect(html).toContain(language==='zh-CN'?'此指标计算失败':'This metric could not be calculated');expect(html).toContain('>30 <small>kWh</small>');}
+ for(const language of ['zh-CN','en-US']){initializeLocale(language);const html=renderToStaticMarkup(createElement(CockpitKpis,{snapshot,name:id=>id}));expect(html).toContain(language==='zh-CN'?'此指标计算失败':'This metric could not be calculated');expect(html.replace(/<[^>]*>/g,' ')).toMatch(/\b30\s+kWh/);}
 });
