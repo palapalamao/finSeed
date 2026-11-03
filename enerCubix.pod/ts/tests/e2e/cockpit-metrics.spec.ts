@@ -43,6 +43,6 @@ for(const language of ['zh-CN','en-US']){
 test('promoting a focus keeps the applied absolute period rather than submitting unrelated draft filters',async({page})=>{
  const {requests}=await setup(page,'en-US');await page.goto('/#/cockpit?project=testproject');await expect(page.locator('.cockpit-number')).toHaveText('100 kWh');
  await page.locator('.cockpit-conditions-trigger').click();await page.locator('.cockpit-controls').getByText('This month',{exact:true}).click();await page.getByText('Today',{exact:true}).last().click();expect(requests).toHaveLength(1);
- await page.getByRole('button',{name:'真实园区 / 电表原名',exact:true}).click();await page.getByRole('button',{name:'Set as statistical scope'}).click();await expect.poll(()=>requests.length).toBe(2);
+ await page.getByRole('button',{name:'Object list',exact:true}).click();await page.getByRole('button',{name:'真实园区 / 电表原名',exact:true}).click();await page.locator('.cockpit-focus-panel>summary').click();await page.getByRole('button',{name:'Set as statistical scope'}).click();await expect.poll(()=>requests.length).toBe(2);
  expect(requests[1]).toMatchObject({reportScope:{nodeIds:['a']},time:{preset:'custom',from:raw.context.time.from,to:raw.context.time.to},asOf:raw.context.asOf});
 });
