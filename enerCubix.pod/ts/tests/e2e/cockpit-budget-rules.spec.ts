@@ -13,6 +13,30 @@ const p29=JSON.parse(readFileSync(new URL('../fixtures/cockpit-pressure-24day.js
 const zero=JSON.parse(readFileSync(new URL('../fixtures/cockpit-budget-zero-target.json',import.meta.url),'utf8')) as CockpitSnapshot;
 const fullP27Path=process.env.ENERCUBIX_P27_NINE;const fullP27=fullP27Path?JSON.parse(readFileSync(fullP27Path,'utf8')):undefined;
 const version=JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;
+for(const language of ['zh-CN','en-US'])test('compact budget large amounts stay on one line '+language,async({page},info)=>{
+ const state=await setup(page,language,{variant:'p27'}),b=state.snapshot.modules.kpis!.data!.budget!;
+ Object.assign(b,{status:'unavailable',budgetStatus:'ok',comparisonStatus:'unavailable',monthBudget:11000000,periodBudget:1047033.09,periodActualCost:1149016.66,variancePct:null,monthUsagePct:null,referenceVariancePct:9.74,referenceMonthUsagePct:10.45,costQuality:'partial',costValueBasis:'knownSubtotal',reasonCodes:['BUDGET_COST_INCOMPLETE']});
+ await state.openCockpit();const budget=page.locator('.cockpit-reference .cockpit-budget'),captures:unknown[]=[];
+ for(const [width,height]of [[1280,720],[290,844],[320,800],[390,844],[1920,1080]]){
+  await page.setViewportSize({width,height});await budget.scrollIntoViewIfNeeded();
+  const values=await budget.locator('.cockpit-budget-values strong').evaluateAll(nodes=>nodes.map(node=>{
+   const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT),texts:Text[]=[];let text;while(text=walker.nextNode()){if(!(text.parentElement?.closest('small'))&&text.textContent?.trim())texts.push(text as Text);}
+   const first=texts[0],range=document.createRange();range.selectNodeContents(first);const rects=[...range.getClientRects()],number=node.querySelector('.cockpit-budget-number')||node,box=number.getBoundingClientRect();
+   return {text:first.textContent!.trim(),lineCount:new Set(rects.map(rect=>Math.round(rect.top))).size,width:box.width,clientWidth:number.clientWidth,scrollWidth:number.scrollWidth,fontSize:getComputedStyle(node).fontSize};
+  }));
+  captures.push({language,width,height,values});writeFileSync(info.outputPath('large-budget-geometry.json'),JSON.stringify({level:'controlled synthetic amounts; fake transport; not FIN runtime',captures},null,2));await page.screenshot({path:info.outputPath('large-budget-'+language+'-'+width+'.png')});
+  expect(values.map(value=>value.text)).toEqual(['11,000,000','1,047,033.09','1,149,016.66','9.74']);
+  expect(values.map(value=>value.lineCount)).toEqual([1,1,1,1]);
+  expect(values.every(value=>value.scrollWidth<=value.clientWidth)).toBe(true);
+  await expect(budget).toContainText('10.45%');expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);expect(state.queries).toHaveLength(1);
+ }
+ // Extreme amounts retain every digit in the local number scroller, not in page overflow.
+ b.monthBudget=1e20;await page.setViewportSize({width:1280,height:720});await page.locator('.cockpit-query-submit').click();await expect.poll(()=>state.queries.length).toBe(2);
+ const number=budget.locator('.cockpit-budget-values strong').first();await expect(number).toContainText(new Intl.NumberFormat(language,{maximumFractionDigits:2}).format(1e20));
+ const extreme=await number.locator('.cockpit-budget-number').evaluate(node=>({width:node.clientWidth,scroll:node.scrollWidth,textOverflow:getComputedStyle(node).textOverflow,lines:new Set([...(()=>{const range=document.createRange();range.selectNodeContents(node);return range.getClientRects();})()].map(rect=>Math.round(rect.top))).size}));
+ writeFileSync(info.outputPath('extreme-budget-geometry.json'),JSON.stringify({language,value:new Intl.NumberFormat(language,{maximumFractionDigits:2}).format(1e20),...extreme},null,2));
+ expect(extreme.lines).toBe(1);expect(extreme.textOverflow).not.toBe('ellipsis');expect(extreme.scroll).toBeGreaterThan(extreme.width);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+});
 async function setup(page:Page,language='en-US',options:{reader?:boolean;config?:boolean;nine?:boolean;variant?:'p27'|'p29'|'zero';unavailable?:string}={}){
  await page.emulateMedia({reducedMotion:'reduce'});
  const project=options.config?'budgetFixture':'test',snapshot=structuredClone(options.nine&&fullP27?fullP27.snapshot:options.variant==='p27'?p27:options.variant==='p29'?p29:options.variant==='zero'?zero:pressure),calls:{path:string;body:any}[]=[],queries:CockpitRequest[]=[];

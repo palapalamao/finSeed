@@ -4,3 +4,5 @@
 @media print{.cockpit-budget-chart{break-inside:avoid}.cockpit-budget-curve-table{overflow:visible}.cockpit-budget-details{display:block}.cockpit-budget-details summary{display:none}.cockpit-rule-evaluation{break-inside:auto}.cockpit-budget-details table{font-size:10px}.cockpit-budget-details tr{break-inside:avoid}}
 
 .cockpit-rule-input{display:contents}.cockpit-comparison-reference{margin-top:16px;border-top:1px solid #dfe7ed;padding-top:10px}.cockpit-rule-evaluations{border-top:1px solid #dfe7ed;margin:12px 0;padding-top:10px}
+
+.cockpit-budget .cockpit-budget-values strong{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2em .3em}.cockpit-budget-number{display:inline-block;min-width:0;max-width:100%;white-space:nowrap;overflow-x:auto;overflow-wrap:normal}.cockpit-budget-compact .cockpit-budget-values>div{container-type:inline-size}.cockpit-budget-compact .cockpit-budget-values strong{font-size:clamp(14px,15cqi,21px)}
