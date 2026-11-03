@@ -10,7 +10,7 @@ class EnerCubixCockpitSourceSessionTest : Test
     point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
     prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
     scope:=EnerCubixCockpitRequestScope("test","controlled-final-copy");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
-    EnerCubixCockpitSourceSession? session;late:=false;returned:=false;held:=0
+    EnerCubixCockpitSourceSession? session;late:=false;returned:=false;released:=false;held:=0
     try
     {
       try
@@ -19,13 +19,14 @@ class EnerCubixCockpitSourceSessionTest : Test
         {
           session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(100f+10f*i))) }},scope)
           headers:=session.load;meta:=(Map)headers.last["_cockpitRequestMeta"];publish:=(|Str:Obj?->Str:Obj?|)meta["publishDiagnostics"]
+          release:=(|->Void|)meta["releaseSources"];meta["releaseSources"]=|->Void| {released=true;release()}
           meta["publishDiagnostics"]=|Str:Obj? reports->Str:Obj?| {result:=publish(reports);late=true;peer.hold(budget.state.remaining);held=peer.entries;return result}
           return headers
         },"test",TimeZone.utc,a+2hr,false,null,null,null,scope.deadline,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},null,null,scope)
         returned=true
       }
       catch(EnerCubixHttpErr e) {verifyEq(e.status,422);verifyEq(e.code,"PREPARED_READ_LIMIT")}
-      verify(late);verify(!returned);verifyEq(budget.nativeReads,1);verify(!scope.responseStarted);verify(scope.canSendError)
+      verify(late);verify(!returned);verify(!released);verifyEq(budget.nativeReads,1);verify(!scope.responseStarted);verify(scope.canSendError)
       session.close;scope.close;verifyEq(budget.state.temporary.val,held)
     }
     finally {session?.close;scope.close;peer.close}
@@ -56,17 +57,19 @@ class EnerCubixCockpitSourceSessionTest : Test
     points:=Str:Dict[:]
     ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"])}
     prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pn":[Str:Obj?][,],"pd":[Str:Obj?][,]]].toImmutable
-    scope:=EnerCubixCockpitRequestScope("test","controlled-nine-wire");budget:=scope.stream;EnerCubixCockpitSourceSession? session;Buf? escaped;calls:=0
+    scope:=EnerCubixCockpitRequestScope("test","controlled-nine-wire");budget:=scope.stream;EnerCubixCockpitSourceSession? session;Buf? escaped;calls:=0;[Str:Obj?][]? loaded
     try
     {
       snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
-      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i))) }},scope);return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i))) }},scope);loaded=session.load;return loaded},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
       {
         report:=session.read(key,q);verify(report.isImmutable);verify(session.read(key,q)===report)
         changed:=q.dup.set("from",(a-1hr).toIso);verifyErr(ArgErr#) {session.read(key,changed)}
         verifyErr(ArgErr#) {session.read("not-registered",q)}
         return report
       },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      verify(loaded.isEmpty,"Source session must be released after snapshot freeze and before encoding/sending")
+      verifyEq(budget.state.temporary.val,scope.entries)
       scope.deliver(snapshot,|Buf bytes|
       {
         calls++;escaped=bytes;verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitGate.enter("test","controlled-nine-wire")}
@@ -320,36 +323,51 @@ class EnerCubixCockpitSourceSessionTest : Test
       verifyEq(budget.state.temporary.val,0)
     }
   }
-  Void testCleaningCountersParametersAndPooledRowsStaySeparateFromHeaders()
+  Void testCleaningCountersParametersAndPooledRowsStaySeparateFromHeaders() {cleaning(false)}
+  Void testScopedCleaningCopAndRulesSurviveSourceRelease() {cleaning(true)}
+  private Void cleaning(Bool scoped)
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr;rs:=records;request:=input;owned:=configuration
-    cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMax":Number(50)])
+    cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMax":Number(50),"enerCubixProfileRef":Ref("clean-profile"),"enerCubixProfileVersion":Number(2)])
     points:=Str:Dict["pn":Etc.makeDict(["id":Ref("pn"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"MWh","tz":"UTC"]),"pd":Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])]
     configs:=Str:Dict["pd":cfg]
     read:=|Dict point,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(point.id.id=="pn" ? 0.1f*i : (i==0 ? 0f : (i==1 ? 10f : 100f)))))}}
-    expected:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {EnerCubixCockpitStream.prepare(q,frozen,points,configs,read,EnerCubixStreamBudget())},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,null,owned)
-    prepared:=Str:Obj?["points":points,"configs":configs,"configRefs":Str:[Str:Obj?][]["pn":[Str:Obj?][,],"pd":[Str:Obj?][,]]].toImmutable
-    budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session;[Str:Obj?][]? headers
+    refs:=Str:[Str:Obj?][]["pn":[["id":"pn","mod":a.toIso]],"pd":[["id":"pd","mod":a.toIso],["id":"clean-profile","mod":a.toIso]]]
+    expected:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {out:=EnerCubixCockpitStream.prepare(q,frozen,points,configs,read,EnerCubixStreamBudget());out.each |h| {h["configRefs"]=refs[h["pointId"].toStr]};return out},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,null,owned)
+    prepared:=Str:Obj?["points":points,"configs":configs,"configRefs":refs].toImmutable
+    scope:=scoped ? EnerCubixCockpitRequestScope("test","cleaning-release") : null
+    budget:=scope?.stream ?: EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session;[Str:Obj?][]? headers
     try
     {
-      actual:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,read);verifyEq(budget.nativeReads,0);headers=session.load;return headers},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,null,owned,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+      actual:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,read,scope);verifyEq(budget.nativeReads,0);headers=session.load;return headers},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope?.deadline,owned,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
       artifactDir:=Env.cur.vars["ENERCUBIX_SOURCE_SESSION_DIFF_DIR"]
       if(artifactDir!=null)
       {File.os(artifactDir+"/source-session-cleaning.expected-modules.json").out.print(JsonOutStream.writeJsonToStr(normalize(expected["modules"],expected))).close;File.os(artifactDir+"/source-session-cleaning.actual-modules.json").out.print(JsonOutStream.writeJsonToStr(normalize(actual["modules"],actual))).close}
       verifyEq(normalize(actual["modules"],actual),normalize(expected["modules"],expected))
       verifyEq(((Map)actual["provenance"])["appliedCleaning"],((Map)expected["provenance"])["appliedCleaning"])
+      ["configRefs","configFingerprint"].each |key| {verifyEq(((Map)actual["provenance"])[key],((Map)expected["provenance"])[key])}
       report:=(Map)((Map)actual["reports"])["profile-energy"]
       cleaned:=EnerCubixMath.maps(((Map)report["extra"])["cleaning"]).first
       verifyEq(cleaned["rejectedCount"],1);verifyEq(cleaned["pointId"],"pd")
-      header:=headers.find |h| {h["pointId"]=="pd"}
-      verifyEq(((Map)header["cleaning"]).keys.sort,["parameters","profileId","profileVersion"])
+      if(!scoped)
+      {header:=headers.find |h| {h["pointId"]=="pd"};verifyEq(((Map)header["cleaning"]).keys.sort,["parameters","profileId","profileVersion"])}
+      else
+      {
+        verify(headers.isEmpty);verifyEq(budget.state.temporary.val,scope.entries)
+        verifyErr(ArgErr#) {session.read("profile-energy",[:])}
+        verifyErr(ArgErr#) {session.copData("cop",[:])}
+        verifyErr(ArgErr#) {session.ruleData("rule",[:])}
+        body:=JsonOutStream.writeJsonToStr(actual);session.close
+        verifyEq(JsonOutStream.writeJsonToStr(actual),body)
+        verify(!body.contains("releaseSources"));verify(!body.contains("publishDiagnostics"))
+      }
       entries:=EnerCubixMath.maps(((Map)actual["diagnostics"])["entries"])
       proof:=entries.find |entry| {entry["id"]==cleaned["detailsDiagnosticRef"]}
       verifyEq(proof["kind"],"cleaningEvents");verifyEq(proof["returnedCount"],((List)cleaned["details"]).size)
       verify(EnerCubixMath.strings(proof["reportRefs"]).contains("profile-energy"))
       verifyEq(budget.nativeReads,2);verifyEq(budget.state.unprepared.val,0)
     }
-    finally {session?.close}
+    finally {session?.close;scope?.close}
     verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
   }
   Void testEmptyMissingAndNoHistoryNeverBecomeNativeEmptyReadWindows()

@@ -326,3 +326,11 @@ Root最终快照改由同一scope准入不可变副本。先用限额夹具复�
 cockpit-report-lifetime-tests.log：4类32方法850检查通过，6445ms，含全九模块到compact/wire、重复读取身份、缓存后非法签名/未知key拒绝、报告释放及重复close、复制中限额和peer保持。captured回放cockpit-report-lifetime-main在仅追加测试前的相同生产实现通过：12.925秒，逻辑峰188852，462读取/12094样本/44010小时/unprepared0；发送期间Gate保留，关闭raw/temporary0而prepared48不重置。响应497574B，SHA256 266870DF51F7BFF5B36CDFF04E034A3490F606C9DDA74F12B49DDD33A982B9F1；TS解码12报告、8项provenance、58严格业务组及5行能流窄诊断比较均通过。
 
 此峰仍未包含上游配置及所有Root/codec创建点，不能当作完整请求准入、JVM堆或FIN实机通过。原生Repo仍未切SourceSession；只读账号暂缓，浏览器安全停止保持。
+
+业务快照后释放源会话（私有scope路径）
+
+先以RED确认原Root返回时源header仍存活。新typed releaseSources控制回调只由带scope的SourceSession提供，Root白名单与类型检查要求同时为显式prepared路径；全部模块和诊断发布完成、freezeSnapshot成功后，先取局部回调再关闭session，随后进入codec。冻结失败不执行该成功释放回调，外层仍清理；控制回调不进入公开JSON。关闭后read/cop/rule/publish均受closed检查，scope报告和快照仍保留。
+
+源准备配置是借用调用者提供的不可变输入，其owner仍须存活到最终发送；toImmutable不代表可免计账。此批未声称解决History配置生成、Root历史元数据及全部投影的创建计账。4类33方法891检查通过，7562ms（cockpit-source-release-final-tests.log）；含清洗+COP+规则全模块对原路径核对、非空配置refs和fingerprint、清洗计数及诊断ref、关闭后JSON稳定、冻结失败不提前关源。
+
+捕获cockpit-source-release-main：11.591秒，峰188853、462读/12094样本/unprepared0，关闭raw/temporary0；497573B，SHA256 133B7468C403099F5FDE3B08B4D15BF862AAD805150841B732160F41DF29D300。12报告解码及8+58+5既定比较通过。仍不是native FIN/HTTP/完整请求准入；未部署。

@@ -110,7 +110,7 @@ class EnerCubixCockpit
       metadataRows:=histories.findAll |h| {h.containsKey("_cockpitRequestMeta")}
       if(preparedReport==null || metadataRows.size!=1 || metadataRows.first.size!=1) throw ArgErr("cockpitPreparedRequestMeta")
       candidate:=metadataRows.first["_cockpitRequestMeta"] as Map
-      if(candidate==null || candidate["schemaVersion"]!=1 || candidate["diagnostics"] isnot Map || candidate["preparedBudget"] isnot EnerCubixPreparedBudget || (candidate["streaming"]!=null && candidate["streaming"] isnot Map) || (candidate["publishDiagnostics"]!=null && candidate["publishDiagnostics"] isnot |Str:Obj?->Str:Obj?|) || candidate.keys.any |key| {!["schemaVersion","diagnostics","preparedBudget","streaming","historyConfigObservedFrom","historyConfigObservedTo","publishDiagnostics"].contains(key)}) throw ArgErr("cockpitPreparedRequestMeta")
+      if(candidate==null || candidate["schemaVersion"]!=1 || candidate["diagnostics"] isnot Map || candidate["preparedBudget"] isnot EnerCubixPreparedBudget || (candidate["streaming"]!=null && candidate["streaming"] isnot Map) || (candidate["publishDiagnostics"]!=null && candidate["publishDiagnostics"] isnot |Str:Obj?->Str:Obj?|) || (candidate["releaseSources"]!=null && (requestScope==null || candidate["releaseSources"] isnot |->Void|)) || candidate.keys.any |key| {!["schemaVersion","diagnostics","preparedBudget","streaming","historyConfigObservedFrom","historyConfigObservedTo","publishDiagnostics","releaseSources"].contains(key)}) throw ArgErr("cockpitPreparedRequestMeta")
       diagnostic:=(Map)candidate["diagnostics"];count:=diagnostic["returnedCount"] as Int
       if(diagnostic["schemaVersion"]!=1 || diagnostic["rowBudget"]!=1000 || count==null || count<0 || count>1000 || diagnostic["entries"] isnot List) throw ArgErr("cockpitPreparedRequestMeta")
       if(candidate.containsKey("historyConfigObservedFrom") || candidate.containsKey("historyConfigObservedTo"))
@@ -251,6 +251,8 @@ class EnerCubixCockpit
       snapshotData["diagnostics"]=publisher==null ? requestMeta["diagnostics"] : publisher(reports)
     }
     snapshot:=requestScope==null ? (Str:Obj?)snapshotData.toImmutable : requestScope.freezeSnapshot(snapshotData)
+    releaseSources:=requestMeta["releaseSources"] as |->Void|
+    releaseSources?.call
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
     deadline?.check

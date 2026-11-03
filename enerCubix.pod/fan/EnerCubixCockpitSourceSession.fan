@@ -167,6 +167,7 @@ internal class EnerCubixCockpitSourceSession
       owner.hold(48);observed:=budget.evidence;stats.setAll(observed);observed.clear
       owner.hold(12)
       meta:=Str:Obj?["schemaVersion":1,"diagnostics":registry.diagnostics,"preparedBudget":budget.state,"streaming":stats,"publishDiagnostics":|Str:Obj? reports->Str:Obj?| {ready;return registry.publishDiagnostics(reports)}]
+      if(requestScope!=null) {owner.hold(1);meta["releaseSources"]=|->Void| {close}}
       if(prepared["observedFrom"] is Str) meta["historyConfigObservedFrom"]=prepared["observedFrom"]
       if(prepared["observedTo"] is Str) meta["historyConfigObservedTo"]=prepared["observedTo"]
       headers.add(["_cockpitRequestMeta":meta]);done=true;return headers
