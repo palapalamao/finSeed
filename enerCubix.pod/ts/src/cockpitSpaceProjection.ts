@@ -15,10 +15,16 @@ export function cockpitSpaceSites(nodes:CockpitSpaceNode[]){
  const sites=nodes.filter(node=>node.nodeKind==='site');
  return sites.map(site=>({site,floors:nodes.filter(node=>node.nodeKind==='floor'&&node.parentId===site.id)}));
 }
+/** Ancestors may remain visible as context, without becoming a professional target. */
+export function cockpitSpaceFocusIds(snapshot:CockpitSnapshot,catalog:Catalog,nodes=cockpitSpaceObjects(snapshot,catalog)){
+ const scope=snapshot.context.reportScope,allowed=new Set([...scope.nodeIds,...focusRecords(catalog,scope).flatMap(row=>[row.id,row.nativeSourceId]).filter((id):id is string=>typeof id==='string')]);
+ if(scope.dimension==='space')for(const candidate of nodes){let node:CockpitSpaceNode|undefined=candidate;const seen=new Set<string>();while(node&&!seen.has(node.id)){if(allowed.has(node.id)||allowed.has(node.nativeId)){allowed.add(candidate.id);break;}seen.add(node.id);node=nodes.find(parent=>parent.id===node!.parentId);}}
+ return allowed;
+}
 /** Choose only objects in this observation. Catalogue ancestors never supply site totals. */
 export function cockpitDefaultSpaceFocus(snapshot:CockpitSnapshot,catalog:Catalog,current?:string):string|undefined{
  if(!snapshot.capabilities.canRead)return;
- const nodes=cockpitSpaceObjects(snapshot,catalog);
+ const all=cockpitSpaceObjects(snapshot,catalog),allowed=cockpitSpaceFocusIds(snapshot,catalog,all),nodes=all.filter(node=>allowed.has(node.id)||allowed.has(node.nativeId));
  if(current&&nodes.some(node=>node.id===current))return current;
  if(!snapshot.modules.space?.data)return;
  const readable=nodes.filter(node=>node.quality!=='notLoaded'&&!node.reasonCodes.some(code=>code==='notLoaded'||code==='FOCUS_NOT_LOADED'));

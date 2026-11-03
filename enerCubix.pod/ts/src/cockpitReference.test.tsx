@@ -13,6 +13,7 @@ import {cockpitDefaultSpaceFocus,cockpitSpaceUsage} from './cockpitSpaceProjecti
 it('chooses only readable snapshot sites, preserves valid focus and never infers an unloaded ancestor',()=>{
  const snapshot=structuredClone(spaceRaw) as unknown as CockpitSnapshot,catalog={records:[],spaceSource:'fin'} as unknown as Catalog,before=structuredClone(snapshot);
  expect(cockpitDefaultSpaceFocus(snapshot,catalog)).toBe('s');expect(cockpitDefaultSpaceFocus(snapshot,catalog,'f')).toBe('f');expect(snapshot).toEqual(before);
+ snapshot.context.reportScope.nodeIds=['f'];expect(cockpitDefaultSpaceFocus(snapshot,catalog)).toBe('f');expect(cockpitDefaultSpaceFocus(snapshot,catalog,'s')).toBe('f');snapshot.context.reportScope.nodeIds=['s'];
  const other={...snapshot.modules.space!.data!.nodes.find(node=>node.id==='s')!,id:'aaa',nativeId:'aaa'};snapshot.modules.space!.data!.nodes.unshift(other);
  expect(cockpitDefaultSpaceFocus(snapshot,catalog)).toBe('s');snapshot.context.reportScope.nodeIds=['aaa'];expect(cockpitDefaultSpaceFocus(snapshot,catalog)).toBe('aaa');snapshot.context.reportScope.nodeIds=['s'];snapshot.modules.space!.data!.nodes.shift();
  const nodes=snapshot.modules.space!.data!.nodes,site=nodes.find(node=>node.id==='s')!;

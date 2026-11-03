@@ -2035,3 +2035,5 @@ Object.assign(englishMessages,{
 
 Object.assign(englishMessages,{"本快照为统计计算保留空间，诊断样本已限量：共返回 {0} 条，上限 {1} 条；统计结果与数据质量另行标注。":"Diagnostics were limited to reserve capacity for statistical computation: {0} records returned, up to {1}. Statistical results and data quality are stated separately."});
 Object.assign(englishMessages,{'当前焦点没有已返回的能流，以下显示统计范围的能流。':'No energy flow was returned for the current focus. The flow for the reporting scope is shown below.'});
+
+Object.assign(englishMessages,{'该关联对象位于当前统计范围之外；请先设为统计范围，再打开专业分析。':'This related object is outside the current reporting scope. Set it as the reporting scope before opening professional analysis.'});
