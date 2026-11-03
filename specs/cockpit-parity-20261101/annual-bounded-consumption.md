@@ -340,3 +340,11 @@ cockpit-report-lifetime-tests.log：4类32方法850检查通过，6445ms，含�
 Root配置指纹与compact证据hash复用精确JSON UTF-8流式SHA-256，不再持有整段JSON Str和重复Buf。先在相同SDK执行JDK MessageDigest逐字节适配，随后与原JsonOutStream.writeJsonToStr(...).toBuf的中英文、emoji及转义字节/摘要对照；摘要一致。内部未压缩hash超过8MiB仍可处理，最终HTTP信封的8MiB限制保持独立。带scope时hash小工作区预先准入，并沿用同一deadline；限额/超时清理仅释放自己，不清peer。
 
 cockpit-digest-final-tests.log 4类21方法613检查通过，7761ms；年度九模块旧路径测试也在先前批次执行通过（同批唯一失败为新增时钟夹具捕获可变Int，改用AtomicInt后单独重跑相关检查，未改生产计时）。完整suite仍以11939ed3证据为准；此批不声称已完成codec全部图所有权。
+
+Compact编码图准入
+
+RED复现300个普通字段（不经过shared证据hash）可绕过codec额度。现在同一scope下对编码Map/List、表格常量/变量列、行与证据字典在创建前保留额度；排序/列检查临时数组持短租约，最终不可变图另由payloadOwner保留到发送。源业务快照始终保留；编码工作图在复制后清理。内部hash继续流式计算。未带owner的旧私有调用保持原路径；Root带scope的编码已接入owner。
+
+8组29方法676检查通过，6156ms（cockpit-codec-owned-final-tests.log），覆盖普通字段限额、原wire逐字节一致、literal控制键、表格/null/0/中英文、源对象不改、只有输出及peer额度保留、编码中统一超时清理、九模块到发送链。捕获cockpit-codec-owned-main在最后仅增加测试前的相同生产实现通过：14.927秒，峰188853，462读取/12094样本/unprepared0，raw/temporary关闭0；响应497574B，SHA256 05DFCFE8A110DB192AA7D467804D97FCB2F5DE14317F8C98AD24C4F7060B2E80，12报告解码及8+58+5比较通过。
+
+这是已接入对象的逻辑Map/List/Value计账，并非JVM堆测量；Repo上游、Root目录/计划/业务投影及History准备配置仍须覆盖。未部署，ALL-59继续进行中。

@@ -1,7 +1,56 @@
 using util
+using concurrent
 
 class EnerCubixCockpitPayloadTest : Test
 {
+  Void testNonSharedCodecObjectsCannotBypassTheRequestBudget()
+  {
+    source:=Str:Obj?[:];(0..<300).each |i| {source["field$i"]=i}
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    peer.hold(budget.remaining-24);held:=peer.entries
+    try
+    {
+      verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)}
+      verifyEq(peer.entries,held);output.close;verifyEq(budget.temporary.val,held)
+      verifyEq(source.size,300)
+    }
+    finally {output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedEncodingMatchesTheExistingWireAndKeepsOnlyItsOutputLease()
+  {
+    rows:=[Str:Obj?][,];(0..<40).each |i| {rows.add(["from":"2026-10-01T00:00:00Z","value":i==1 ? null : i.toFloat,"quality":i==1 ? "na" : "ok","pointId":"电表 🌍"])}
+    source:=Str:Obj?["periods":rows,"heatmap":rows,"sourceUsage":rows,"literal":["\$cockpitRef":"user data"],"trueZero":0f]
+    before:=JsonOutStream.writeJsonToStr(source)
+    expected:=JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source))
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(31)
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)
+      verify(actual.isImmutable);verifyEq(JsonOutStream.writeJsonToStr(actual),expected)
+      verifyEq(JsonOutStream.writeJsonToStr(source),before)
+      verify(output.entries>4);verifyEq(budget.temporary.val,output.entries+peer.entries)
+      output.close;verifyEq(budget.temporary.val,peer.entries)
+    }
+    finally {output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedEncodingTimeoutReleasesWorkspaceWithoutChangingInput()
+  {
+    source:=Str:Obj?[:];(0..<1000).each |i| {source["field$i"]=i}
+    calls:=AtomicInt();deadline:=EnerCubixCockpitDeadline(30sec,|->Int| {calls.incrementAndGet>2 ? 31sec.ticks : 0})
+    budget:=EnerCubixStreamBudget(50000,200000,20000000,30sec,deadline).state
+    output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(17)
+    try
+    {
+      try {EnerCubixCockpitPayload.encode(source,deadline,budget,output);fail("Encoder must use the request deadline")}
+      catch(EnerCubixHttpErr e) {verifyEq(e.status,504);verifyEq(e.code,"QUERY_TIMEOUT")}
+      verifyEq(source.size,1000);verifyEq(budget.temporary.val,output.entries+peer.entries)
+      output.close;verifyEq(budget.temporary.val,peer.entries)
+    }
+    finally {output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
   Void testBusinessControlKeysAreEscapedLiterally()
   {
     business:=Str:Obj?["\$cockpitRef":"business data","\$cockpitTable":["columns":["value"],"rows":[[0f]]],"\$cockpitLiteral":["nested":true]]

@@ -28,6 +28,7 @@ internal class EnerCubixCockpitRequestScope
   private EnerCubixPreparedOwner? snapshotOwner
   private [Str:Obj?]? snapshot
   private EnerCubixPreparedOwner? reportOwner
+  private EnerCubixPreparedOwner? payloadOwner
   private [Str:[Str:Obj?]]? frozenReports
   private Bool entered := false
   private Bool closed := false
@@ -35,7 +36,9 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)}
+  EnerCubixPreparedOwner payloadOutput()
+  {checkContext(project,user);if(payloadOwner==null) payloadOwner=EnerCubixPreparedOwner(stream.state);return payloadOwner}
   Void checkContext(Str project,Str user)
   {if(closed || !entered || this.project!=project || this.user!=user) throw ArgErr("cockpitRequestScopeContext");deadline.check}
   Str:Obj? freezeInputs(Str:Obj? input,Str:Obj? owned,[Str:Obj?][] records)
@@ -88,6 +91,7 @@ internal class EnerCubixCockpitRequestScope
     closed=true
     Err? failure
     try {owner?.close} catch(Err e) {failure=e}
+    try {payloadOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit payload cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}

@@ -254,7 +254,7 @@ class EnerCubixCockpit
     releaseSources:=requestMeta["releaseSources"] as |->Void|
     releaseSources?.call
     deadline?.check
-    result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline,requestScope?.stream?.state) : snapshot
+    result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline,requestScope?.stream?.state,requestScope?.payloadOutput) : snapshot
     deadline?.check
     return result
   }
