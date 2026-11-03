@@ -250,7 +250,7 @@ class EnerCubixCockpit
       publisher:=requestMeta["publishDiagnostics"] as |Str:Obj?->Str:Obj?|
       snapshotData["diagnostics"]=publisher==null ? requestMeta["diagnostics"] : publisher(reports)
     }
-    snapshot:=(Str:Obj?)snapshotData.toImmutable
+    snapshot:=requestScope==null ? (Str:Obj?)snapshotData.toImmutable : requestScope.freezeSnapshot(snapshotData)
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot
     deadline?.check

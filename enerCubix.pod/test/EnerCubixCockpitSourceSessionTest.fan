@@ -4,6 +4,33 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testFinalSnapshotCopyMustBeAdmittedBeforeExecuteCanReturn()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");request:=input;request["modules"]=["trend"]
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","controlled-final-copy");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;late:=false;returned:=false;held:=0
+    try
+    {
+      try
+      {
+        EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {
+          session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(100f+10f*i))) }},scope)
+          headers:=session.load;meta:=(Map)headers.last["_cockpitRequestMeta"];publish:=(|Str:Obj?->Str:Obj?|)meta["publishDiagnostics"]
+          meta["publishDiagnostics"]=|Str:Obj? reports->Str:Obj?| {result:=publish(reports);late=true;peer.hold(budget.state.remaining);held=peer.entries;return result}
+          return headers
+        },"test",TimeZone.utc,a+2hr,false,null,null,null,scope.deadline,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},null,null,scope)
+        returned=true
+      }
+      catch(EnerCubixHttpErr e) {verifyEq(e.status,422);verifyEq(e.code,"PREPARED_READ_LIMIT")}
+      verify(late);verify(!returned);verifyEq(budget.nativeReads,1);verify(!scope.responseStarted);verify(scope.canSendError)
+      session.close;scope.close;verifyEq(budget.state.temporary.val,held)
+    }
+    finally {session?.close;scope.close;peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
   Void testInputCopyLimitRejectsBeforeAnySourceCallbackAndPreservesPeer()
   {
     scope:=EnerCubixCockpitRequestScope("test","controlled-input-limit");budget:=scope.stream
@@ -33,7 +60,13 @@ class EnerCubixCockpitSourceSessionTest : Test
     try
     {
       snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
-      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i)))}});return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i))) }},scope);return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+      {
+        report:=session.read(key,q);verify(report.isImmutable);verify(session.read(key,q)===report)
+        changed:=q.dup.set("from",(a-1hr).toIso);verifyErr(ArgErr#) {session.read(key,changed)}
+        verifyErr(ArgErr#) {session.read("not-registered",q)}
+        return report
+      },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
       scope.deliver(snapshot,|Buf bytes|
       {
         calls++;escaped=bytes;verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitGate.enter("test","controlled-nine-wire")}

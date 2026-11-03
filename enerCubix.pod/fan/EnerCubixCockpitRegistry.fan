@@ -290,11 +290,23 @@ internal class EnerCubixCockpitRegistry
   }
   Str:Obj? read(Str key,Str:Obj? query)
   {
+    validateReport(key,query)
+    result:=key.startsWith("cop:") ? (Str:Obj?)copWorks[key[4..-1]].result["report"] : (key=="energy-flow" ? flowWork.result : works[key].result)
+    if(result.isEmpty) throw ArgErr("cockpitRegistryReportReleased")
+    return result
+  }
+  Void validateReport(Str key,Str:Obj? query)
+  {
     check
     if(!done || attachedCleaning.size!=cleaningKeys.size || !queries.containsKey(key)) throw ArgErr("cockpitRegistryReportNotPrepared")
     expectQuery(query,queries[key],"cockpitRegistryReportNotPrepared")
-    if(key.startsWith("cop:")) return (Str:Obj?)copWorks[key[4..-1]].result["report"]
-    return key=="energy-flow" ? flowWork.result : works[key].result
+  }
+  Void releaseReport(Str key)
+  {
+    check
+    if(!done || !queries.containsKey(key) || key.startsWith("cop:")) throw ArgErr("cockpitRegistryReportNotPrepared")
+    if(key=="energy-flow") flowWork.close
+    else works[key].close
   }
   private Void expectQuery(Str:Obj? query,Str:Obj? registered,Str error)
   {

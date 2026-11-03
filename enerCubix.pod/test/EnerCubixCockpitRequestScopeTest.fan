@@ -3,6 +3,22 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testFinalSnapshotBorrowsFrozenInputsAndKeepsItsCopyOwnedThroughTheSender()
+  {
+    scope:=EnerCubixCockpitRequestScope("request-snapshot","a");Map? frozen
+    try
+    {
+      inputs:=scope.freezeInputs(["schemaVersion":1],[:],[["id":"m","kind":"meter"]])
+      inputRecord:=(Map)((List)inputs["records"]).first;shared:=Str:Obj?["value":12.5f,"source":inputRecord]
+      frozen=scope.freezeSnapshot(["schemaVersion":1,"left":shared,"right":shared])
+      verify(frozen.isImmutable);verify(frozen["left"]===frozen["right"]);verify(((Map)frozen["left"])["source"]===inputRecord)
+      shared["value"]=999f;verifyEq(((Map)frozen["left"])["value"],12.5f)
+      scope.deliver((Str:Obj?)frozen,|Buf bytes| {verify(scope.stream.state.temporary.val>scope.entries)})
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {frozen=null;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
   Void testInputBundleSharesFrozenModelRecordsAndKeepsTheirOwnerThroughSending()
   {
     record:=Str:Obj?["id":"m","name":"Original 中文","kind":"meter"]

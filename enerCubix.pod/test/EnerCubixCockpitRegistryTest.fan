@@ -31,6 +31,13 @@ class EnerCubixCockpitRegistryTest : Test
         verifyEq(EnerCubixMath.maps(report["rows"]).size,2)
       }
       verifyEq(budget.state.unprepared.val,0);verifyEq(budget.logicalHours,8)
+      query:=EnerCubixCockpitReports.metricQuery(q,"cost",null)
+      report:=registry.read("profile-cost",query);before:=budget.state.temporary.val
+      registry.releaseReport("profile-cost");verify(report.isEmpty);verify(budget.state.temporary.val<before)
+      registry.validateReport("profile-cost",query)
+      verifyErr(ArgErr#) {registry.read("profile-cost",query)}
+      verifyErr(ArgErr#) {registry.validateReport("profile-cost",query.dup.set("from",previous.toIso))}
+      registry.releaseReport("profile-cost") // Closing the registry later is also idempotent.
     }
     finally {registry.close}
     verifyEq(budget.state.temporary.val,0)

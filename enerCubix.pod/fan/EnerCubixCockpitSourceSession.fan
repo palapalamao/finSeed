@@ -15,18 +15,20 @@ internal class EnerCubixCockpitSourceSession
     budget.check
     return EnerCubixCockpitSourceSession(request,records,prepared.toImmutable,budget,read)
   }
-  new make(Str:Obj? request,[Str:Obj?][] records,Str:Obj? prepared,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read)
+  new make(Str:Obj? request,[Str:Obj?][] records,Str:Obj? prepared,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read,EnerCubixCockpitRequestScope? requestScope := null)
   {
     this.budget=budget;owner=EnerCubixPreparedOwner(budget.state)
     try
     {
       checkDeadline(request,budget)
+      if(requestScope!=null && requestScope.stream!==budget) throw ArgErr("cockpitSourceSessionScope")
+      this.requestScope=requestScope
       if(!request.isImmutable || !records.isImmutable || !prepared.isImmutable || request["_cockpitConsumers"] isnot Map || prepared["points"] isnot Map || prepared["configs"] isnot Map || prepared["configRefs"] isnot Map) throw ArgErr("cockpitSourceSessionPlan")
       owner.hold(48);this.request=request;this.records=records;this.prepared=prepared;reader=read
       owner.watch |->Void|
       {
         headers.each |h| {(h["sourceIds"] as List)?.clear;(h["_cockpitRequestMeta"] as Map)?.clear;h.clear};headers.clear
-        stats.clear;windows.each |w| {w.unavailable?.clear;w.cleaning?.clear};detached.each |v| {if(v is Map) ((Map)v).clear;else ((List)v).clear};detached.clear;windows.clear;this.request=null;this.records=null;this.prepared=null;reader=null
+        stats.clear;windows.each |w| {w.unavailable?.clear;w.cleaning?.clear};detached.each |v| {if(v is Map) ((Map)v).clear;else ((List)v).clear};detached.clear;windows.clear;this.request=null;this.records=null;this.prepared=null;reader=null;this.requestScope=null
       }
       plan:=(Map)request["_cockpitConsumers"];q:=(Str:Obj?)plan["request"];tz:=TimeZone(q["tz"].toStr)
       clockFrom=EnerCubixMath.floorHour(DateTime.fromIso(q["from"].toStr).toTimeZone(tz));clockTo=ceiling(DateTime.fromIso(q["to"].toStr).toTimeZone(tz))
@@ -79,6 +81,7 @@ internal class EnerCubixCockpitSourceSession
   private [Str:Obj?][]? records
   private [Str:Obj?]? prepared
   private |Dict,Span,|HisItem|->Void|? reader
+  private EnerCubixCockpitRequestScope? requestScope
   private EnerCubixCockpitRegistry? registry
   private EnerCubixCockpitSourceWindow[] windows := [,]
   private [Str:Obj?][] headers := [,]
@@ -223,7 +226,14 @@ internal class EnerCubixCockpitSourceSession
     if(value!=null && !value.isImmutable) throw ArgErr("cockpitSourceSessionMetadataValue")
     return value
   }
-  Str:Obj? read(Str key,Str:Obj? query) {ready;return registry.read(key,query)}
+  Str:Obj? read(Str key,Str:Obj? query)
+  {
+    ready
+    if(requestScope==null || key.startsWith("cop:")) return registry.read(key,query)
+    registry.validateReport(key,query)
+    cached:=requestScope.frozenReport(key);if(cached!=null) return cached
+    result:=requestScope.freezeReport(key,registry.read(key,query));registry.releaseReport(key);return result
+  }
   Str:Obj? copData(Str id,Str:Obj? query) {ready;return registry.copData(id,query)}
   Str:Obj? ruleData(Str id,Str:Obj? query) {ready;return registry.ruleData(id,query)}
   private Void ready() {check;if(!done) throw ArgErr("cockpitSourceSessionNotReady")}

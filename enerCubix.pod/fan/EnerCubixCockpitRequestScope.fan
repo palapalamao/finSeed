@@ -9,7 +9,7 @@ internal class EnerCubixCockpitRequestScope
     {
       deadline.check;EnerCubixCockpitGate.enter(project,user);entered=true
       owner=EnerCubixPreparedOwner(this.stream.state)
-      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null}
+      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null;snapshot=null;frozenReports?.clear;frozenReports=null}
     }
     catch(Err e)
     {
@@ -25,13 +25,17 @@ internal class EnerCubixCockpitRequestScope
   private [Str:Obj?]? envelope
   private EnerCubixPreparedOwner? inputOwner
   private [Str:Obj?]? inputs
+  private EnerCubixPreparedOwner? snapshotOwner
+  private [Str:Obj?]? snapshot
+  private EnerCubixPreparedOwner? reportOwner
+  private [Str:[Str:Obj?]]? frozenReports
   private Bool entered := false
   private Bool closed := false
   private Bool attempted := false
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)}
   Void checkContext(Str project,Str user)
   {if(closed || !entered || this.project!=project || this.user!=user) throw ArgErr("cockpitRequestScopeContext");deadline.check}
   Str:Obj? freezeInputs(Str:Obj? input,Str:Obj? owned,[Str:Obj?][] records)
@@ -46,6 +50,23 @@ internal class EnerCubixCockpitRequestScope
       inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);return inputs
     }
     finally {bundle?.clear;scratch.close}
+  }
+  Str:Obj? freezeSnapshot(Str:Obj? source)
+  {
+    checkContext(project,user)
+    if(snapshot!=null) throw ArgErr("cockpitRequestSnapshotAlreadyFrozen")
+    if(snapshotOwner==null) snapshotOwner=EnerCubixPreparedOwner(stream.state)
+    snapshot=(Str:Obj?)EnerCubixCockpitFreeze.value(source,snapshotOwner);return snapshot
+  }
+  [Str:Obj?]? frozenReport(Str key) {checkContext(project,user);return frozenReports?.get(key)}
+  Str:Obj? freezeReport(Str key,Str:Obj? source)
+  {
+    checkContext(project,user)
+    cached:=frozenReports?.get(key);if(cached!=null) return cached
+    if(reportOwner==null)
+    {reportOwner=EnerCubixPreparedOwner(stream.state);reportOwner.hold(1);frozenReports=[:]}
+    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner)
+    reportOwner.hold(1);frozenReports[key]=value;return value
   }
   Void deliver(Str:Obj? data,|Buf| send)
   {
@@ -67,6 +88,8 @@ internal class EnerCubixCockpitRequestScope
     closed=true
     Err? failure
     try {owner?.close} catch(Err e) {failure=e}
+    try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
+    try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}
     if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}
     if(failure!=null) throw failure

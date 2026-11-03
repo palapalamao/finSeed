@@ -316,3 +316,13 @@ Root在带requestScope的私有路径将input/ownedConfig/records作为一个复
 配置冻结回调的全局错误边界（补测修正）
 
 RED复现currentConfig回调抛出的401/403/409/422/429/504被原catch Err吞掉并转为空清洗配置；这也会掩盖后续配置创建时准入的限额异常。仅先透传EnerCubixHttpErr原实例，普通已有配置错误继续原质量路径，不泛化改写所有Err。源码也确认原生CleaningRepo.readable确实使用403 HttpErr，故不是虚构接口类型。3类25方法586检查通过，7069ms（cockpit-config-global-tests.log），含6类错误均第一回调即原样抛出、不继续第二点配置，以及原准备/SourceSession/局部投影回归。正常账号权限仍未作为实机通过；只读按用户暂缓，未部署。
+
+最终业务快照及报告所有权（私有路径，未部署）
+
+Root最终快照改由同一scope准入不可变副本。先用限额夹具复现原final toImmutable未准入即返回；修正后在发送前保留422及peer。捕获主表年度回放随后真实触发200003保护，证明不能把原峰177136当作完成结果封装的峰，也没有提高200000或30秒上限。
+
+为释放已消费的中间报告，带scope的SourceSession首次read严格校验签名后，将报告冻结到scope报告owner，再关闭该报告的可变工作输出；后续读取返回同一不可变对象，但仍校验完整请求签名。COP借用值及非scope路径保持原生命周期。最终快照可直接借用这些不可变报告，报告owner一直保留到发送清理，未降低计账系数或重置全局计数。
+
+cockpit-report-lifetime-tests.log：4类32方法850检查通过，6445ms，含全九模块到compact/wire、重复读取身份、缓存后非法签名/未知key拒绝、报告释放及重复close、复制中限额和peer保持。captured回放cockpit-report-lifetime-main在仅追加测试前的相同生产实现通过：12.925秒，逻辑峰188852，462读取/12094样本/44010小时/unprepared0；发送期间Gate保留，关闭raw/temporary0而prepared48不重置。响应497574B，SHA256 266870DF51F7BFF5B36CDFF04E034A3490F606C9DDA74F12B49DDD33A982B9F1；TS解码12报告、8项provenance、58严格业务组及5行能流窄诊断比较均通过。
+
+此峰仍未包含上游配置及所有Root/codec创建点，不能当作完整请求准入、JVM堆或FIN实机通过。原生Repo仍未切SourceSession；只读账号暂缓，浏览器安全停止保持。
