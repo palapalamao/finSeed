@@ -120,6 +120,7 @@ class EnerCubixHistory
       if (point?.get("hisFunc") == "enerCubixCleanHis")
       {
         try { configs[id]=point.has("enerCubixCleaningOwned") ? currentConfig(point) : (point["hisFuncConfig"] as Dict ?: Etc.emptyDict) }
+        catch (EnerCubixHttpErr e) {throw e}
         catch (Err e) { configs[id]=Etc.emptyDict }
         if (point.has("enerCubixCleaningOwned") && !configs[id].isEmpty)
         {

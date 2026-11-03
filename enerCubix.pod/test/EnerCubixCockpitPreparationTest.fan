@@ -3,6 +3,17 @@ using util
 
 class EnerCubixCockpitPreparationTest : Test
 {
+  Void testConfigurationCallbackDoesNotDowngradeGlobalFailuresToMissingCleaning()
+  {
+    [401,403,409,422,429,504].each |status|
+    {
+      db:=database;rs:=catalog(db);original:=EnerCubixHttpErr(status,"CONTROLLED_GLOBAL","controlled configuration failure")
+      Err? observed;calls:=0
+      try {EnerCubixHistory.prepareConfiguration(request,rs,|Str id->Dict?| {db[id]},|Dict p->Bool| {true},|Dict p->Dict| {calls++;throw original})}
+      catch(Err e) {observed=e}
+      verify(observed===original);verifyEq(calls,1)
+    }
+  }
   Void testPreparedV1RejectsCurrentV2AsWholeRequest()
   {
     db:=database; records:=catalog(db)
