@@ -3,6 +3,30 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testPreparationLivesUntilTheCompositeInputIsFrozen()
+  {
+    scope:=EnerCubixCockpitRequestScope("preparation","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
+    work:=scope.preparationWorkspace;rows:=[Str:Obj?][["id":"m","name":"原表名"]]
+    work.hold(5);work.watch |->Void| {rows.clear}
+    try
+    {
+      frozen:=scope.freezeInputs(["key":"value"],["modelRecords":rows],rows)
+      verify(rows.isEmpty);verifyEq(work.entries,0)
+      verifyEq(((Map)((List)frozen["records"]).first)["name"],"原表名")
+      verify(((Map)frozen["owned"])["modelRecords"]===frozen["records"])
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testPreparationFailureDoesNotDropAnotherOwnersCharge()
+  {
+    scope:=EnerCubixCockpitRequestScope("preparation-limit","a");work:=scope.preparationWorkspace;peer:=EnerCubixPreparedOwner(scope.stream.state)
+    peer.hold(scope.stream.state.remaining-3);held:=peer.entries
+    try {verifyErr(EnerCubixHttpErr#) {work.hold(4)};scope.close;verifyEq(scope.stream.state.temporary.val,held)}
+    finally {scope.close;peer.close}
+  }
   Void testSourcePlanReusesOnlyExactFrozenInputFacts()
   {
     scope:=EnerCubixCockpitRequestScope("source-plan-facts","a");baseline:=EnerCubixPreparedOwner(scope.stream.state)

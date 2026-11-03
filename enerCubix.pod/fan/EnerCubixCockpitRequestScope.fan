@@ -23,6 +23,7 @@ internal class EnerCubixCockpitRequestScope
   EnerCubixCockpitDeadline deadline() {stream.state.deadline}
   private EnerCubixPreparedOwner? owner
   private [Str:Obj?]? envelope
+  private EnerCubixPreparedOwner? preparationOwner
   private EnerCubixPreparedOwner? inputOwner
   private [Str:Obj?]? inputs
   private EnerCubixPreparedOwner? snapshotOwner
@@ -46,7 +47,7 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)+(sourcePlanOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(preparationOwner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)+(sourcePlanOwner?.entries ?: 0)}
   Str:Obj? freezeSourcePlan(Str:Obj? request)
   {
     checkContext(project,user)
@@ -108,6 +109,9 @@ internal class EnerCubixCockpitRequestScope
   {checkContext(project,user);if(payloadOwner==null) payloadOwner=EnerCubixPreparedOwner(stream.state);return payloadOwner}
   Void checkContext(Str project,Str user)
   {if(closed || !entered || this.project!=project || this.user!=user) throw ArgErr("cockpitRequestScopeContext");deadline.check}
+  EnerCubixPreparedOwner preparationWorkspace()
+  {checkContext(project,user);if(preparationOwner==null) preparationOwner=EnerCubixPreparedOwner(stream.state);return preparationOwner}
+  Void finishPreparation() {preparationOwner?.close}
   Str:Obj? freezeInputs(Str:Obj? input,Str:Obj? owned,[Str:Obj?][] records)
   {
     checkContext(project,user)
@@ -117,7 +121,7 @@ internal class EnerCubixCockpitRequestScope
     try
     {
       scratch.hold(4);bundle=["input":input,"owned":owned,"records":records]
-      inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);return inputs
+      inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);finishPreparation;return inputs
     }
     finally {bundle?.clear;scratch.close}
   }
@@ -164,6 +168,7 @@ internal class EnerCubixCockpitRequestScope
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
     try {finishMetadata;historyOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit history metadata cleanup also failed",e)}
     try {configurationOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit configuration cleanup also failed",e)}
+    try {finishPreparation} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit preparation cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}
     if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}
     if(failure!=null) throw failure

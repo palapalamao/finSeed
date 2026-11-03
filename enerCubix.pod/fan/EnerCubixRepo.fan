@@ -9,6 +9,7 @@ class EnerCubixRepo
   Context cx
   private Bool revisionRead := false
   private Dict? revision
+  internal EnerCubixPreparedOwner? cockpitPreparation
   new make(Context cx) { this.cx = cx }
 
   static const [Str:Str] refTags := ["parentId":"enerCubixParentRef", "pointId":"enerCubixPointRef", "categoryId":"enerCubixCategoryRef", "subcategoryId":"enerCubixSubcategoryRef", "utilityId":"enerCubixUtilityRef", "tariffId":"enerCubixTariffRef", "expressionId":"enerCubixExpressionRef", "numeratorId":"enerCubixNumeratorRef", "denominatorId":"enerCubixDenominatorRef", "nodeId":"enerCubixNodeRef", "spaceId":"enerCubixSpaceRef", "areaSpaceId":"enerCubixAreaSpaceRef", "meterParentId":"enerCubixMeterParentRef", "organizationId":"enerCubixOrganizationRef", "canonicalId":"enerCubixCanonicalRef", "nativeAlarmId":"enerCubixNativeAlarmRef", "episodeId":"enerCubixAlarmEpisodeRef", "cleaningProfileId":"enerCubixCleaningProfileRef"]
@@ -35,13 +36,19 @@ class EnerCubixRepo
       revision = cx.db.read(Filter.has("enerCubixRevision"),false)
       revisionRead = true
     }
-    return cx.db.readAllList(Filter.has("enerCubixKind").and(Filter.has("enerCubix").or(Filter.has("equip")))).findAll |r|
+    rows:=cx.db.readAllList(Filter.has("enerCubixKind").and(Filter.has("enerCubix").or(Filter.has("equip"))))
+    cockpitPreparation?.hold(1);out:=[Str:Obj?][,]
+    cockpitPreparation?.watch |->Void| {out.clear}
+    rows.each |r|
     {
-      if (!comparison && !cx.canRead(r)) return false
-      // Recovery bodies are not application data. Avoid parsing every archived
-      // snapshot on every report/catalog read; rollback opts in explicitly.
-      return recovery || !(r["enerCubixConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")
-    }.map |r->[Str:Obj?]| { out:=decode(r); if (comparison) out["_comparisonReadable"]=cx.canRead(r); return out }
+      if (!comparison && !cx.canRead(r)) return
+      if (!recovery && (r["enerCubixConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")) return
+      cockpitPreparation?.hold(2)
+      data:=cockpitPreparation==null ? decode(r) : decodeOwned(r,cockpitPreparation)
+      if(comparison) data["_comparisonReadable"]=cx.canRead(r)
+      out.add(data)
+    }
+    return out
   }
 
   [Str:Obj?] catalog()
@@ -418,8 +425,10 @@ class EnerCubixRepo
     else scope.checkContext(cx.proj.name,cx.user.username)
     started:=Duration.nowTicks
     deadline:=scope?.deadline ?: EnerCubixCockpitDeadline()
+    EnerCubixCockpitSourceSession? session;Err? failure
     try
     {
+      if(scope!=null) cockpitPreparation=scope.preparationWorkspace
       now:=DateTime.now
       tz:=TimeZone.fromStr(cx.proj.meta["tz"]?.toStr ?: "Shanghai")
       prepared:=prepareReport(EnerCubixCockpit.query(input,cx.proj.name,tz,now),true)
@@ -429,15 +438,36 @@ class EnerCubixRepo
       if (EnerCubixMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
       normalized:=input.dup
       normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
-      result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]| {EnerCubixHistory.loadPrepared(cx,q,rs,scope?.stream)},cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]|
+      cockpitPreparation=null
+      result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]|
+      {
+        if(scope==null) return EnerCubixHistory.loadPrepared(cx,q,rs)
+        session=EnerCubixHistory.sourceSession(cx,q,rs,scope.stream,scope)
+        return session.load
+      },cx.proj.name,tz,now,cx.user.isAdmin,null,|->[Str:Obj?][]|
       {
         return EnerCubixCockpitIssues.readableEvents(EnerCubixNativeAlarms(this).list,cx.proj.name) |id->Bool|
         {source:=cx.db.readById(Ref(id),false);return source != null && cx.canRead(source)}
-      },null,deadline,owned,null,null,null,scope)
+      },null,deadline,owned,
+      scope==null ? null : |Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},
+      scope==null ? null : |Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},
+      scope==null ? null : |Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
       if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
       return result
     }
-    finally {if(scope==null) EnerCubixCockpitGate.leave(cx.proj.name,cx.user.username)}
+    catch(Err e) {failure=e;throw e}
+    finally
+    {
+      closeCockpitSource(session,failure)
+      cockpitPreparation=null
+      if(scope==null) EnerCubixCockpitGate.leave(cx.proj.name,cx.user.username)
+    }
+  }
+
+  private static Void closeCockpitSource(EnerCubixCockpitSourceSession? session,Err? failure)
+  {
+    try {session?.close}
+    catch(Err cleanup) {if(failure==null) throw cleanup;Log.get("enerCubix").err("Cockpit source cleanup failed after an earlier failure",cleanup)}
   }
 
   [Str:Obj?] cockpitBudgets() {mustRead;return ownedStore.list("budget").set("projectRef",cx.proj.id.id)}
@@ -453,7 +483,7 @@ class EnerCubixRepo
   private Str:Obj? ownedSnapshot()
   {
     before:=cx.db.readById(Ref("enerCubix-config-revision"),false)
-    store:=ownedStore;b:=store.capture("budget");r:=store.capture("rule")
+    store:=ownedStore;b:=store.capture("budget",cockpitPreparation);r:=store.capture("rule",cockpitPreparation)
     after:=cx.db.readById(Ref("enerCubix-config-revision"),false)
     if(before?.get("mod") != after?.get("mod")) throw EnerCubixHttpErr(409,"CONFLICT","cockpitConfigConflict")
     return ["projectRef":cx.proj.id.id,"budgets":b["records"],"budgetsComplete":b["complete"],"budgetAttribution":b["attribution"],"rules":r["records"],"rulesComplete":r["complete"],"ruleAttribution":r["attribution"]]
@@ -479,13 +509,15 @@ class EnerCubixRepo
     if (cockpit)
     {
       source:=EnerCubixNativeEquipRepo(this).records(rawRecords(false,true))
-      all=EnerCubixNativeSpace.load(cx).project(EnerCubixCockpitEfficiency.visible(source.findAll |r| {r["_comparisonReadable"] != false},source))
+      all=EnerCubixNativeSpace.loadAnalysis(cx,source,cockpitPreparation).project(EnerCubixCockpitEfficiency.visible(source.findAll |r| {r["_comparisonReadable"] != false},source))
       EnerCubixCockpit.guardVisibleScope(request,all,source)
       // Private completeness proof; never serialized. Preserve hidden/unplaced
       // members so a readable subset cannot masquerade as a project budget.
+      cockpitPreparation?.hold(4+source.size+all.size)
       index:=Str:[Str:Obj?][:];source.each |r| {index[r["id"].toStr]=r};all.each |r| {index[r["id"].toStr]=r}
       scopeRecords=index.vals.map |r->[Str:Obj?]|
       {
+        cockpitPreparation?.hold(3+r.size)
         out:=r.dup;pointId:=r["pointId"] as Str
         if(pointId != null) {point:=cx.db.readById(Ref(pointId),false);if(point == null || !cx.canRead(point)) out["_comparisonPointReadable"]=false}
         return out

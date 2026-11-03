@@ -6,6 +6,32 @@ using util
 
 class EnerCubixCockpitConfigStoreTest : Test
 {
+  Void testOwnedCaptureEqualsNormalReadAndRejectsBudgetBeforeDtoPublication()
+  {
+    fixture |db,store|
+    {
+      created:=store.save("budget",budget)
+      expected:=store.capture("budget");scope:=EnerCubixCockpitRequestScope("owned-capture","a");peer:=EnerCubixPreparedOwner(scope.stream.state)
+      try
+      {
+        actual:=store.capture("budget",scope.preparationWorkspace)
+        verifyEq(actual,expected);verify(scope.preparationWorkspace.entries>20)
+        peer.hold(scope.stream.state.remaining-8);held:=peer.entries
+        verifyErr(EnerCubixHttpErr#) {store.capture("budget",scope.preparationWorkspace)}
+        verifyEq(store.capture("budget"),expected)
+        scope.close;verifyEq(scope.stream.state.temporary.val,held)
+      }
+      finally {scope.close;peer.close}
+      verifyEq(scope.stream.state.temporary.val,0)
+    }
+  }
+  Void testNativeJsonAdmissionPrecedesEachContainerCopy()
+  {
+    scope:=EnerCubixCockpitRequestScope("native-json","a");work:=scope.preparationWorkspace
+    source:=Etc.makeDict(["nested":Etc.makeDict(["ref":Ref("p:test:r:m"),"list":[Number(1),Number(2)]])])
+    try {verifyEq(EnerCubixCockpitConfigStore.nativeJson(source,work),EnerCubixCockpitConfigStore.nativeJson(source));verifyEq(work.entries,12)}
+    finally {scope.close}
+  }
   Void testNativeRoundTripAuditRevisionAndDelete()
   {
     fixture |db,store|

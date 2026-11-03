@@ -16,8 +16,11 @@ class EnerCubixNativeEquipRepo
   Str:Str mapping()
   {
     json:=model?.get("enerCubixAliases") as Str ?: "{}"
-    out:=Str:Str[:]
-    ((Map)JsonInStream(json.in).readJson).each |v,k| { out[k.toStr]=v.toStr }
+    owner:=repo.cockpitPreparation
+    parsed:=(Map)(owner==null ? JsonInStream(json.in).readJson : EnerCubixOwnedJson.parse(json,owner))
+    owner?.hold(1+parsed.size);out:=Str:Str[:]
+    owner?.watch |->Void| {out.clear}
+    parsed.each |v,k| { out[k.toStr]=v.toStr }
     return out
   }
 
@@ -49,6 +52,7 @@ class EnerCubixNativeEquipRepo
 
   [Str:Obj?][] records([Str:Obj?][] raw)
   {
+    repo.cockpitPreparation?.hold(2*(1+raw.size))
     raw=raw.findAll |r| { r["action"] != "nativeEquipSnapshot" }
     if (!active) return raw
     return raw.findAll |r| { !EnerCubixRelations.meterKinds.contains(r["kind"]) || r["nativeEquip"] == true }
@@ -119,8 +123,11 @@ class EnerCubixNativeEquipRepo
 
   [Str:Obj?][] validateRead([Str:Obj?][] all)
   {
-    all.findAll |r| { r["nativeEquip"] == true }.each |r|
+    all.each |r|
     {
+      if(r["nativeEquip"] != true) return
+      repo.cockpitPreparation?.budget?.deadline?.check
+      repo.cockpitPreparation?.hold(2+r.size)
       // Area is optional metadata. A lost/inaccessible service space must not
       // invalidate primary-history consumption; normalization diagnoses it later.
       checked:=r.dup

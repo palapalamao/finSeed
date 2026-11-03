@@ -9,10 +9,20 @@ class EnerCubixNativeSpace
   Str path := ""
   Str[] warnings := [,]
   [Str:Obj?][] nodes := [,]
+  private EnerCubixPreparedOwner? owner
+  private [Str:Bool]? analysisPoints
 
   static EnerCubixNativeSpace load(Context cx)
+  {loadTree(cx,null)}
+
+  internal static EnerCubixNativeSpace loadAnalysis(Context cx,[Str:Obj?][] stored,EnerCubixPreparedOwner? owner := null)
+  {owner?.hold(1+2*stored.size);return loadTree(cx,analysisPointIds(stored),owner)}
+
+  private static EnerCubixNativeSpace loadTree(Context cx,[Str:Bool]? keep,EnerCubixPreparedOwner? owner := null)
   {
-    out:=EnerCubixNativeSpace()
+    owner?.hold(8)
+    out:=EnerCubixNativeSpace();out.analysisPoints=keep;out.owner=owner
+    owner?.watch |->Void| {out.nodes.clear;out.warnings.clear;keep?.clear}
     tree:=NavTree.find(cx,"equip",false)
     if (tree == null) { out.warnings.add("FIN equip navigation tree is unavailable"); return out }
     navPath:=tree.path(cx)
@@ -23,6 +33,7 @@ class EnerCubixNativeSpace
 
   private Void walk(Context cx, NavTree tree, NavPath navPath, Dict? base, Str? parent, Int depth, Str:Bool seen)
   {
+    owner?.budget?.deadline?.check
     if (depth > 128) throw ArgErr("FIN navigation tree exceeds 128 levels")
     children:=tree.children(cx,base).findAll |rec| { cx.canRead(rec) && NavTree.canAccess(cx,navPath,rec) && (!rec.has("point") || rec.has("his")) }
     // A path level includes indented equips as well as their parents. Defer
@@ -31,8 +42,10 @@ class EnerCubixNativeSpace
     {
       id:=rec.id.id
       if (seen.containsKey(id)) { if (warnings.size < 20) warnings.add("Repeated FIN navigation node: $id"); return }
-      if (nodes.size >= 50000) throw ArgErr("FIN navigation tree exceeds 50000 nodes")
-      seen[id]=true
+      if (seen.size >= 50000) throw ArgErr("FIN navigation tree exceeds 50000 nodes")
+      owner?.hold(1);seen[id]=true
+      if(rec.has("point") && analysisPoints!=null && !analysisPoints.containsKey(id)) return
+      owner?.hold(30)
       sourceKind:=rec.has("point") ? "point" : (navPath.segForRec(rec)?.tag ?: "equip")
       node:=Str:Obj?["id":id,"name":rec["navName"] as Str ?: rec.dis,"parentId":parent,"sourceKind":sourceKind,"nativeDis":rec.dis,"mod":EnerCubixRepo.iso(rec["mod"])]
       // Navigation records may omit native tags. Freeze the actual readable
@@ -60,6 +73,28 @@ class EnerCubixNativeSpace
     }
   }
 
+  internal static Str:Bool analysisPointIds([Str:Obj?][] stored)
+  {
+    keep:=Str:Bool[:]
+    stored.each |r|
+    {
+      // Preserve nativeIds shadowing for any stored-ID collision as well as
+      // every configured primary point, independently of visibility/category.
+      id:=r["id"] as Str;if(id!=null) keep[id]=true
+      point:=r["pointId"] as Str
+      if(EnerCubixRelations.meterKinds.contains(r["kind"]) && point!=null) keep[point]=true
+    }
+    return keep
+  }
+
+  ** Pure equivalent of the private DTO filter, for complete projection parity.
+  internal EnerCubixNativeSpace forAnalysis([Str:Obj?][] stored)
+  {
+    keep:=analysisPointIds(stored);out:=EnerCubixNativeSpace();out.path=path;out.warnings=warnings.dup
+    out.nodes=nodes.findAll |n| {n["sourceKind"]!="point" || keep.containsKey(n["id"].toStr)}
+    return out
+  }
+
   internal static Dict[] childRoots(Dict[] children, |Dict->Ref?| indentParent)
   {
     ids:=Ref:Bool[:]
@@ -70,6 +105,7 @@ class EnerCubixNativeSpace
   ** Pure projection. Overlay IDs are reused only when they already exist.
   [Str:Obj?][] project([Str:Obj?][] stored)
   {
+    owner?.hold(5+3*nodes.size+3*stored.size)
     ids:=Str:Str[:]
     overlays:=Str:[Str:Obj?][:]
     stored.findAll |r| { r["kind"] == "space" && r["migrationSourceId"] != null }.sort |a,b| { a["id"].toStr <=> b["id"].toStr }.each |r|
@@ -79,11 +115,13 @@ class EnerCubixNativeSpace
     }
     nodes.each |n| { source:=n["id"].toStr; ids[source]=n["sourceKind"] == "point" ? source : (overlays[source]?.get("id")?.toStr ?: source) }
     projected:=[Str:Obj?][,]
+    owner?.watch |->Void| {projected.clear}
     points:=Str:[Str:Obj?][:]
     nodes.each |n|
     {
       source:=n["id"].toStr
       isPoint:=n["sourceKind"] == "point"
+      owner?.hold(30+(overlays[source]?.size ?: 0))
       r:=isPoint ? Str:Obj?[:] : (overlays[source]?.dup ?: Str:Obj?[:])
       r["id"]=ids[source]; r["kind"]=isPoint ? "nativePoint" : "space"
       r["name"]=n["name"]; r["parentId"]=ids[n["parentId"]?.toStr ?: ""]
@@ -95,6 +133,7 @@ class EnerCubixNativeSpace
         business:=stored.find |s| { s["id"] == source && s["nativeEquip"] == true }
         if (business != null)
         {
+          owner?.hold(business.size)
           business.each |v,k| { r[k]=v }
           r["parentId"]=business["parentId"]
           r["nativeReadonly"]=false
@@ -120,6 +159,7 @@ class EnerCubixNativeSpace
     stored.each |old|
     {
       if (nativeIds.contains(old["id"])) return
+      owner?.hold(10+3*old.size)
       r:=clean(old)
       if (old["nativeEquip"] == true)
       {

@@ -384,3 +384,12 @@ Root的historyRequest不再绕过计账执行toImmutable，改由sourcePlanOwner
 4类45方法824检查通过，7392ms（cockpit-source-plan-shared-final-tests.log），覆盖精确事实身份、修改隔离、相等普通Map不误合并、不可变与容器类型校验以及原冻结/准备/九模块/scope回归。新增测试最初把无序Map原始JSON的桶顺序当作复制契约；实际旧冻结也重排无序Map，改为对照既有冻结的JSON和源对象不改，ordered容器规则不放宽。
 
 捕获cockpit-source-plan-shared-main在最后仅追加测试前的相同生产实现通过：12.977秒，峰191240，462读取/12094样本/unprepared0，raw/temporary清理0；497574B，SHA256 D4CEFCD9DCCEBEC5D6BF76FF1DA2B30D4995F409E3813C24596A545C486BBFD2，TS解码12报告及8+58+5比较通过。这里覆盖计划不可变副本，Root原计划/纯业务DTO创建及Repo上游仍待计账；未部署，仍不是完整请求或FIN实机完成。
+
+
+原生 SourceSession 正式接线及上游准备工作区
+
+带 RequestScope 的 Repo 入口现使用 History.sourceSession，与捕获回放采用相同 report/COP/rule 回调；旧无 scope 路径保留。源关闭保留原错误，清理辅助函数避开目标 Fantom JVM 对嵌套 finally 的 VerifyError（Multiple returns to single jsr）。私有 NativeSpace 只跳过未配置主点的 point DTO，仍逐个执行原生 ACL/his/排序/父子解析及实际扫描上限；保留全部配置主点和 stored-ID 冲突，普通目录未过滤。
+
+Repo 的 JSON 解码、别名表、原生空间 DTO/投影、配置完整性副本、预算/规则 DTO 与 nativeJson 容器在创建前使用同一 prepared budget。准备工作区持续到复合输入冻结成功；其关闭不动其他 owner，失败由 scope 统一清理。全局资源异常不降级为空配置。Folio/NavTree API 内部结果仍为外部边界；Root 原计划与部分纯业务 DTO 创建尚未全覆盖，不能宣称完整 JVM 内存界限。
+
+upstream-preparation-build.log 编译成功；upstream-preparation-tests.log 5 类 / 59 方法 / 942 检查通过（5650ms）。覆盖完整投影与过滤投影等价、跨能源/隐藏/别名/失效主点、准备冻结后的别名与值稳定、超限不吞异常及 peer 保留。该批未部署，未冒充原生 HTTP 或最终候选验收。

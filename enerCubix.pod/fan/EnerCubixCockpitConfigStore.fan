@@ -9,6 +9,7 @@ internal class EnerCubixCockpitConfigStore
   new make(Folio db,Str project,Ref projectRef,Str actor,Bool manage,
     |Dict->Bool| readable := |Dict r->Bool| {true},|Dict->Bool| writable := |Dict r->Bool| {true})
   {this.db=db;this.project=project;this.projectRef=projectRef;this.actor=actor;this.manage=manage;this.readable=readable;this.writable=writable}
+  private EnerCubixPreparedOwner? captureOwner
   private Folio db
   private Str project
   private Ref projectRef
@@ -29,10 +30,15 @@ internal class EnerCubixCockpitConfigStore
   {readRecords(type,false)}
   ** Server-only context for proving an invalid configuration unrelated. Native
   ** references in this context must never be returned by the public list DTO.
-  Str:Obj? capture(Str type)
-  {readRecords(type,true)}
+  Str:Obj? capture(Str type,EnerCubixPreparedOwner? owner := null)
+  {
+    captureOwner=owner
+    try {return readRecords(type,true)}
+    finally {captureOwner=null}
+  }
   private Str:Obj? readRecords(Str type,Bool privateAttribution)
   {
+    captureOwner?.hold(8)
     marker(type)
     manifest:=db.readById(manifestId,false)
     if(manifest == null) return ["records":[Str:Obj?][,],"complete":true,"canWrite":manage]
@@ -47,18 +53,20 @@ internal class EnerCubixCockpitConfigStore
       {
         requireOwned(r,type,manifest)
         dto:=dto(r,type)
+        captureOwner?.hold(2+dto.size)
         try {v:=dto.dup;references(v,type);validateValue(v,type)}
         catch(ArgErr e) {if(privateAttribution) attributions[r.id.id]=attributionOf(r);dto=invalidDto(r,type,"OWNED_REFERENCE_INVALID")}
         catch(EnerCubixHttpErr e)
         {
+          if([401,409,422,429,504].contains(e.status)) throw e
           if(e.status == 403) {complete=false;return}
           if(privateAttribution) attributions[r.id.id]=attributionOf(r)
           dto=invalidDto(r,type,"OWNED_REFERENCE_INVALID")
         }
-        out.add(dto)
+        captureOwner?.hold(2);out.add(dto)
       }
       catch(ArgErr e) {complete=false}
-      catch(EnerCubixHttpErr e) {complete=false}
+      catch(EnerCubixHttpErr e) {if([401,409,422,429,504].contains(e.status)) throw e;complete=false}
     }
     result:=Str:Obj?["records":out,"complete":complete,"canWrite":manage]
     if(privateAttribution) result["attribution"]=attributions
@@ -136,7 +144,7 @@ internal class EnerCubixCockpitConfigStore
         if(value["calendarRef"] == null) throw ArgErr("cockpitRuleCalendar")
         category:=record((Ref)value["categoryRef"]);data:=category["enerCubixConfig"] as Str
         unit:=category["unit"] as Str
-        if(unit == null && data != null) unit=((Map)JsonInStream(data.in).readJson)["unit"] as Str
+        if(unit == null && data != null) unit=((Map)(captureOwner==null ? JsonInStream(data.in).readJson : EnerCubixOwnedJson.parse(data,captureOwner)))["unit"] as Str
         if((unit ?: "").trim.isEmpty || (value["thresholdUnit"] as Str ?: "").trim.isEmpty || EnerCubixMath.unitFactor(value["thresholdUnit"].toStr,unit) == null) throw ArgErr("cockpitRuleUnit")
       }
       else if(value["thresholdUnit"] != "%" || value["currency"] == null) throw ArgErr("cockpitRuleUnit")
@@ -213,7 +221,7 @@ internal class EnerCubixCockpitConfigStore
     if(manifest == null || !owned(manifest).contains(r.id) || !r.has(marker(type)) || r["enerCubixOwnedSchema"] != Number(1) || r["version"] isnot Number || r["createdAt"] isnot DateTime || r.has(marker(type == "budget" ? "rule" : "budget")) || prohibited.any |key| {r.has(key)})
       throw EnerCubixHttpErr(403,"PERMISSION","cockpitConfigNotOwned")
   }
-  private Ref[] owned(Dict manifest) {((List)manifest["ownedRefs"]).map |v->Ref| {v as Ref ?: throw ArgErr("cockpitConfigManifest")}.dup}
+  private Ref[] owned(Dict manifest) {captureOwner?.hold(2*(1+((List)manifest["ownedRefs"]).size));return ((List)manifest["ownedRefs"]).map |v->Ref| {v as Ref ?: throw ArgErr("cockpitConfigManifest")}.dup}
   private Dict record(Ref ref) {db.readById(ref,false) ?: throw EnerCubixHttpErr(404,"NOT_FOUND","cockpitConfigNotFound")}
   private Ref qualify(Ref ref) {ref.id.startsWith(db.idPrefix) ? ref : Ref(db.idPrefix+ref.id)}
   private Ref ref(Str id,Bool projectScope := false)
@@ -228,14 +236,16 @@ internal class EnerCubixCockpitConfigStore
   { ["scopeKind","scopeRef","categoryRef",type == "budget" ? "month" : "ruleType","currency"].map |k->Str| {nativeJson(r[k])?.toStr ?: ""}.join("|") }
   private Str:Obj? dto(Dict r,Str type)
   {
+    captureOwner?.hold(6+persisted.size)
     out:=Str:Obj?["id":r.id.id,"mod":EnerCubixRepo.iso(r["mod"]),"name":r.dis,"type":type,"canWrite":manage && writable(r)]
-    persisted.each |key| {if(r.has(key)) out[key]=nativeJson(r[key])}
+    persisted.each |key| {if(r.has(key)) out[key]=nativeJson(r[key],captureOwner)}
     return out
   }
   private Str:Obj? invalidDto(Dict r,Str type,Str reason)
-  {["id":r.id.id,"mod":EnerCubixRepo.iso(r["mod"]),"type":type,"name":r.dis,"validation":"invalid","reasonCodes":[reason]]}
+  {captureOwner?.hold(9);return ["id":r.id.id,"mod":EnerCubixRepo.iso(r["mod"]),"type":type,"name":r.dis,"validation":"invalid","reasonCodes":[reason]]}
   private Str:Obj? attributionOf(Dict r)
   {
+    captureOwner?.hold(8)
     out:=Str:Obj?[:];month:=r["month"] as Str
     if(month != null) {try {EnerCubixBudgetMath.monthStart(month);out["month"]=month} catch(ArgErr e) {}}
     category:=attributionRef(r["categoryRef"])
@@ -251,13 +261,13 @@ internal class EnerCubixCockpitConfigStore
   }
   private Ref? attributionRef(Obj? v,Bool projectScope := false)
   {if(v isnot Ref) return null;try {return ref(((Ref)v).id,projectScope)} catch(ArgErr e) {return null}}
-  internal static Obj? nativeJson(Obj? v)
+  internal static Obj? nativeJson(Obj? v,EnerCubixPreparedOwner? owner := null)
   {
     if(v is Ref) return ((Ref)v).id
     if(v is Number) return ((Number)v).toFloat
     if(v is DateTime) return ((DateTime)v).toIso
-    if(v is Dict) {out:=Str:Obj?[:];((Dict)v).each |value,key| {out[key]=nativeJson(value)};return out}
-    if(v is List) return ((List)v).map |item->Obj?| {nativeJson(item)}
+    if(v is Dict) {count:=1;((Dict)v).each |value,key| {count++};owner?.hold(count);out:=Str:Obj?[:];((Dict)v).each |value,key| {out[key]=nativeJson(value,owner)};return out}
+    if(v is List) {owner?.hold(1+((List)v).size);return ((List)v).map |item->Obj?| {nativeJson(item,owner)}}
     return v is Marker ? true : v
   }
 }

@@ -3,6 +3,31 @@ using haystack
 
 class EnerCubixNativeSpaceTest : Test
 {
+  Void testPrivateAnalysisDropsOnlyUnusedPointDtosAndKeepsBusinessProjection()
+  {
+    source:=fixtureSource;raw:=stored;original:=JsonOutStream.writeJsonToStr(source.nodes)
+    full:=source.project(raw);analysis:=source.forAnalysis(raw).project(raw)
+    verifyEq(analysis,full.exclude |r| {r["id"]=="temperature" && r["kind"]=="nativePoint"})
+    verifyEq(find(analysis,"meter")["nativeSpaceId"],"nested-equip")
+    verifyEq(find(analysis,"point"),find(full,"point"))
+    verifyEq(JsonOutStream.writeJsonToStr(source.nodes),original)
+    source.nodes.find |r| {r["id"]=="point"}["parentId"]="floor-b"
+    verifyEq(find(source.forAnalysis(raw).project(raw),"meter")["nativeSpaceId"],"floor-b")
+    source.nodes=source.nodes.exclude |r| {r["id"]=="point"}
+    verifyEq(find(source.forAnalysis(raw).project(raw),"meter")["nativeSourceMissing"],true)
+  }
+  Void testAnalysisRetentionIncludesOtherEnergySensorsAliasesAndStoredIdCollisions()
+  {
+    source:=fixtureSource;raw:=stored
+    raw.add(["id":"sensor","kind":"sensor","pointId":"temperature","categoryId":"other","_comparisonReadable":false,"includeInTotals":false])
+    raw.add(["id":"alias","kind":"meter","pointId":"missing","canonicalId":"meter"])
+    keep:=EnerCubixNativeSpace.analysisPointIds(raw)
+    verify(keep.containsKey("temperature"));verify(keep.containsKey("point"));verify(keep.containsKey("missing"))
+    verifyEq(source.forAnalysis(raw).project(raw),source.project(raw))
+    raw=stored;raw.add(["id":"temperature","kind":"category","unit":"kWh"])
+    verifyEq(source.forAnalysis(raw).project(raw),source.project(raw))
+    verifyEq(find(source.forAnalysis(raw).project(raw),"temperature")["kind"],"nativePoint")
+  }
   Void testFlatNativeLevelDefersIndentedEquipsToTheirVisibleParent()
   {
     parent:=Etc.makeDict(["id":Ref("parent"),"equip":Marker.val])
