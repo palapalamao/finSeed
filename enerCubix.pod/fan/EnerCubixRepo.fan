@@ -9,6 +9,7 @@ class EnerCubixRepo
   Context cx
   private Bool revisionRead := false
   private Dict? revision
+  internal EnerCubixNativeAliases? cockpitAliases
   internal EnerCubixPreparedOwner? cockpitPreparation
   new make(Context cx) { this.cx = cx }
 
@@ -438,7 +439,7 @@ class EnerCubixRepo
       if (EnerCubixMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
       normalized:=input.dup
       normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
-      cockpitPreparation=null
+      cockpitPreparation=null;cockpitAliases=null
       result:=EnerCubixCockpit.execute(normalized,all,|q,rs->[Str:Obj?][]|
       {
         if(scope==null) return EnerCubixHistory.loadPrepared(cx,q,rs)
@@ -459,7 +460,7 @@ class EnerCubixRepo
     finally
     {
       closeCockpitSource(session,failure)
-      cockpitPreparation=null
+      cockpitPreparation=null;cockpitAliases=null
       if(scope==null) EnerCubixCockpitGate.leave(cx.proj.name,cx.user.username)
     }
   }

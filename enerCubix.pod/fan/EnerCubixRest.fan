@@ -74,6 +74,7 @@ const class EnerCubixRest : WebMod
     catch (EnerCubixHttpErr e)
     {
       failure=e;if(failedAfterResponseStart(cockpitScope,e)) return
+      if(cockpitScope!=null && ["PREPARED_READ_LIMIT","QUERY_TIMEOUT"].contains(e.code)) Log.get("enerCubix").err("Cockpit resource guard rejected an unpublished request",e)
       error:=Str:Obj?["code":e.code,"msg":e.msg]
       if (e.status == 429) {error["retryAfterSeconds"]=2;res.headers["Retry-After"]="2"}
       send(e.status,["ok":false,"error":error])

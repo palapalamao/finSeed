@@ -15,12 +15,15 @@ class EnerCubixNativeEquipRepo
   Bool active() { model?.get("enerCubixStorageModel") == "nativeEquip" }
   Str:Str mapping()
   {
-    json:=model?.get("enerCubixAliases") as Str ?: "{}"
     owner:=repo.cockpitPreparation
-    parsed:=(Map)(owner==null ? JsonInStream(json.in).readJson : EnerCubixOwnedJson.parse(json,owner))
-    owner?.hold(1+parsed.size);out:=Str:Str[:]
-    owner?.watch |->Void| {out.clear}
-    parsed.each |v,k| { out[k.toStr]=v.toStr }
+    if(owner!=null)
+    {
+      if(repo.cockpitAliases==null) repo.cockpitAliases=EnerCubixNativeAliases(owner)
+      return repo.cockpitAliases.read |->Str| {model?.get("enerCubixAliases") as Str ?: "{}"}
+    }
+    json:=model?.get("enerCubixAliases") as Str ?: "{}"
+    out:=Str:Str[:]
+    ((Map)JsonInStream(json.in).readJson).each |v,k| {out[k.toStr]=v.toStr}
     return out
   }
 
