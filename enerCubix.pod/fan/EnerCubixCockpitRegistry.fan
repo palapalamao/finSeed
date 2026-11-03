@@ -147,7 +147,7 @@ internal class EnerCubixCockpitRegistry
       budget.diagnosticCapture=pool
       metadata.hold(cleaningPlan.size);cleaningKeys=cleaningPlan.keys
       queries.each |query,key| {if(key=="energy-flow" || query["kind"]=="cop") return;metadata.hold(22);works[key]=EnerCubixCockpitReportWork(key,query,catalog,budget,pool,tariffs)}
-      if(flowEnabled) {metadata.hold(22);flowWork=EnerCubixCockpitFlowWork((Str:Obj?)flowPlan["request"],flowCatalog,budget,pool,flowPeriods)}
+      if(flowEnabled) {metadata.hold(22);flowWork=EnerCubixCockpitFlowWork((Str:Obj?)flowPlan["request"],flowCatalog,budget,pool,flowPeriods,flowMeters)}
     }
     catch(Err e) {close;throw e}
     finally {generation.close}

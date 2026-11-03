@@ -138,6 +138,8 @@ class EnerCubixReportConsumerTest : Test
   }
   Void test81FocusSummariesIncludeOwnedCanonicalCatalogInJointPeak()
   {exerciseOutputGraph("summaryShared")}
+  Void testPooledScopeRetainsOnlyItsFinalDataAndClassAllowance()
+  {exerciseOutputGraph("pooledScope")}
 
   private Void exerciseOutputGraph(Str mode,Int hours := 24,Bool failFinish := false)
   {
@@ -147,6 +149,8 @@ class EnerCubixReportConsumerTest : Test
     dimension:="metering";kind:="daily";area:=false
     if(mode=="working") {kind="workingDays";rs.add(["id":"cal","kind":"calendar","workDays":[1,2,3,4,5]])}
     summaryOnly:=mode.startsWith("summary")
+    if(mode=="pooledScope")
+    {dimension="space";kind="profile";ids=["scope"];rs.add(["id":"scope","kind":"space"]);rs.findAll |r| {r["kind"]=="meter"}.each |r| {r["spaceId"]="scope"}}
     if(mode=="space" || summaryOnly)
     {
       dimension="space";ids.clear
@@ -172,11 +176,13 @@ class EnerCubixReportConsumerTest : Test
       if(mode=="alias") rs.find |r| {r["id"]=="m1"}["canonicalId"]="m0"
     }
     for(i:=0;i<1000;i++) rs.add(["id":"unused$i","kind":"nativePoint","name":"Unselected point $i","nativeSourceId":"point$i","nativeSourceKind":"point","nativeTreeParentId":"folder","nativeHis":true,"unit":"kWh","siteRef":"site","equipRef":"unselected","nativeMod":"frozen","nativeDis":"Original point $i","writable":false,"nativePoint":true])
-    q:=Str:Obj?["kind":kind,"nodeIds":ids,"dimension":dimension,"from":start.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"UTC","period":"hour","metric":"energy","perArea":area]
+    gran:=mode=="pooledScope" ? "month" : "hour"
+    q:=Str:Obj?["kind":kind,"nodeIds":ids,"dimension":dimension,"from":start.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"UTC","period":gran,"metric":"energy","perArea":area]
     original:=rs.toStr
     streamBudget:=EnerCubixStreamBudget();budget:=streamBudget.state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
     sources:=EnerCubixCockpitStream[,]
     model:=mode=="summaryShared" ? EnerCubixPreparedOwner(budget) : null
+    captureOwner:=mode=="pooledScope" ? EnerCubixPreparedOwner(budget) : null
     try
     {
       catalog:=model==null ? null : EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
@@ -184,9 +190,10 @@ class EnerCubixReportConsumerTest : Test
       ctx:=catalog==null ? EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim) : EnerCubixContext.shared(catalog,dimension,false,state)
       if(catalog==null) ctx.useOwner(state)
       ctx.orderWarnings
-      report:=EnerCubixReport(ctx,q,start,end,kind,"hour","energy",state,summaryOnly)
+      report:=EnerCubixReport(ctx,q,start,end,kind,gran,"energy",state,summaryOnly)
       EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
-      consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,"hour",state,output)
+      capture:=captureOwner==null ? null : EnerCubixCockpitCapture(Str:[Str:Obj?]["scope":["kind":"sourceUsage","grain":"sourceRead","objectIds":ids,"sourceIds":rs.findAll |r| {r["kind"]=="meter"}.map |r->Str| {r["pointId"].toStr},"sourceIdsComplete":true,"requestRange":["from":start.toIso,"to":end.toIso,"asOf":end.toIso]]],captureOwner)
+      consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,gran,state,output,capture,capture==null ? null : "scope")
       verify(budget.peak.val<200000)
       verify(cursors.all |cursor| {cursor.watermark==start})
       verifyEq(budget.unprepared.val,0)
@@ -210,6 +217,7 @@ class EnerCubixReportConsumerTest : Test
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
+      if(capture!=null) capture.freeze
       if(summaryOnly)
       {
         verify(report.frameLedger(cursors.map |c->EnerCubixLine| {c.line}).isEmpty)
@@ -226,18 +234,34 @@ class EnerCubixReportConsumerTest : Test
       // Count retained data containers once by identity, excluding only input
       // catalog graphs. Include capture and frozen rows, not just the JSON root.
       seen:=Obj[,];borrowed:=(Obj[])EnerCubixReportConsumer#.field("borrowed").get(consumer)
+      excluded:=capture==null ? borrowed : borrowed.dup.addAll(capture.protectedRoots)
       roots:=Obj?[actual,borrowed]
       ["consumedPeriods","consumedMeters","consumedCoverage","consumedEvidence","consumedDaily","consumedWorking"].each |field| {roots.add(EnerCubixReport#.field(field).get(report))}
       ["evidence","frozenMeters"].each |field| {roots.add(EnerCubixReportConsumer#.field(field).get(consumer))}
       cursors.each |cursor| {roots.add(cursor.line.consumedTotals);roots.add(cursor.line.normalizationArea)}
       ((EnerCubixPeriodConsumer[])EnerCubixReportConsumer#.field("periods").get(consumer)).each |period| {roots.add(EnerCubixPeriodConsumer#.field("totals").get(period))}
       sources.each |source| {source.close};state.close
-      owned:=roots.reduce(0) |Int n,root->Int| {n+outputEntries(root,borrowed,seen)}
+      owned:=roots.reduce(0) |Int n,root->Int| {n+outputEntries(root,excluded,seen)}
       verify(output.entries>=owned,"output admission must cover every retained data entry")
-      verify(budget.peak.val<200000);verifyEq(budget.temporary.val,output.entries+(model?.entries ?: 0))
+      captured:=captureOwner?.entries ?: 0
+      if(capture!=null) ((Str:EnerCubixCockpitCaptureGroup)EnerCubixCockpitCapture#.field("groups").get(capture)).each |group| {group.cells.each |cell| {captured+=cell.owner.entries}}
+      verify(budget.peak.val<200000);verifyEq(budget.temporary.val,output.entries+(model?.entries ?: 0)+captured)
       echo("DAILY_OUTPUT_GRAPH mode="+mode+" hours="+hours+" retained="+owned+" admitted="+output.entries+" model="+(model?.entries ?: 0)+" peak="+budget.peak.val)
+      if(capture!=null)
+      {
+        peer:=EnerCubixPreparedOwner(budget)
+        try
+        {
+          // Leave 6500 entries for this detached report while admitting the
+          // next consumer. Existing pooled evidence keeps its separate owners.
+          peer.hold(budget.remaining+output.entries-6500)
+          verifyEq(EnerCubixMath.maps(((Map)actual["summary"])["totals"]).first["value"],432f)
+          verify(output.entries>=owned);verifyEq(rs.toStr,original)
+        }
+        finally {peer.close}
+      }
     }
-    finally {sources.each |source| {source.close};state.close;output.close;model?.close}
+    finally {sources.each |source| {source.close};state.close;output.close;captureOwner?.close;model?.close}
     verifyEq(budget.temporary.val,0)
     verifyEq(rs.toStr,original)
   }

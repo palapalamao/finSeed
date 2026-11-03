@@ -17,7 +17,7 @@ internal class EnerCubixCockpitPayload
     deadline?.check;EnerCubixPreparedOwner? work;EnerCubixCockpitPayload? codec;Obj? body;Map? envelope
     try
     {
-      if(output!=null) {work=EnerCubixPreparedOwner(budget);work.hold(10)}
+      if(output!=null) {work=EnerCubixPreparedOwner(budget);work.hold(12)}
       codec=EnerCubixCockpitPayload();codec.work=work;codec.deadline=deadline;codec.budget=budget
       body=codec.value(snapshot,"")
       codec.hold(5);envelope=["payloadEncoding":"compact-v1","codecVersion":1,"snapshot":body,"evidence":codec.entries]
@@ -31,9 +31,10 @@ internal class EnerCubixCockpitPayload
         work.release(count-1)
       })
     }
-    finally {clear(body);clear(codec?.entries);codec?.sharedMemo?.clear;envelope?.clear;work?.close}
+    finally {clear(body);clear(codec?.entries);codec?.sharedMemo?.clear;codec?.sourceMemo?.clear;envelope?.clear;work?.close}
   }
   private IdentityHashMap sharedMemo := IdentityHashMap()
+  private Str:Obj? sourceMemo := [:]
   private Str:Obj? entries := [:]
   private EnerCubixCockpitDeadline? deadline
   private EnerCubixPreparedBudget? budget
@@ -56,6 +57,19 @@ internal class EnerCubixCockpitPayload
     memoize:=work!=null && input.isImmutable && shared.contains(key)
     memo:=memoize ? (sharedMemo.get(input) as Map) : null
     if(memo!=null && memo.containsKey(key)) return memo[key]
+    Str? sourceKey
+    if(memoize)
+    {
+      // Separate report freezes may detach equal evidence lists. Reuse their
+      // existing encoded reference before allocating a second discarded graph.
+      sourceHash:=EnerCubixCockpitDigest.json(input,deadline,budget)
+      if(sourceHash.size>512)
+      {
+        sourceKey=key+"|"+sourceHash.sha256
+        if(sourceMemo.containsKey(sourceKey))
+        {cached:=sourceMemo[sourceKey];remember(input,key,cached,memoize,memo,sourceKey);return cached}
+      }
+    }
     local:=work==null ? null : EnerCubixPreparedOwner(work.budget)
     try
     {
@@ -105,18 +119,19 @@ internal class EnerCubixCockpitPayload
         id:=hash.sha256
         if (!entries.containsKey(id)) {hold(1);entries[id]=out}
         hold(2)
-        result:=Str:Obj?["\$cockpitRef":id];remember(input,key,result,memoize,memo);return result
+        result:=Str:Obj?["\$cockpitRef":id];remember(input,key,result,memoize,memo,sourceKey);return result
       }
     }
-    remember(input,key,out,memoize,memo);return out
+    remember(input,key,out,memoize,memo,sourceKey);return out
     }
     finally {local?.close}
   }
-  private Void remember(Obj input,Str key,Obj? encoded,Bool enabled,Map? memo)
+  private Void remember(Obj input,Str key,Obj? encoded,Bool enabled,Map? memo,Str? sourceKey := null)
   {
     if(!enabled) return
     if(memo==null) {hold(4);memo=Str:Obj?[:];sharedMemo.put(input,memo)}
     hold(1);memo[key]=encoded
+    if(sourceKey!=null && !sourceMemo.containsKey(sourceKey)) {hold(2);sourceMemo[sourceKey]=encoded}
   }
   private Bool sameKeys(Map row,Str[] columns)
   {

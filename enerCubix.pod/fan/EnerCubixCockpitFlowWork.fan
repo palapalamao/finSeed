@@ -2,10 +2,10 @@
 ** only after the shared diagnostic pool freezes and every producer frame ends.
 internal class EnerCubixCockpitFlowWork
 {
-  new make(Str:Obj? q,EnerCubixCockpitCatalog catalog,EnerCubixStreamBudget budget,EnerCubixCockpitCapture pool,Str:Str periodKeys)
+  new make(Str:Obj? q,EnerCubixCockpitCatalog catalog,EnerCubixStreamBudget budget,EnerCubixCockpitCapture pool,Str:Str periodKeys,[Str:Obj?][]? selectedPlan := null)
   {
     if(!q.isImmutable) throw ArgErr("cockpitFlowWorkPlan")
-    this.q=q;this.catalog=catalog;this.budget=budget;this.pool=pool;this.periodKeys=periodKeys
+    this.q=q;this.catalog=catalog;this.budget=budget;this.pool=pool;this.periodKeys=periodKeys;this.selectedPlan=selectedPlan
     from=DateTime.fromIso(q["from"].toStr).toTimeZone(catalog.tz);to=DateTime.fromIso(q["to"].toStr).toTimeZone(catalog.tz);next=from
   }
   private Str:Obj? q
@@ -13,6 +13,7 @@ internal class EnerCubixCockpitFlowWork
   private EnerCubixStreamBudget budget
   private EnerCubixCockpitCapture pool
   private Str:Str periodKeys
+  private [Str:Obj?][]? selectedPlan
   private DateTime from
   private DateTime to
   private DateTime next
@@ -30,7 +31,7 @@ internal class EnerCubixCockpitFlowWork
     if(state==null)
     {
       state=EnerCubixPreparedOwner(budget.state);numbers=EnerCubixPreparedOwner(budget.state);graph=EnerCubixPreparedOwner(budget.state)
-      consumer=EnerCubixFlowConsumer(q,catalog,state,numbers,pool,"energy-flow",periodKeys)
+      consumer=EnerCubixFlowConsumer(q,catalog,state,numbers,pool,"energy-flow",periodKeys,selectedPlan)
     }
     consumer.addFrame(histories,frame)
     next=EnerCubixMath.floorHour(next)+1hr;if(next>to) next=to

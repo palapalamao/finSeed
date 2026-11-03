@@ -489,7 +489,7 @@ internal class EnerCubixContext
     return "constant|"+r["id"]+"|"+category+"|"+metric+"|"+(domain?.toStr ?: "notPrepared")
   }
 
-  private Bool timeInvariantEmpty(Str metric)
+  internal Bool timeInvariantEmpty(Str metric)
   {
     if(metric!="cost") return true
     // Missing tariff configuration is a frozen fact. Any configured tariff,

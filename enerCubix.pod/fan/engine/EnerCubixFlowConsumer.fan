@@ -3,7 +3,7 @@
 ** Projection DTO/scratch admission is deliberately a separate lifetime.
 internal class EnerCubixFlowConsumer
 {
-  new make(Str:Obj? q,EnerCubixCockpitCatalog catalog,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,EnerCubixCockpitCapture pool,Str usageKey,Str:Str periodKeys)
+  new make(Str:Obj? q,EnerCubixCockpitCatalog catalog,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output,EnerCubixCockpitCapture pool,Str usageKey,Str:Str periodKeys,[Str:Obj?][]? selectedPlan := null)
   {
     if(!q.isImmutable || state===output || state.budget!==output.budget || state.budget!==catalog.owner.budget || pool.budget!==state.budget || q["kind"]!="energyFlow" || q["metric"]!="energy" || q["flowMode"]=="endUse" || q["meterHistorySegments"]!=null) throw ArgErr("flowConsumerPlan")
     this.q=q;this.state=state;this.output=output;this.pool=pool;this.usageKey=usageKey
@@ -20,10 +20,25 @@ internal class EnerCubixFlowConsumer
       scratch:=EnerCubixPreparedOwner(state.budget)
       try
       {
-        scratch.hold(32+8*catalog.records.size)
-        dim:=catalog.view(q["dimension"].toStr,q["spaceSource"]=="fin")
-        scope:=EnerCubixEnergyFlow.scope(dim.normalizeRequest(q),dim,scratch)
-        meters:=EnerCubixMath.maps(scope["selected"]).dup.addAll(EnerCubixMath.maps(scope["unassigned"])).unique.sort |a,b| {a["id"].toStr<=>b["id"].toStr}
+        meters:=[Str:Obj?][,]
+        if(selectedPlan==null)
+        {
+          scratch.hold(32+8*catalog.records.size)
+          dim:=catalog.view(q["dimension"].toStr,q["spaceSource"]=="fin")
+          scope:=EnerCubixEnergyFlow.scope(dim.normalizeRequest(q),dim,scratch)
+          meters=EnerCubixMath.maps(scope["selected"]).dup.addAll(EnerCubixMath.maps(scope["unassigned"])).unique
+        }
+        else
+        {
+          // Registry already resolved this exact catalogue before source I/O.
+          // Borrow its owned facts; never infer a second scope at output peak.
+          scratch.hold(32+4*selectedPlan.size)
+          category:=catalog.byId[q["categoryId"] as Str ?: ""]
+          if(q["perArea"]==true || !["space","metering","organization"].contains(q["dimension"]) || (q["flowMode"]!=null && q["flowMode"]!="relations") || category?.get("kind")!="category" || (category?.get("unit") as Str ?: "").isEmpty) throw ArgErr("flowConsumerSelectedPlan")
+          if(selectedPlan.any |meter| {id:=meter["id"] as Str;return id==null || catalog.byId[id]!==meter || !["meter","totalMeter"].contains(meter["kind"]) || meter["categoryId"]!=q["categoryId"]}) throw ArgErr("flowConsumerSelectedPlan")
+          meters=selectedPlan.dup
+        }
+        meters.sort |a,b| {a["id"].toStr<=>b["id"].toStr}
         if(periodKeys.size!=meters.size || meters.any |m| {!periodKeys.containsKey(m["id"].toStr)}) throw ArgErr("flowConsumerPeriodsPlan")
         meters.each |meter|
         {

@@ -31,6 +31,7 @@ internal class EnerCubixReportConsumer
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
     // envelope includes totals, utility groups and shallow tariff map heads.
     finalEntries=2048+128*(ledger.size+cursors.size)+40*n*cursors.size+32*(shape["members"]+shape["details"])
+    classEntries=2048+128*cursors.size
     // Keep cleanup workspace until output expires, so dropGraph can still clear
     // aliased lists/maps when another owner has filled the remaining budget.
     maxList:=(n*cursors.size).max(shape["details"]).max(shape["members"]).max(ctx.byId.size).max(1000)
@@ -83,6 +84,9 @@ internal class EnerCubixReportConsumer
   private EnerCubixValue[] frozenMeters := [,]
   private Int finishScratch := 0
   private Int finalEntries := 0
+  private Int classEntries := 0
+  private Int countVisits := 0
+  private Bool meterValuesWereNull := false
   private Int readCount := 0
   private Int detailCount := 0
   private Bool emptyOmitted := false
@@ -101,11 +105,18 @@ internal class EnerCubixReportConsumer
     try
     {
       report.beginFrame(frame,histories,constantEmpty)
-      while(at<to && at<through) addHour(frame)
+      meterValuesWereNull=true;skipMeters:=false
+      while(at<to && at<through)
+      {
+        addHour(frame,skipMeters)
+        // Repeating the same null-only own-meter input is idempotent for both
+        // folds. Period counts and coverage still consume every original hour.
+        if(constantEmpty && !skipMeters && meterValuesWereNull && report.constantEmptyMeters && report.frameReads.isEmpty) skipMeters=true
+      }
     }
     catch(Err e) {failure=e;throw e}
   }
-  private Void addHour(EnerCubixPreparedOwner frame)
+  private Void addHour(EnerCubixPreparedOwner frame,Bool skipMeters)
   {
       end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
       cursors.each |cursor,i|
@@ -114,11 +125,12 @@ internal class EnerCubixReportConsumer
         if(!daily.isEmpty) daily[i].add(tick,report.frameBand(cursor.line,tick))
         if(!working.isEmpty) working[i].add(tick,report.frameWorking(tick))
       }
-      consumeMeters(1,end)
+      if(!skipMeters) consumeMeters(1,end)
       // Normal finish freezes coverage/evidence before dimensionDetails reads.
       // Detail-only meters must not appear in that earlier evidence snapshot.
       freezeEvidence(frame)
-      consumeMeters(3,end);at=end
+      if(!skipMeters) consumeMeters(3,end)
+      at=end
   }
   private Void freezeEvidence(EnerCubixPreparedOwner frame)
   {
@@ -133,8 +145,9 @@ internal class EnerCubixReportConsumer
     {
       id:=item["id"].toStr;category:=item["category"].toStr;key:="$id|$category"
       ctx.warningScope(phase,(Int)item["order"],at.ticks)
-      meters[key+"|false"].add(report.frameMeter(id,category,at,end,false))
-      meters[key+"|true"].add(report.frameMeter(id,category,at,end,true))
+      strict:=report.frameMeter(id,category,at,end,false);known:=report.frameMeter(id,category,at,end,true)
+      if(strict.value!=null || known.value!=null) meterValuesWereNull=false
+      meters[key+"|false"].add(strict);meters[key+"|true"].add(known)
     }
   }
 
@@ -182,9 +195,41 @@ internal class EnerCubixReportConsumer
         ((Map)result["extra"])["relationBasis"]="current"
       }
       finally {scratch.close}
+      releaseFinalSlack
       done=true;return result
     }
     catch(Err e) {failure=e;throw e}
+  }
+  private Void releaseFinalSlack()
+  {
+    if(diagnostics==null && !sharedBorrowed) return
+    cap:=finalEntries-classEntries;if(cap<=0) return
+    // Generated report DTOs are acyclic. Counting aliases repeatedly is a safe
+    // upper bound; borrowed catalogue/pool graphs retain their own owners.
+    // Keep the original class envelope and every separately admitted output.
+    scratch:=EnerCubixPreparedOwner(output.budget);count:=0;countVisits=0
+    try
+    {
+      scratch.hold(64);count=retainedEntries(result,cap)
+      report.eachFrameOutputRoot |root| {if(count<cap) count+=retainedEntries(root,cap-count)}
+      cursors.each |cursor|
+      {if(count<cap) count+=retainedEntries(cursor.line.consumedTotals,cap-count);if(count<cap) count+=retainedEntries(cursor.line.normalizationArea,cap-count)}
+      if(count<cap) count+=retainedEntries(frozenMeters,cap-count)
+    }
+    finally {scratch.close}
+    if(count<cap) output.release(cap-count)
+  }
+  private Int retainedEntries(Obj? value,Int cap)
+  {
+    if(++countVisits%256==0) output.budget.deadline.check
+    if(cap<=0 || (value isnot Map && value isnot List && value isnot EnerCubixValue)) return 0
+    if(borrowed.any |item| {item===value} || diagnostics?.protectedRoots?.any |item| {item===value} == true) return 0
+    if(value is EnerCubixValue) return (3+retainedEntries(((EnerCubixValue)value).sources,(cap-3).max(0))).min(cap)
+    n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(n>=cap) return cap
+    if(value is Map) ((Map)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n)}
+    else ((List)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n)}
+    return n
   }
   private Void capture([Str:Obj?][] reads)
   {

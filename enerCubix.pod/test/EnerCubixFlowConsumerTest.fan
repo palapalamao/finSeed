@@ -5,8 +5,9 @@ class EnerCubixFlowConsumerTest : Test
 {
   Void testBorrowedFramesKeepOwnValuesCoverageWarningsAndWholePeriodBalance()
   {
-    [0,1,2,3].each |variant|
+    (0..<8).each |testCase|
     {
+      variant:=testCase%4
       missingVirtual:=variant==1;nativeMissing:=variant>=2
       a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+2hr
       rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"t","kind":"totalMeter","name":"Total","pointId":"pt","categoryId":"c"],["id":"a","kind":"meter","name":"A","pointId":"pa","categoryId":"c","meterParentId":"t"],["id":"b","kind":"meter","name":"B","pointId":"pb","categoryId":"c","meterParentId":"t"],["id":"v","kind":"totalMeter","name":"Virtual","pointId":"pv","categoryId":"c","expressionId":"e"],["id":"e","kind":"expression","expression":"x+y","variables":["x":"a","y":"b"]]]
@@ -33,7 +34,10 @@ class EnerCubixFlowConsumerTest : Test
       plan:=Str:[Str:Obj?]["energy-flow":["kind":"sourceUsage","grain":"sourceRead","reportRefs":["energy-flow"]]]
       ids.each |id| {key:="periods|"+id;periodKeys[id]=key;plan[key]=["kind":"coveragePeriods","grain":"hour","reportRefs":["energy-flow"]]}
       pool:=EnerCubixCockpitCapture(plan,diagnosticOwner)
-      consumer:=EnerCubixFlowConsumer(q.toImmutable,catalog,state,output,pool,"energy-flow",periodKeys)
+      selectedPlan:=testCase<4 ? null : ids.map |id->Str:Obj?| {catalog.byId[id]}
+      if(selectedPlan!=null) diagnosticOwner.hold(1+selectedPlan.size)
+      beforePlan:=selectedPlan?.toStr
+      consumer:=EnerCubixFlowConsumer(q.toImmutable,catalog,state,output,pool,"energy-flow",periodKeys,selectedPlan)
       planning:=EnerCubixContext.shared(catalog,"metering",false,layout)
       sources:=EnerCubixCockpitStream[,]
       try
@@ -56,6 +60,7 @@ class EnerCubixFlowConsumerTest : Test
         verify((Int)diagnostics["returnedCount"]<=1000);verifyEq(budget.state.unprepared.val,0)
         verifyErr(ArgErr#) {consumer.value("not-planned",false,ctx)}
         state.close
+        verifyEq(selectedPlan?.toStr,beforePlan)
         verifyEq(EnerCubixMath.maps(consumer.overview["rows"]).size,4,"numeric state can expire while owned output stays readable")
       }
       finally {sources.each |s| {s.close};state.close;layout.close;graph.close;output.close;diagnosticOwner.close;model.close}

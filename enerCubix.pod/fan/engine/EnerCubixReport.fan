@@ -146,6 +146,9 @@ internal class EnerCubixReport
   internal Bool frameUnpreparedOmitted() {knownCtx?.unpreparedEvidenceOmitted ?: false}
   internal EnerCubixValue frameMeter(Str id,Str category,DateTime start,DateTime end,Bool known)
   { (known ? knownCtx : ctx).node(id,category,start,end,metric) }
+  internal Bool constantEmptyMeters() {ctx.timeInvariantEmpty(metric)}
+  internal Void eachFrameOutputRoot(|Obj?| visit)
+  {visit(consumedPeriods);visit(consumedMeters);visit(consumedCoverage);visit(consumedEvidence);visit(consumedDaily);visit(consumedWorking)}
   internal Str:Obj? finishFrames(EnerCubixLine[] lines,Str:Str:Obj? periods,Str:EnerCubixValue meters,Str:[Str:Obj?] coverage,Str:Obj? evidence,Str:[Str:Obj?] daily := [:],Str:[Str:Obj?][] working := [:])
   {
     consumedPeriods=periods;consumedMeters=meters;consumedCoverage=coverage;consumedEvidence=evidence;consumedDaily=daily;consumedWorking=working

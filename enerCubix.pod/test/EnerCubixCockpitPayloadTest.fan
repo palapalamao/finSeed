@@ -3,6 +3,28 @@ using concurrent
 
 class EnerCubixCockpitPayloadTest : Test
 {
+  Void testEqualDetachedEvidenceDoesNotRetainDiscardedDuplicateBuilders()
+  {
+    source:=Str:Obj?[:]
+    6.times |copy|
+    {
+      rows:=[Str:Obj?][,]
+      500.times |i| {rows.add(["nodeId":"m","pointId":"p","from":"2026-10-01T00:00:00Z","to":"2026-10-01T01:00:00Z","unit":"kWh","knownValue":i.toFloat,"knownQuality":"filtered","coveredSeconds":900f,"expectedSeconds":3600f,"sourceIds":["p"],"intervals":Obj?[,]])}
+      source["report$copy"]=["sourceUsage":rows.toImmutable]
+    }
+    source=source.toImmutable;before:=JsonOutStream.writeJsonToStr(source)
+    expected:=JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source))
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(160000)
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)
+      verifyEq(JsonOutStream.writeJsonToStr(actual),expected);verifyEq(JsonOutStream.writeJsonToStr(source),before)
+      verifyEq(((Map)actual["evidence"]).size,1);verify(budget.peak.val<=200000)
+      verifyEq(budget.temporary.val,output.entries+peer.entries);output.close;verifyEq(budget.temporary.val,peer.entries)
+    }
+    finally {output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
   Void testOwnedEncodingReusesOnlyTheSameFrozenSharedValueAndField()
   {
     rows:=[Str:Obj?][,];100.times |i| {rows.add(["index":i,"value":i==1 ? null : i.toFloat])}
