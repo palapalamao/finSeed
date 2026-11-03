@@ -21,25 +21,32 @@ internal class EnerCubixCoverageFold
   {
     check
     if(frame.budget !== budget) throw ArgErr("coverageFrameOwner")
-    frame.hold(5+reads.size)
-    ordered:=EnerCubixKnownUsage.coverageOrder(reads.findAll |r|
-    {totals.containsKey(r["pointId"] as Str ?: "") && DateTime.fromIso(r["from"].toStr)>=from && DateTime.fromIso(r["to"].toStr)<=to})
-    // Validate the whole frame before changing any earlier contribution.
-    ordered.each |r|
+    // Filtering and sorting vectors expire here, before another hourly fold.
+    charge:=5+2*reads.size;frame.hold(charge)
+    [Str:Obj?][]? filtered;[Str:Obj?][]? ordered
+    try
     {
-      previous:=last[r["pointId"].toStr]
-      if(previous != null && EnerCubixKnownUsage.coverageCompare(previous,r)>0) throw ArgErr("coverageFrameOrder")
+      filtered=reads.findAll |r|
+      {totals.containsKey(r["pointId"] as Str ?: "") && DateTime.fromIso(r["from"].toStr)>=from && DateTime.fromIso(r["to"].toStr)<=to}
+      ordered=EnerCubixKnownUsage.coverageOrder(filtered)
+      // Validate the whole frame before changing any earlier contribution.
+      ordered.each |r|
+      {
+        previous:=last[r["pointId"].toStr]
+        if(previous != null && EnerCubixKnownUsage.coverageCompare(previous,r)>0) throw ArgErr("coverageFrameOrder")
+      }
+      ordered.each |r|
+      {
+        point:=r["pointId"].toStr
+        totals[point]=totals[point]+(EnerCubixMath.num(r["coveredSeconds"]) ?: 0f)
+        last[point]=["from":r["from"],"to":r["to"],"nodeId":r["nodeId"],"pointId":point]
+        start:=r["intervalStart"] == null ? null : DateTime.fromIso(r["intervalStart"].toStr)
+        end:=r["intervalEnd"] == null ? null : DateTime.fromIso(r["intervalEnd"].toStr)
+        if(start != null && (firstAt == null || start<firstAt)) firstAt=start
+        if(end != null && (lastAt == null || end>lastAt)) lastAt=end
+      }
     }
-    ordered.each |r|
-    {
-      point:=r["pointId"].toStr
-      totals[point]=totals[point]+(EnerCubixMath.num(r["coveredSeconds"]) ?: 0f)
-      last[point]=["from":r["from"],"to":r["to"],"nodeId":r["nodeId"],"pointId":point]
-      start:=r["intervalStart"] == null ? null : DateTime.fromIso(r["intervalStart"].toStr)
-      end:=r["intervalEnd"] == null ? null : DateTime.fromIso(r["intervalEnd"].toStr)
-      if(start != null && (firstAt == null || start<firstAt)) firstAt=start
-      if(end != null && (lastAt == null || end>lastAt)) lastAt=end
-    }
+    finally {filtered?.clear;ordered?.clear;frame.release(charge)}
   }
   Str:Obj? finish()
   {

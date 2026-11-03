@@ -1,6 +1,20 @@
 ** Coverage uses the same rows, per-source time order and original scalar adds.
 class EnerCubixCoverageFoldTest : Test
 {
+  Void testCoverageSortScratchExpiresBeforeTheNextFoldInTheSameConsumerFrame()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+    fold:=EnerCubixCoverageFold(["p"],at,at+2hr,owner);frame:=EnerCubixPreparedOwner(budget)
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining-32);held:=peer.entries;base:=frame.entries
+    (0..<48).each |i| {fold.addFrame([Str:Obj?][,],frame);verifyEq(frame.entries,base);verifyEq(peer.entries,held)}
+    rows:=[row("m","p",at,at+1hr,0f)];before:=rows.toStr
+    fold.addFrame(rows,frame);verifyEq(frame.entries,base);verifyEq(rows.toStr,before);verifyEq(fold.finish["coveredSeconds"],0f)
+    fold.addFrame([row("m","p",at+1hr,at+2hr,0f)],frame)
+    verifyErr(ArgErr#) {fold.addFrame([row("m","p",at,at+1hr,1f)],frame)}
+    verifyEq(frame.entries,base);verify(budget.peak.val<=200000)
+    frame.close;owner.close;verifyEq(budget.temporary.val,held);peer.close;verifyEq(budget.temporary.val,0)
+  }
+
   Void testSubsecondRowsAreBitwiseEqualAcrossFrameSizesAndInputOrders()
   {
     rows:=[Str:Obj?][,];seconds:=0f

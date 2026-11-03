@@ -2032,3 +2032,5 @@ Object.assign(englishMessages,{
  '参考偏差 =（同截止已有费用 − 期间预算）÷ 期间预算 × 100%；已统计费用占月预算 = 同截止已有费用 ÷ 涉及月份预算合计 × 100%。不按覆盖比例放大费用。':'Reference variance = (observed cost at the same cutoff − period budget) / period budget × 100%; observed cost / monthly budget = observed cost at the same cutoff / involved full-month budgets × 100%. Cost is not scaled by coverage.',
  '当前快照未加载可用站点用量，保留当前范围对象，不推算站点总量。':'Site usage is not loaded in this snapshot. The current scope object is retained without inferring a site total.'
 });
+
+Object.assign(englishMessages,{"本快照为统计计算保留空间，诊断样本已限量：共返回 {0} 条，上限 {1} 条；统计结果与数据质量另行标注。":"Diagnostics were limited to reserve capacity for statistical computation: {0} records returned, up to {1}. Statistical results and data quality are stated separately."});

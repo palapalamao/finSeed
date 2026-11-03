@@ -206,15 +206,27 @@ class EnerCubixDimension
     return incomplete ? "topologyIncomplete" : null
   }
 
+  ** Private range reports expand only their own energy. Explicit objects,
+  ** ordinary reports and cross-energy calculation operands retain old rules.
+  internal static Str? cockpitRangeCategory(Str:Obj? request)
+  {
+    category:=request["_cockpitCategoryId"]
+    if(category==null || request["_cockpitExplicitObjects"]!=false || !["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(request["kind"] as Str ?: "profile") || request["otherFrom"]!=null || request["otherTo"]!=null) return null
+    categories:=EnerCubixMath.strings(request["categoryIds"])
+    if(category isnot Str || category.toStr.isEmpty || categories.size!=1 || categories.first!=category) throw ArgErr("cockpitCategoryScope")
+    return category
+  }
+
   ** Shared with history planning so native reads use precisely the new membership.
   static Str:Obj? dependencies(Str:Obj? request, [Str:Obj?][] records)
   {
     if (request["kind"] == "energyFlow") records=EnerCubixEnergyFlow.normalizeRecords(records)
     dim:=EnerCubixDimension(request["dimension"]?.toStr ?: "",records,request["spaceSource"] == "fin")
     req:=dim.normalizeRequest(request)
+    category:=cockpitRangeCategory(req)
     if (req["kind"] == "utility")
     {
-      selected:=EnerCubixEndUse.resolve(EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim),EnerCubixMath.strings(req["nodeIds"]))
+      selected:=EnerCubixEndUse.resolve(EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim),EnerCubixMath.strings(req["nodeIds"]),category)
       points:=selected.map |r->Str| {r["pointId"] as Str ?: ""}
       return ["points":points.findAll |Str id->Bool| {!id.isEmpty}.unique.sort,"nodes":selected.map |r->Str| {r["id"].toStr}]
     }
@@ -247,20 +259,22 @@ class EnerCubixDimension
     }
     selected.unique.each |id|
     {
-      dim.collect(id,req["kind"] == "leak",nodes,points)
+      r:=dim.byId[id]
+      dim.collect(id,req["kind"] == "leak",nodes,points,(dim.scope(id) || r?.get("kind")=="group") ? category : null)
     }
     return ["points":points.unique.sort,"nodes":nodes.unique]
   }
 
-  private Void collect(Str id, Bool leak, Str[] nodes, Str[] points)
+  private Void collect(Str id, Bool leak, Str[] nodes, Str[] points,Str? category := null)
   {
     if (nodes.contains(id)) return
-    nodes.add(id)
     r:=byId[id]
+    if(category!=null && r!=null && ["meter","totalMeter","virtual","sensor"].contains(r["kind"]) && r["categoryId"]!=category) return
+    nodes.add(id)
     if (r == null) { if (records.any |row| {row["pointId"] == id}) points.add(id); return }
     if (r["kind"] == "nativePoint" || (nativeSpace && r["nativeSourceMissing"] == true)) return
-    if (scope(id)) members(id).each |m| { collect(m["id"].toStr,false,nodes,points) }
-    else if (r["kind"] == "group") records.findAll |m| { m["parentId"]?.toStr == id }.each |m| { collect(m["id"].toStr,false,nodes,points) }
+    if (scope(id)) members(id).each |m| { collect(m["id"].toStr,false,nodes,points,category) }
+    else if (r["kind"] == "group") records.findAll |m| { m["parentId"]?.toStr == id }.each |m| { collect(m["id"].toStr,false,nodes,points,category) }
     else
     {
       point:=r["pointId"] as Str

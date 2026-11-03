@@ -50,3 +50,13 @@ it('opaque capture identities stay in evidence but not business columns; sidecar
  for(const language of ['zh-CN','en-US']){initializeLocale(language);const html=renderToStaticMarkup(createElement(ReportView,{snapshot:report}));expect(html).not.toContain('OPAQUE_');expect(reportTables(report).headers.join('|')).not.toContain('CaptureId');expect(html).toContain(language==='zh-CN'?'已返回覆盖时段诊断数':'Returned coverage-period diagnostic records');expect(reportCellText(report,'periodsTruncated',true)).toBe(language==='zh-CN'?'是':'Yes');expect(reportCellText(report,'periodsTruncationReason','cockpitPeriodCaptureLimit')).toContain(language==='zh-CN'?'覆盖时段诊断记录上限':'Coverage-period diagnostic record limit');}
  const meta={...metadata,entries:[{...metadata.entries[0],upstreamReason:'cockpitPeriodCaptureLimit'}]};expect(renderToStaticMarkup(createElement(DiagnosticNotice,{metadata:meta}))).toContain('Coverage-period diagnostic record limit reached');expect(report).toEqual(before);expect(report.result.rows[0].value).toBe(0);expect(JSON.stringify(report)).toContain('OPAQUE_CAPTURE_SENTINEL');
 });
+
+it('explains resource-limited diagnostic samples in both UI and frozen exports without changing numerical data',()=>{
+ const snapshot=actual();snapshot.diagnostics={...metadata,returnedCount:0,preparedEntryLimited:true};const before=structuredClone(snapshot);
+ for(const language of ['zh-CN','en-US']){
+  initializeLocale(language);const html=renderToStaticMarkup(createElement(DiagnosticNotice,{metadata:snapshot.diagnostics})),packet=freezeCockpitExport(snapshot,language,{});
+  const phrase=language==='zh-CN'?'为统计计算保留空间':'reserve capacity for statistical computation';expect(html).toContain(phrase);expect(packet.diagnosticNotice).toContain(phrase);
+  expect(cockpitPrintEvidence(packet).diagnostics).toMatchObject({preparedEntryLimited:true,returnedCount:0,rowBudget:1000});
+ }
+ expect(snapshot).toEqual(before);
+});

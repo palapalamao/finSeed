@@ -479,6 +479,7 @@ internal class EnerCubixReport
 
   private [Str:Obj?][] detailMembers(EnerCubixLine line)
   {
+    category:=EnerCubixDimension.cockpitRangeCategory(request)
     if(finalMetadataFrozen) return finalDetails[line.id]
     members:=kind == "utility" ? ctx.dimension.usageMembers(line.nodeId) : ctx.dimension.members(line.nodeId)
     own:=ctx.byId[line.nodeId]
@@ -488,6 +489,7 @@ internal class EnerCubixReport
       members=leakMembers(line.nodeId,line.category).dup
       if(own != null) members.insert(0,own)
     }
+    if(category!=null && ctx.dimension?.scope(line.nodeId)==true) members=members.findAll |m| {m["categoryId"]==category}
     return members
   }
 

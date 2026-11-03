@@ -30,7 +30,7 @@ internal class EnerCubixCockpitFlowWork
     if(done || next>=to || next>=b || next<a) return
     if(state==null)
     {
-      state=EnerCubixPreparedOwner(budget.state);numbers=EnerCubixPreparedOwner(budget.state);graph=EnerCubixPreparedOwner(budget.state)
+      state=EnerCubixPreparedOwner(budget.state,pool);numbers=EnerCubixPreparedOwner(budget.state,pool);graph=EnerCubixPreparedOwner(budget.state,pool)
       consumer=EnerCubixFlowConsumer(q,catalog,state,numbers,pool,"energy-flow",periodKeys,selectedPlan)
     }
     consumer.addFrame(histories,frame)
@@ -47,7 +47,7 @@ internal class EnerCubixCockpitFlowWork
   {
     if(projected) return
     if(!done || !pool.finalized) throw ArgErr("cockpitFlowWorkIncomplete")
-    layout:=EnerCubixPreparedOwner(budget.state)
+    layout:=EnerCubixPreparedOwner(budget.state,pool)
     try
     {
       ctx:=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",layout)

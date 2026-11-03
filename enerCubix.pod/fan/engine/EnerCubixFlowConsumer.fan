@@ -9,7 +9,7 @@ internal class EnerCubixFlowConsumer
     this.q=q;this.state=state;this.output=output;this.pool=pool;this.usageKey=usageKey
     from=DateTime.fromIso(q["from"].toStr).toTimeZone(catalog.tz);to=DateTime.fromIso(q["to"].toStr).toTimeZone(catalog.tz);at=from
     if(to<=from) throw ArgErr("flowConsumerRange")
-    calc=EnerCubixPreparedOwner(state.budget)
+    calc=state.fork
     try
     {
       state.watch |->Void| {calc.close;devices.clear;this.periodKeys.clear;stateClosed=true}
@@ -17,7 +17,7 @@ internal class EnerCubixFlowConsumer
       output.watch |->Void| {if(bindings.any |owner| {owner.entries!=0}) throw ArgErr("flowValuesStillBorrowed");drop(overviewData);strictValues.each |v| {expire(v)};knownValues.each |v| {expire(v)};maskedValues.each |v| {expire(v)};strictValues.clear;knownValues.clear;maskedValues.clear;warningValues.each |v| {v.clear};warningValues.clear;bindings.clear;borrowed=Obj[,];outputClosed=true}
       output.hold(14);borrowed=catalog.protectedRoots;catalog.bind(output);pool.bind(output)
       pool.expect(usageKey,"sourceUsage")
-      scratch:=EnerCubixPreparedOwner(state.budget)
+      scratch:=state.fork
       try
       {
         meters:=[Str:Obj?][,]
@@ -102,7 +102,7 @@ internal class EnerCubixFlowConsumer
         key:=periodKeys[device.id]
         if(pool.canPutSimple(key))
         {
-          scratch:=EnerCubixPreparedOwner(state.budget)
+          scratch:=state.fork
           try {scratch.hold(6);pool.put(key,["from":at.toIso,"to":end.toIso,"value":known.value,"quality":known.quality,"pointId":device.point])}
           finally {scratch.close}
         }
@@ -126,7 +126,7 @@ internal class EnerCubixFlowConsumer
         strictValues[device.id]=strict;knownValues[device.id]=known
         warnings:=device.strict.orderedWarnings
         output.hold(2+warnings.size);warningValues[device.id]=warnings.dup
-        scratch:=EnerCubixPreparedOwner(state.budget)
+        scratch:=state.fork
         try
         {
           scratch.hold(16);coverage:=device.coverage.finish;covered:=(Float)coverage["coveredSeconds"]
@@ -170,7 +170,7 @@ internal class EnerCubixFlowConsumer
   }
   private EnerCubixValue freezeValue(EnerCubixValueFold fold)
   {
-    scratch:=EnerCubixPreparedOwner(state.budget)
+    scratch:=state.fork
     try {scratch.hold(4+3*fold.sourceCount);output.hold(6+fold.sourceCount);return fold.finish}
     finally {scratch.close}
   }

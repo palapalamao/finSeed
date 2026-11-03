@@ -160,7 +160,9 @@ internal class EnerCubixReportConsumer
     {
       // Final report DTOs do not exist while frames are being reduced. Admit
       // their unchanged envelope immediately before the first final allocation.
-      output.hold(finalEntries)
+      // The class/line allowance covers preparation links. Each reduced value
+      // and daily/working snapshot has its own admission below.
+      output.hold(classEntries)
       totals:=Str:EnerCubixValue[:];coverage:=Str:[Str:Obj?][:];buckets:=Str:Str:Obj?[:];dailyData:=Str:[Str:Obj?][:];workingData:=Str:[Str:Obj?][][:]
       periods.each |consumer,i|
       {
@@ -185,6 +187,9 @@ internal class EnerCubixReportConsumer
         diagnostics.seal(diagnosticKey,emptyOmitted || unpreparedOmitted)
       }
       else if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
+      // Finished daily bins have expired. Admit the complete remaining DTO
+      // envelope before constructing the original final report maps.
+      output.hold(finalEntries-classEntries)
       scratch:=EnerCubixPreparedOwner(output.budget)
       try
       {
@@ -200,35 +205,77 @@ internal class EnerCubixReportConsumer
     }
     catch(Err e) {failure=e;throw e}
   }
+  internal Int childStateEntries() {daily.reduce(0) |Int n,d->Int| {n+d.stateEntries}}
+
+  ** Count only the public graph at the registry's explicit done boundary.
+  ** No sample reclamation occurs merely to attempt this optional compaction.
+  internal Int publicEntries()
+  {
+    if(!done || !sharedBorrowed || output.budget.remaining<68) return output.entries
+    cap:=output.entries;scratch:=EnerCubixPreparedOwner(output.budget)
+    [Int:Obj[]]? seen;countVisits=0
+    try
+    {
+      scratch.hold(64);seen=Int:Obj[][:]
+      n:=retainedEntries(result,cap,seen,scratch)
+      // Owner/control references, one cleanup closure and the future fields
+      // reserved by knownEnvelope remain admitted after private roots expire.
+      return (n+32+(diagnostics?.pendingEntries(output) ?: 0)).min(cap)
+    }
+    finally {seen?.each |bucket| {bucket.clear};seen?.clear;scratch.close}
+  }
+
+  ** Generated report DTOs are acyclic. Shared catalog and sample containers
+  ** remain owned by their original owners and must never be cleared here.
+  internal static Void clearPublic(Obj? value,Obj[] catalog,Obj[] samples)
+  {
+    if(value isnot Map && value isnot List && value isnot EnerCubixValue) return
+    if(catalog.any |root| {root===value} || samples.any |root| {root===value}) return
+    if(value is EnerCubixValue)
+    {v:=(EnerCubixValue)value;clearPublic(v.sources,catalog,samples);v.value=null;v.quality="ownerExpired";return}
+    if(value is Map) {((Map)value).each |child| {clearPublic(child,catalog,samples)};((Map)value).clear}
+    else {((List)value).each |child| {clearPublic(child,catalog,samples)};((List)value).clear}
+  }
+
   private Void releaseFinalSlack()
   {
     if(diagnostics==null && !sharedBorrowed) return
     cap:=finalEntries-classEntries;if(cap<=0) return
-    // Generated report DTOs are acyclic. Counting aliases repeatedly is a safe
-    // upper bound; borrowed catalogue/pool graphs retain their own owners.
-    // Keep the original class envelope and every separately admitted output.
-    scratch:=EnerCubixPreparedOwner(output.budget);count:=0;countVisits=0
+    // Count physical containers once across all output roots. Other owners and
+    // the original class allowance stay charged; only our unused envelope moves.
+    scratch:=output.fork;[Int:Obj[]]? seen;count:=0;countVisits=0
     try
     {
-      scratch.hold(64);count=retainedEntries(result,cap)
-      report.eachFrameOutputRoot |root| {if(count<cap) count+=retainedEntries(root,cap-count)}
+      scratch.hold(64);seen=Int:Obj[][:]
+      count=retainedEntries(result,cap,seen,scratch)
+      report.eachFrameOutputRoot |root| {if(count<cap) count+=retainedEntries(root,cap-count,seen,scratch)}
       cursors.each |cursor|
-      {if(count<cap) count+=retainedEntries(cursor.line.consumedTotals,cap-count);if(count<cap) count+=retainedEntries(cursor.line.normalizationArea,cap-count)}
-      if(count<cap) count+=retainedEntries(frozenMeters,cap-count)
+      {if(count<cap) count+=retainedEntries(cursor.line.consumedTotals,cap-count,seen,scratch);if(count<cap) count+=retainedEntries(cursor.line.normalizationArea,cap-count,seen,scratch)}
+      if(count<cap) count+=retainedEntries(frozenMeters,cap-count,seen,scratch)
     }
-    finally {scratch.close}
+    finally {seen?.each |bucket| {bucket.clear};seen?.clear;scratch.close}
     if(count<cap) output.release(cap-count)
   }
-  private Int retainedEntries(Obj? value,Int cap)
+  private Int retainedEntries(Obj? value,Int cap,Int:Obj[] seen,EnerCubixPreparedOwner scratch)
   {
     if(++countVisits%256==0) output.budget.deadline.check
     if(cap<=0 || (value isnot Map && value isnot List && value isnot EnerCubixValue)) return 0
     if(borrowed.any |item| {item===value} || diagnostics?.protectedRoots?.any |item| {item===value} == true) return 0
-    if(value is EnerCubixValue) return (3+retainedEntries(((EnerCubixValue)value).sources,(cap-3).max(0))).min(cap)
+    id:=Env.cur.idHash(value);bucket:=seen[id]
+    if(bucket?.any |item| {item===value} == true) return 0
+    // Hash collisions use reference equality. Admit the map link, bucket header
+    // and retained reference before allocating them. Without scratch room,
+    // keep the original conservative cap rather than fail merely to trim it.
+    charge:=bucket==null ? 3 : 1
+    if(output.budget.remaining<charge) return cap
+    scratch.hold(charge)
+    if(bucket==null) {bucket=Obj[value];seen[id]=bucket}
+    else bucket.add(value)
+    if(value is EnerCubixValue) return (3+retainedEntries(((EnerCubixValue)value).sources,(cap-3).max(0),seen,scratch)).min(cap)
     n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
     if(n>=cap) return cap
-    if(value is Map) ((Map)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n)}
-    else ((List)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n)}
+    if(value is Map) ((Map)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n,seen,scratch)}
+    else ((List)value).each |child| {if(n<cap) n+=retainedEntries(child,cap-n,seen,scratch)}
     return n
   }
   private Void capture([Str:Obj?][] reads)

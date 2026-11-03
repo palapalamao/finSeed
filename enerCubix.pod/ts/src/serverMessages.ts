@@ -471,3 +471,6 @@ Object.assign(chineseServerMessages,{"COST_CURRENCY_INVALID":"费用币种无效
 
 Object.assign(serverMessages,{cockpitHistoryReadFailed:'History could not be read. This query did not produce a new snapshot. Try again later.'});
 Object.assign(chineseServerMessages,{cockpitHistoryReadFailed:'历史读取失败，本次查询未生成新快照。请稍后重新查询。'});
+
+Object.assign(serverMessages,{cockpitCategoryScope:"The report energy scope is inconsistent. Refresh and select the energy category again."});
+Object.assign(chineseServerMessages,{cockpitCategoryScope:"能源范围不一致，请刷新后重新选择关注能源。"});

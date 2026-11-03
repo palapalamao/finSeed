@@ -1,6 +1,48 @@
 ** Diagnostic samples only; this pool is never a numeric report data source.
 class EnerCubixCockpitCaptureTest : Test
 {
+  Void testBusinessOwnerAdmitsItsHeaderAndForkBeforeReclaimingOnlyMutableSamples()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget);pool:=EnerCubixCockpitCapture(plan,owner)
+    (0..<30).each |i| {pool.put("clean",row(i))}
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining-3);held:=peer.entries
+    business:=EnerCubixPreparedOwner(budget,pool);verifyEq(business.entries,5);verifyEq(peer.entries,held);verifyEq(pool.retainedRows,0)
+    child:=business.fork;verifyEq(child.entries,5);child.hold(12)
+    verifyErr(ArgErr#) {child.hold(-1)};verifyEq(peer.entries,held);verify(budget.peak.val<=200000)
+    child.close;business.close;peer.close;["clean","reads","flow"].each |key| {pool.seal(key)};pool.freeze;owner.close;verifyEq(budget.temporary.val,0)
+  }
+  Void testBusinessAdmissionCannotEvictFrozenSamplesOrBorrowAnotherBudget()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget);pool:=EnerCubixCockpitCapture(plan,owner)
+    pool.put("clean",row(1));["clean","reads","flow"].each |key| {pool.seal(key)};pool.freeze
+    sample:=pool.rows("clean").first;before:=sample.toStr
+    foreign:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());verifyErr(ArgErr#) {bad:=EnerCubixPreparedOwner(foreign,pool)};verifyEq(foreign.temporary.val,0)
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+    verifyErr(EnerCubixHttpErr#) {blocked:=EnerCubixPreparedOwner(budget,pool)}
+    verifyEq(pool.retainedRows,1);verifyEq(sample.toStr,before);verifyEq(peer.entries,held)
+    peer.close;owner.close;verifyEq(budget.temporary.val,0)
+  }
+
+  Void testOptionalSamplesYieldWithoutFailingAnOtherwiseAdmittedQuery()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+    pool:=EnerCubixCockpitCapture(plan,owner)
+    (0..<12).each |i| {pool.put("reads",row(i).set("intervals",[row(i)]).set("intervalCount",1))}
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining-80);held:=peer.entries
+    verifyEq(pool.put("clean",row(1)),false)
+    verifyEq(pool.retainedRows,0);verifyEq(peer.entries,held)
+    // Once pressure has reclaimed optional samples, later hours keep exact
+    // logical counters without growing this pool again.
+    (0..<5).each |i| {verifyEq(pool.put("flow",row(i)),false)}
+    peer.close
+    ["clean","reads","flow"].each |key| {pool.seal(key)}
+    result:=pool.freeze;verifyEq(result["returnedCount"],0);verifyEq(result["preparedEntryLimited"],true)
+    entries:=EnerCubixMath.maps(result["entries"])
+    ["cleaningEvents":1,"sourceUsage":12,"sourceIntervals":12,"coveragePeriods":5].each |n,kind|
+    {entry:=entries.find |e| {e["kind"]==kind};verifyEq(entry["totalCount"],n);verifyEq(entry["returnedCount"],0);verifyEq(entry["reason"],"snapshotDiagnosticBudget")}
+    verify(budget.peak.val<=200000);owner.close;verifyEq(budget.temporary.val,0)
+  }
+
   Void testPublishedMetadataDropsAbsentReportsWithoutResamplingOrMutatingFrozenEvidence()
   {
     (0..<3).each |variant|
@@ -75,7 +117,7 @@ class EnerCubixCockpitCaptureTest : Test
     pool:=EnerCubixCockpitCapture(plan,owner);output:=EnerCubixPreparedOwner(budget);pool.bind(output)
     verifyErr(ArgErr#) {owner.close}
     peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
-    verifyErr(EnerCubixHttpErr#) {pool.put("clean",row(1))};verifyErr(EnerCubixHttpErr#) {pool.freeze}
+    verifyEq(pool.put("clean",row(1)),false);["clean","reads","flow"].each |key| {pool.seal(key)};verifyErr(EnerCubixHttpErr#) {pool.freeze}
     output.close;owner.close;verifyEq(budget.temporary.val,held);peer.close;verifyEq(budget.temporary.val,0)
   }
   Void testTruncatedParentSlicesUseDistinctIdentitiesAndTruthfulReasons()

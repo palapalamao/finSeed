@@ -426,3 +426,28 @@ upstream-preparation-build.log 编译成功；upstream-preparation-tests.log 5 �
 第二批修复：相等但被分别冻结的共享证据以前会重建builder、按输出hash丢弃后仍保留逻辑额度。新增仅本请求、同字段、相同冻结源JSON的memo，输出hash/协议和原业务快照保持不变。6份500行证据与160k peer的测试真实RED→GREEN，4方法23检查通过。最终报告只回收未使用的保守DTO预留：完整返回及私有数据图按上界计数，原class余量和其他显式准入均保留；别名重复计数只会更保守。pooled scope从7346降到5123、独立数图1827仍全部覆盖；shared summary从66760降到38109、独立数图10116覆盖。已证实空输入帧中只复用幂等的null meter归约，逐小时period/coverage不跳过，数值/非空诊断/时变费率保留原路径。3类20方法1334检查通过。
 
 受控站点从30秒超时推进到7.191秒进入当年，随后在Flow重新解析相同scope的临时预留失败。复用Registry提前解析并持有的同一catalogue选表事实，校验对象身份、能源、维度与period keys；不改普通无计划路径。2类19方法1402检查通过，含4种原/预解析路径数值与覆盖对照。最后受控复查5.385秒仍在当年首批Capture.put到200008，raw/temporary关闭为0；它仅有5点元数据，不是完整FIN站点验收。此轮就此冻结，后续诊断取样额度问题独立跟进，不让年度迭代阻塞已验收的金额排版发布。
+
+
+## 2026-11-03 0.14.5 实机与独立后续（未完成）
+
+0.14.5 / developer `35777c4c` / Pod `73B4EF5212275AFCFCBCBE935895E11C122D9D12C5D31D426B4C75911475B613` 实际安装唯一 PID47680，FIN5停止、指定-noAuth。六组年度同截止、9模块：cubeTest site/main/leaf全部200（15.866/8.365/2.192秒），zeda main/leaf200（5.008/2.145秒），zeda site422/2.866秒。生产TS解码、主点计划、200k/8MiB、unprepared0、固定4816kWh/2799.549228CNY及冻结中英Excel通过；年度仍5/6。现场月预算及中英金额/320手机/站点自身小计另有真实UI与独立复算。证据 `out/cockpit/parity-20261101/live-0.14.5-20261103/`；失败响应及整体passed:false保留。
+
+后续源码尚未提交/部署，不能当作已解决年度：
+
+- 新低余量红测复现真实Capture.put168；先记录total/child，再按实际申请与声明freeze元数据(含新增flag)预检。不足时释放仅本池可选cell并停止再采样；精确总数/unknown/覆盖和所有数学时序保留。`preparedEntryLimited`仅可选细因，中英页面/导出复用现有summary入口；1000仍上限。冻结后不可回收。
+- `CoverageFold`过滤排序的临时引用在函数结束显式清空并释放本次申请，不累计到整24小时consumer frame。新红测9!=4，随后3类40方法8522检查通过；覆盖/浮点累加顺序/DST/失败帧原语义不变。
+- controlled site随后在Flow初始化的真实业务申请先失败。显式Flow/Report/Registry业务Owner可链接同预算的采样池、子Owner继承，仅在真正申请前释放可选样本；额外引用先计费、默认Owner不变、close清引用。不向const PreparedBudget放mutable Capture/Unsafe，不catch已失败hold。低余量<4、fork、跨预算、peer、冻结保护通过；Flow新红测make16→绿6检查。最初测试遗漏先结束借用frame导致preparedFrameActive，测试生命周期已修正，未改运行代码掩盖。
+- 同一WIP实现 captured main 正常1000与私有强制0样本均成功（约9.8/10.1秒），生产codec解码12reports，70组报告/覆盖/8项provenance/KPI完全一致；仅每包自生成boundaryId在确认指向自身boundary后规范化。证据 `diagnostic-zero-vs1000-parity.json`。这不是FIN实机。
+- **最后controlled site仍失败**：约8.6秒、200006，preparedEntryLimited=true、kept=0，首个2026-01-01 current帧的FlowDevice严格ValueFold初始化。可选样本已清空，仍是剩余业务驻留容量，不能把局部红绿包装成站点修复。模型只有5份captured点元数据、103窗口，不冒充完整原生site。Stream直接budget申请不全经Owner链接，不能声称全局回收覆盖。
+
+为不阻塞用户新增“用量趋势改柱状”需求，下一0.14.6只发布已安装0.14.5+`26ea7a24`的一行bar参数+四版本文件（`81a7d405`），冻结git archive排除全部上述WIP。238个fan/test文件逐字节等于0.14.5，相关36前端及P01中英2场景通过；后端121类全量证据明确复用不冒称重跑。UI包SHA `4A072AC030F95C86C742A71FED2EB37AA43B5D47E5E3926A42EE310C1AB76534`。此记录追加时未安装0146；发布脚本等待0145同PID30分钟摘要后再正常停启。
+
+## 2026-11-03 0.14.7 年度后续冻结
+
+0.14.6 已安装 PID11624，同包同进程1805.128秒/181样本通过。两项目catalog、12份资源字节、固定4816/2799.549228及真实中英桌面/320柱图已核对；这些不代替0.14.7验收。
+
+本批额外消除的驻留：输出按对象身份计数（相等但独立的容器不合并，碰撞用引用比较）；日均负荷bin子owner在生成结果后结束；原最终DTO完整预留分阶段准入，系数未减少。隐式单能源范围的profile/utility依赖在展开范围时按明确类别过滤，辅助能源独立规划；显式混合对象、普通报告及跨能源Num/Den保持原语义，不全局删除catalog或点位。新类别测试含100kWh/50m³、辅助开关及跨能源派生依赖，局部测试通过；它有意纠正非关注能源的多余明细，不声称所有旧结果字节不变。
+
+已结束的registry报告保留同一output身份和同一公共result，独立计数公共图与未来diagnostic字段预留；state.close断开私有根后，仅替换旧清理回调，再释放本owner差额。旧clearFrames/Period清理不可执行，否则会清空公共别名。Catalog/Pool绑定不迁移，后续cleaning继续原owner准入。可选计数采用无pool scratch，空间不足保留原生命周期；peer、独立公共图下界、关闭清空、晚到清洗已测。此项先有旧多cleanup根红测，再3类46方法6922检查、补充2类11方法301检查通过。
+
+最后受控站点仍未通过：仅5点元数据的独立120秒完成性oracle在43.425秒完成所有源小时及报表，随后compact编码触发200001的拒绝预留；实际未超额分配，关闭后raw/temporary均0。它不是生产30秒成功或完整FIN站点回放，不放宽30秒/200000/8MiB。本轮先冻结已验证修复，全量测试和真实六组年度另记，不继续用部分模型替代实机结论。

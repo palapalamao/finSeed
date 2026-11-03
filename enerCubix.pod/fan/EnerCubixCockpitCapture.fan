@@ -43,6 +43,7 @@ internal class EnerCubixCockpitCapture
   private Bool closed := false
   private Bool frozen := false
   private Bool published := false
+  private Bool preparedEntryLimited := false
   private Err? failure
   Int retainedRows() {check;return kept}
   internal Bool finalized() {check;return frozen}
@@ -59,7 +60,7 @@ internal class EnerCubixCockpitCapture
     {
       references:=0;metadataEntries.each |entry| {refs:=entry["reportRefs"] as List;references+=refs?.size ?: 0}
       scratch.hold(16+3*metadataEntries.size+2*references)
-      owner.hold(16+metadataEntries.size)
+      owner.hold(16+metadataEntries.size+(preparedEntryLimited ? 1 : 0))
       rows:=[Str:Obj?][,];counts:=Str:Int[:]
       result:=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":0,"returnedByKind":counts,"truncated":false,"entries":rows]
       owner.watch |->Void| {rows.each |row| {(row["reportRefs"] as List)?.clear;row.clear};rows.clear;counts.clear;result.clear}
@@ -73,6 +74,7 @@ internal class EnerCubixCockpitCapture
         if(!counts.containsKey(kind)) owner.hold(1)
         counts[kind]=(counts[kind] ?: 0)+n;returned+=n
       }
+      if(preparedEntryLimited) result["preparedEntryLimited"]=true
       result["returnedCount"]=returned;result["truncated"]=rows.any |entry| {entry["truncated"]==true}
       owner.hold(1);protectedRoots.add(result);return result
     }
@@ -89,12 +91,17 @@ internal class EnerCubixCockpitCapture
   [Str:Obj?][] rows(Str key) {check;return group(key).rows}
   Str captureId(Str key) {check;return group(key).captureId}
   Str diagnosticId(Str key) {check;return "diagnostic-"+group(key).order}
+  ** Fields populated at freeze are still owned by each finished report, even
+  ** when its current public graph has not acquired those fields yet.
+  internal Int pendingEntries(EnerCubixPreparedOwner output)
+  {check;return frozen ? 0 : 14*envelopes.findAll |e| {e.output===output}.size+12*periodEnvelopes.findAll |e| {e.output===output}.size}
   Void expect(Str key,Str kind)
   {check;g:=group(key);if(frozen || g.sealed || g.spec["kind"]!=kind) throw ArgErr("diagnosticGroupNotPlanned")}
   Bool canPutSimple(Str key)
   {
     check;g:=group(key)
     if(frozen || g.sealed || g.spec["kind"]=="sourceUsage") throw ArgErr("diagnosticSimpleGroup")
+    if(!sampleAdmission(78)) return false
     if(kept<1000) return true
     return groups.any |other| {other!==g && other.weight>g.weight && other.weight-other.cells.last.weight>=g.weight}
   }
@@ -132,8 +139,8 @@ internal class EnerCubixCockpitCapture
     Bool stored:=false
     try
     {
-      scratch=EnerCubixPreparedOwner(owner.budget)
-      scratch.hold(64)
+      // Logical counts describe every producer row, even when no diagnostic
+      // sample can be retained. These fields are never statistical input.
       g.total++
       children:=g.spec["kind"]=="sourceUsage" ? (row["intervals"] as List) : null
       childCount:=children?.size ?: 0
@@ -142,6 +149,9 @@ internal class EnerCubixCockpitCapture
       g.childAvailable+=childCount
       if(children!=null && row["detailsTruncated"]==true && advertised==null) g.childUnknown=true
       if(children!=null && (row["detailsTruncated"]==true || (advertised!=null && advertised>childCount.toFloat))) g.childUpstream=true
+      if(!sampleAdmission(68)) return false
+      scratch=EnerCubixPreparedOwner(owner.budget)
+      scratch.hold(64)
       keep:=childCount.min((1000/groups.size-1).max(0));weight:=1+keep
       while(kept+weight>1000)
       {
@@ -165,6 +175,8 @@ internal class EnerCubixCockpitCapture
         {n+=1+keep;for(i:=0;i<keep;i++) n+=entries(children[i],scratch,path)}
         else n+=entries(value,scratch,path)
       }
+      // Owner header (4), retained graph/class envelope (32+n), drop hook (1).
+      if(!sampleAdmission(37+n)) return false
       allocation=EnerCubixPreparedOwner(owner.budget);allocation.hold(32+n)
       cell:=EnerCubixCockpitCaptureCell(allocation,weight)
       out:=Str:Obj?[:];cell.row=out
@@ -195,7 +207,7 @@ internal class EnerCubixCockpitCapture
     {
       // Two metadata entries per source-read group, maps and range maps. No
       // sample graph is cloned by freezing; the pool continues to own them.
-      owner.hold(32+60*groups.size)
+      owner.hold(33+60*groups.size)
       envelopes.each |e|
       {
         if(e.output.entries==0 || e.target.isEmpty) throw ArgErr("diagnosticEnvelopeExpired")
@@ -225,6 +237,7 @@ internal class EnerCubixCockpitCapture
         }
       }
       snapshot=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":kept,"returnedByKind":byKind,"truncated":list.any |m| {m["truncated"]==true},"entries":list]
+      if(preparedEntryLimited) snapshot["preparedEntryLimited"]=true
       protectedRoots.add(snapshot);frozen=true;return snapshot
     }
     catch(Err e) {failure=e;throw e}
@@ -252,6 +265,28 @@ internal class EnerCubixCockpitCapture
     }
     if(from==null || to==null) return null
     out:=Str:Obj?["from":from.toIso,"to":to.toIso];heads.add(out);return out
+  }
+  ** Optional samples yield before admission fails. Reserve the already
+  ** declared freeze metadata, not a guessed fraction of the request budget.
+  ** One-way pressure mode releases only this pool's mutable detached rows;
+  ** no subsequent sample competes with unfinished numeric report work.
+  Void reclaimForBusiness(Int n)
+  {
+    check
+    if(n<0) throw ArgErr("preparedEntryOwnership")
+    if(!frozen && owner.budget.remaining<n) limitSamples
+  }
+  private Void limitSamples()
+  {
+    preparedEntryLimited=true
+    groups.each |g| {while(!g.cells.isEmpty) remove(g)}
+  }
+  private Bool sampleAdmission(Int n)
+  {
+    if(preparedEntryLimited) return false
+    if(owner.budget.remaining>=n+33+60*groups.size) return true
+    limitSamples
+    return false
   }
   private EnerCubixCockpitCaptureGroup group(Str key) {groups[key] ?: throw ArgErr("diagnosticGroupNotPlanned")}
   private Void remove(EnerCubixCockpitCaptureGroup g)

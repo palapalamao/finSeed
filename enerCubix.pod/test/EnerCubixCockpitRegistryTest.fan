@@ -30,6 +30,18 @@ class EnerCubixCockpitRegistryTest : Test
         finally {source.close}
       }
       registry.finish
+      shared:=(EnerCubixCockpitCatalog)EnerCubixCockpitRegistry#.field("catalog").get(registry)
+      pool:=(EnerCubixCockpitCapture)EnerCubixCockpitRegistry#.field("pool").get(registry)
+      // Completed report owners retain the public result, not the report,
+      // period reducers and line definitions captured by their old callbacks.
+      ((Str:EnerCubixCockpitReportWork)EnerCubixCockpitRegistry#.field("works").get(registry)).each |work|
+      {
+        output:=(EnerCubixPreparedOwner)EnerCubixCockpitReportWork#.field("output").get(work)
+        drops:=(List)EnerCubixPreparedOwner#.field("drops").get(output)
+        verifyEq(drops.size,1,"finished report has one public cleanup root")
+        borrowedRoots:=shared.protectedRoots.dup.addAll(pool.protectedRoots)
+        verify(output.entries>=publicSize(work.result,borrowedRoots,Obj[,]),"public graph remains fully admitted")
+      }
       ["","reference-"].each |prefix|
       {
         query:=prefix.isEmpty ? q : reference
@@ -40,7 +52,9 @@ class EnerCubixCockpitRegistryTest : Test
       verifyEq(budget.state.unprepared.val,0);verifyEq(budget.logicalHours,8)
       query:=EnerCubixCockpitReports.metricQuery(q,"cost",null)
       report:=registry.read("profile-cost",query);before:=budget.state.temporary.val
+      rows:=(List)report["rows"];row:=(Map)rows.first
       registry.releaseReport("profile-cost");verify(report.isEmpty);verify(budget.state.temporary.val<before)
+      verify(rows.isEmpty);verify(row.isEmpty)
       registry.validateReport("profile-cost",query)
       verifyErr(ArgErr#) {registry.read("profile-cost",query)}
       verifyErr(ArgErr#) {registry.validateReport("profile-cost",query.dup.set("from",previous.toIso))}
@@ -48,6 +62,15 @@ class EnerCubixCockpitRegistryTest : Test
     }
     finally {registry.close}
     verifyEq(budget.state.temporary.val,0)
+  }
+
+  private Int publicSize(Obj? value,Obj[] borrowedRoots,Obj[] seen)
+  {
+    if(value isnot Map && value isnot List) return 0
+    if(borrowedRoots.any |r| {r===value} || seen.any |r| {r===value}) return 0
+    seen.add(value)
+    if(value is Map) return ((Map)value).reduce(1+((Map)value).size) |Int n,v->Int| {n+publicSize(v,borrowedRoots,seen)}
+    return ((List)value).reduce(1+((List)value).size) |Int n,v->Int| {n+publicSize(v,borrowedRoots,seen)}
   }
 
   Void testAbortedCloseInsideFrameCanFinishCleanupAfterTheFrameExpires()

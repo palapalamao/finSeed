@@ -3,6 +3,29 @@ using util
 
 class EnerCubixFlowConsumerTest : Test
 {
+  Void testFlowInitializationReclaimsOnlyOptionalSamplesBeforeBusinessAdmission()
+  {
+    a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+1hr
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"t","kind":"totalMeter","name":"Total","pointId":"pt","categoryId":"c"]]
+    q:=Str:Obj?["kind":"energyFlow","dimension":"metering","nodeIds":["t"],"categoryId":"c","categoryIds":["c"],"period":"day","metric":"energy","from":a.toIso,"to":b.toIso,"asOf":b.toIso,"tz":"UTC","_cockpitCategoryId":"c"]
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);diagnosticOwner:=EnerCubixPreparedOwner(budget.state);frame:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    spec:=Str:[Str:Obj?]["seed":["kind":"cleaningEvents","grain":"cleaningEvent","reportRefs":["energy-flow"]],"energy-flow":["kind":"sourceUsage","grain":"sourceRead","reportRefs":["energy-flow"]],"period-t":["kind":"coveragePeriods","grain":"hour","reportRefs":["energy-flow"]]]
+    pool:=EnerCubixCockpitCapture(spec,diagnosticOwner)
+    (0..<300).each |i| {pool.put("seed",["pointId":"pt","from":a.toIso,"to":b.toIso,"value":0f])}
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-32);held:=peer.entries
+    work:=EnerCubixCockpitFlowWork(q.toImmutable,catalog,budget,pool,["t":"period-t"],[catalog.byId["t"]])
+    try
+    {
+      work.addFrame(a,b,Str:EnerCubixHistoryData[:],frame)
+      verifyEq(pool.retainedRows,0);verifyEq(peer.entries,held);verify(budget.state.peak.val<=200000)
+      peer.close;frame.close;work.finish;pool.seal("seed");diag:=pool.freeze
+      verifyEq(diag["preparedEntryLimited"],true);verifyEq(EnerCubixMath.maps(diag["entries"]).find |e| {e["kind"]=="cleaningEvents"}["totalCount"],300)
+    }
+    finally {peer.close;frame.close;work.close;diagnosticOwner.close;model.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testBorrowedFramesKeepOwnValuesCoverageWarningsAndWholePeriodBalance()
   {
     (0..<8).each |testCase|

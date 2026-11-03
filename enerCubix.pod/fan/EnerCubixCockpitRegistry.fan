@@ -266,7 +266,7 @@ internal class EnerCubixCockpitRegistry
   }
   private Void withConsumerFrame(|EnerCubixPreparedOwner| consume)
   {
-    local:=EnerCubixPreparedOwner(budget.state)
+    local:=EnerCubixPreparedOwner(budget.state,pool)
     try {consume(local)} finally {local.close}
   }
   Void finish()
@@ -404,7 +404,7 @@ internal class EnerCubixCockpitReportWork
 
   private Void open(Bool metadataOnly := false)
   {
-    state=EnerCubixPreparedOwner(budget.state);output=EnerCubixPreparedOwner(budget.state)
+    state=EnerCubixPreparedOwner(budget.state,pool);output=EnerCubixPreparedOwner(budget.state,pool)
     state.watch |->Void| {cursors.clear;report=null;consumer=null;context=null}
     state.hold(10);output.hold(4)
     ctx:=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",state);context=ctx;ctx.orderWarnings
@@ -416,7 +416,7 @@ internal class EnerCubixCockpitReportWork
     report=EnerCubixReport(ctx,request,from,to,kind,period,metric,state,key=="space-summary")
     created:=report;output.watch |->Void| {created.clearFrames}
     selected:=EnerCubixMath.strings(request["nodeIds"]).unique
-    if(kind=="utility") EnerCubixEndUse.resolve(ctx,selected).each |meter| {state.hold(1);cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
+    if(kind=="utility") EnerCubixEndUse.resolve(ctx,selected,EnerCubixDimension.cockpitRangeCategory(request)).each |meter| {state.hold(1);cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
     else selected.each |id|
     {
       record:=ctx.byId[id]
@@ -475,12 +475,21 @@ internal class EnerCubixCockpitReportWork
     }
     else
     {
-      result=consumer.finish
+      try {result=consumer.finish}
+      catch(EnerCubixHttpErr e) {Log.get("enerCubix").err("Cockpit report finish rejected: $key (state=${stateEntries}, output=${output.entries}, remaining=${budget.state.remaining})",e);throw e}
       if(key!="space-summary") {output.hold(2);((Map)result["extra"])["cleaning"]=[Str:Obj?][,]}
     }
+    retained:=key=="face-heatmap" ? output.entries : consumer.publicEntries
     done=true;state.close
+    if(retained<output.entries)
+    {
+      // State close severed Work -> consumer/report/cursors. Replace callbacks
+      // without running clearFrames, whose containers alias the public result.
+      publicResult:=result;catalogRoots:=catalog.protectedRoots;sampleRoots:=pool.protectedRoots
+      output.retainPublic(retained) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
+    }
   }
-  Int stateEntries() {state?.entries ?: 0}
+  Int stateEntries() {(state?.entries ?: 0)+(consumer?.childStateEntries ?: 0)}
   Void finishReady() {if(!done && next==to) finish}
   Void cleaning(Str pointId,DateTime a,DateTime b,Str:Obj? meta,Str diagnosticRef)
   {

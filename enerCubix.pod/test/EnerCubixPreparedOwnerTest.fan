@@ -1,5 +1,24 @@
 class EnerCubixPreparedOwnerTest : Test
 {
+  Void testPublicRetirementReplacesOnlyItsOwnCleanupAndCharge()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline())
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(23);held:=peer.entries
+    owner:=EnerCubixPreparedOwner(budget);owner.hold(100)
+    publicResult:=Str:Obj?["value":17f];privateDrop:=false
+    owner.watch |->Void| {privateDrop=true;publicResult.clear}
+    verifyErr(ArgErr#) {owner.retainPublic(5) |->Void| {}}
+    verifyErr(ArgErr#) {owner.retainPublic(200) |->Void| {}}
+    owner.retainPublic(32) |->Void| {publicResult.clear}
+    verify(!privateDrop);verifyEq(publicResult["value"],17f)
+    verifyEq(owner.entries,32);verifyEq(budget.temporary.val,held+32)
+    owner.hold(7);verifyEq(budget.temporary.val,held+39)
+    owner.close;verify(publicResult.isEmpty);verify(!privateDrop)
+    verifyEq(budget.temporary.val,held);owner.close
+    verifyErr(ArgErr#) {owner.retainPublic(6) |->Void| {}}
+    peer.close;verifyEq(budget.temporary.val,0)
+  }
+
   Void testDropPrecedesReleaseAndPeerChargeIsPreserved()
   {
     state:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state.holdOwned(13)

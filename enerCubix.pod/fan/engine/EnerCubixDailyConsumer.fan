@@ -5,9 +5,16 @@ internal class EnerCubixDailyConsumer
   new make(EnerCubixLine line,EnerCubixPreparedOwner state,EnerCubixPreparedOwner output)
   {
     if(state === output || state.budget !== output.budget) throw ArgErr("dailyConsumerOwner")
-    this.line=line;this.state=state;this.output=output
-    state.watch |->Void| {hours.clear;bands.clear;classified.clear;this.line=null;closed=true}
-    state.hold(8)
+    this.line=line;this.output=output
+    // Parent retains the closed child-owner handle until its own cleanup.
+    state.hold(5);local:=state.fork;this.state=local
+    try
+    {
+      state.watch |->Void| {local.close}
+      local.watch |->Void| {hours.clear;bands.clear;classified.clear;this.line=null;closed=true}
+      local.hold(8)
+    }
+    catch(Err e) {local.close;throw e}
   }
   private EnerCubixLine? line
   private EnerCubixPreparedOwner state
@@ -39,8 +46,10 @@ internal class EnerCubixDailyConsumer
       hourRows.each |r| {clear(r)};bandRows.each |r| {clear(r)}
       hourRows.clear;bandRows.clear;((List)out["classified"]).clear;out.clear
     }
-    done=true;return out
+    done=true;state.close;return out
   }
+  internal Int stateEntries() {state.entries}
+
   private Str:Obj? snapshot(EnerCubixDailyBin? bin)
   {
     // Field links, copied values/sources, band list, plus temporary finish values.

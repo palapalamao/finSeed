@@ -1,6 +1,22 @@
 ** Fixed bins preserve independent hour and interval reductions, including DST.
 class EnerCubixDailyConsumerTest : Test
 {
+  Void testFinishedDailyOutputReleasesItsBinStateBeforeTheParentReportCloses()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("m|c","m","M","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());parent:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixDailyConsumer(line,parent,output)
+    (0..<48).each |i|
+    {tick:=EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",["p"]));tick.known=tick.value;consumer.add(tick,"flat")}
+    before:=budget.temporary.val;data:=consumer.finish
+    verify(budget.temporary.val<before,"finished bin state must expire while detached output remains readable")
+    hour:=EnerCubixMath.maps(data["hours"])[1];verifyEq(((EnerCubixValue)hour["value"]).value,26f)
+    verifyEq(((EnerCubixValue)hour["known"]).value,26f)
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+    parent.close;verifyEq(((EnerCubixValue)hour["value"]).value,26f)
+    output.close;verify(data.isEmpty);verifyEq(budget.temporary.val,held);peer.close;verifyEq(budget.temporary.val,0)
+  }
+
   Void testHourAndBandFoldsMatchOriginalSequencesForEnergyGaugeAndCop()
   {
     ["energy","gauge","cop"].each |mode|

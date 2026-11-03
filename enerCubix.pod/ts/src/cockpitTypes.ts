@@ -32,7 +32,7 @@ export interface CockpitIssue {id:string;type:'energyAlarm'|'ruleClue'|'dataQual
 export interface CockpitIssuesData {ruleEvaluations?:RuleEvaluation[];stateObservedAt:string|null;items:CockpitIssue[];total:number;topIds:string[];activeEventCount:number|null;eventScope:{basis:'selectedObjectsAndEffectiveMeters';objectIds:string[];meterIds:string[];categoryId:string}}
 export interface CockpitModule<T> {status:'ok'|'partial'|'empty'|'unavailable'|'error';data?:T;reasonCodes?:string[];error?:{code:string;message?:string}}
 export interface CockpitDiagnosticEntry {id:string;kind:'coveragePeriods'|'sourceUsage'|'sourceIntervals'|'cleaningEvents';grain:'hour'|'sourceRead'|'sourceInterval'|'cleaningEvent';totalCount:number|null;returnedCount:number;truncated:boolean;reason:'complete'|'snapshotDiagnosticBudget'|'upstreamDiagnosticLimit'|'upstreamAndSnapshotLimit';objectIds:string[];sourceIds:string[];sourceIdsComplete:boolean;upstreamReason?:string;requestRange:{from:string;to:string;asOf:string};returnedRange:{from:string;to:string}|null;reportRefs:string[]}
-export interface CockpitDiagnostics {schemaVersion:1;rowBudget:number;returnedCount:number;returnedByKind?:Record<string,number>;truncated:boolean;entries:CockpitDiagnosticEntry[]}
+export interface CockpitDiagnostics {schemaVersion:1;preparedEntryLimited?:boolean;rowBudget:number;returnedCount:number;returnedByKind?:Record<string,number>;truncated:boolean;entries:CockpitDiagnosticEntry[]}
 export interface ReportDiagnosticContext {snapshotId:string;reportRefs:string[];metadata:CockpitDiagnostics}
 export interface CockpitSnapshot {
  schemaVersion:1;snapshotId:string;requestId:string;generatedAt:string;

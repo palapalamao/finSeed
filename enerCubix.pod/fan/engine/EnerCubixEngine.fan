@@ -100,7 +100,7 @@ class EnerCubixEngine
     lines:=EnerCubixLine[,]
     if (kind == "utility")
     {
-      EnerCubixEndUse.resolve(ctx,selected).each |meter| {lines.add(report.line(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
+      EnerCubixEndUse.resolve(ctx,selected,EnerCubixDimension.cockpitRangeCategory(request)).each |meter| {lines.add(report.line(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
       return report.finish(lines)
     }
     selected.each |id|

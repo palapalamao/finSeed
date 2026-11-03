@@ -1,7 +1,7 @@
 ** Report-local selection and overlap checks. Every meter reads its own primary.
 internal class EnerCubixEndUse
 {
-  static [Str:Obj?][] resolve(EnerCubixContext ctx,Str[] selected)
+  static [Str:Obj?][] resolve(EnerCubixContext ctx,Str[] selected,Str? category := null)
   {
     found:=Str:[Str:Obj?][:]
     children:=Str:[Str:Obj?][][:]
@@ -71,7 +71,7 @@ internal class EnerCubixEndUse
       }
       parents.each |key| {if (found.containsKey(key)) covered[key]=true}
     }
-    return found.vals.findAll |m| {!covered.containsKey(m["id"].toStr)}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
+    return (category==null ? found.vals : found.vals.findAll |m| {m["categoryId"]==category}).findAll |m| {!covered.containsKey(m["id"].toStr)}.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
   }
 
   private static Bool meter(Str:Obj? r) {["meter","totalMeter"].contains(r["kind"])}
