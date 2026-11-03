@@ -9,7 +9,7 @@ internal class EnerCubixCockpitRequestScope
     {
       deadline.check;EnerCubixCockpitGate.enter(project,user);entered=true
       owner=EnerCubixPreparedOwner(this.stream.state)
-      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null;snapshot=null;frozenReports?.clear;frozenReports=null}
+      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null;snapshot=null;historyHeaders=null;frozenReports?.clear;frozenReports=null}
     }
     catch(Err e)
     {
@@ -30,6 +30,9 @@ internal class EnerCubixCockpitRequestScope
   private EnerCubixPreparedOwner? reportOwner
   private EnerCubixPreparedOwner? payloadOwner
   private EnerCubixPreparedOwner? configurationOwner
+  private EnerCubixPreparedOwner? historyOwner
+  private EnerCubixPreparedOwner? historyMetadataWork
+  private [Str:Obj?][]? historyHeaders
   private EnerCubixPreparedOwner? planningModel
   private EnerCubixPreparedOwner? planningState
   private EnerCubixCockpitCatalog? planningCatalog
@@ -41,7 +44,23 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)}
+  EnerCubixPreparedOwner historyOutput()
+  {checkContext(project,user);if(historyOwner==null) historyOwner=EnerCubixPreparedOwner(stream.state);return historyOwner}
+  [Str:Obj?][] freezeHistoryHeaders([Str:Obj?][] headers)
+  {
+    checkContext(project,user)
+    if(historyHeaders!=null) throw ArgErr("cockpitHistoryHeadersAlreadyFrozen")
+    historyHeaders=([Str:Obj?][])EnerCubixCockpitFreeze.value(headers,historyOutput);return historyHeaders
+  }
+  EnerCubixPreparedOwner metadataWorkspace(Int pointCount)
+  {
+    checkContext(project,user)
+    if(historyMetadataWork!=null) throw ArgErr("cockpitHistoryMetadataAlreadyCreated")
+    historyMetadataWork=EnerCubixPreparedOwner(stream.state);historyMetadataWork.hold(17+pointCount)
+    return historyMetadataWork
+  }
+  Void finishMetadata() {historyMetadataWork?.close}
   EnerCubixPreparedOwner configurationOutput()
   {checkContext(project,user);if(configurationOwner==null) configurationOwner=EnerCubixPreparedOwner(stream.state);return configurationOwner}
   EnerCubixContext planningContext([Str:Obj?][] records,TimeZone tz,Str dimension,Bool nativeSpace)
@@ -118,6 +137,7 @@ internal class EnerCubixCockpitRequestScope
     try {finishPlanning} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit planning cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
+    try {finishMetadata;historyOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit history metadata cleanup also failed",e)}
     try {configurationOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit configuration cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}
     if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}

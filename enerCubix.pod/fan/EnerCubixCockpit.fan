@@ -133,10 +133,11 @@ class EnerCubixCockpit
       if(meta == null || meta["detailsTruncated"] != true || meta["detailsCaptureId"] != null) return h
       return h.dup.set("cleaning",meta.dup.set("detailsCaptureId",Uuid().toStr))
     }
-    histories=([Str:Obj?][])histories.toImmutable
+    histories=requestScope==null ? ([Str:Obj?][])histories.toImmutable : requestScope.freezeHistoryHeaders(histories)
     observedTo:=readClock()
     deadline?.check
-    historyMeta:=EnerCubixCockpitHistoryMeta(pointIds.unique,effectiveEnd)
+    metadataWork:=requestScope?.metadataWorkspace(pointIds.size)
+    historyMeta:=EnerCubixCockpitHistoryMeta(pointIds.unique,effectiveEnd,metadataWork,requestScope?.historyOutput)
     histories.each |h| {historyMeta.observe(h)}
     report:=EnerCubixCockpitReports.read("profile-energy",request,frozen,EnerCubixCockpitMetrics.histories(request,histories),preparedReport)
     row:=EnerCubixMath.maps(((Map)report["summary"])["selectionTotals"]).find |r| {r["categoryId"] == category}
@@ -228,6 +229,7 @@ class EnerCubixCockpit
     config.addAll(ownedRefs)
     refs:=config.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
     proof:=historyMeta.snapshot
+    requestScope?.finishMetadata
     if(requestMeta["streaming"] is Map) proof=proof.dup.set("streaming",[requestMeta["streaming"]])
     ["historyConfigObservedFrom","historyConfigObservedTo"].each |key| {if(requestMeta[key] is Str) proof=proof.dup.set(key,requestMeta[key])}
     refs.addAll(EnerCubixMath.maps(proof["configRefs"]))

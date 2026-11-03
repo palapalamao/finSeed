@@ -370,3 +370,9 @@ RED复现300字段Folio配置通过原decode先分配JSON树、绕过额度。�
 带scope的SourceSession.prepare现在为History配置准备使用工作owner：引用索引、设备解码、清洗参数转换和比较、配置refs等在创建前准入，已知转换器用保守预留。原生清洗回调使用owned JSON/profile解码；冻结结果交给scope.configurationOwner持有到发送。Folio返回的不可变原生Dict事实仍是借用，工作区关闭前原始可变根清理；新清洗Dict的保留引用另行计入，不因immutable就释放唯一计账owner。scope路径缺少owned回调在lookup前拒绝，不退回未准入回调。原生raw读取选项的小工作区也在回调前准入，查询仍无任何历史写入。
 
 5类48方法861检查通过，6870ms（cockpit-prepare-owned-final-tests.log）。覆盖0历史读取前的额度拒绝、peer保留、配置工作图清理后v1结果及非空refs/fingerprint仍有效、后续改为v2不改变本次冻结、401/403/409/422/429/504原实例透传，以及旧准备/清洗/九模块/scope回归。此批只有受控factory验证，未把捕获main中调用者预先提供的prepared配置冒充原生准备调用；native Context清洗回调尚未实机执行。Root计划/历史元数据/业务投影及Repo上游创建仍待；未部署，ALL-59不关闭。
+
+薄历史header与脱离源的provenance
+
+Root的私有scope路径将薄header的不可变副本纳入historyOwner，保留同一stats对象的别名；历史元数据工作区在创建和收集refs/清洗参数/时段信息前准入。provenance元数据冻结到historyOwner后立即清理工作区，historyOwner持续到发送，所以SourceSession释放后不存在只靠immutable名义放掉唯一owner的情况。旧非scope路径继续原行为。
+
+3类37方法771检查通过，7620ms（cockpit-history-meta-owned-final-tests.log），含原始header/参数/stats修改及清空不影响冻结proof、工作区关闭后拒绝继续读取、复制额度拒绝、peer与发送边界、配置factory与九模块回归。捕获cockpit-history-meta-owned-main在最后仅追加测试前的相同生产实现通过：12.625秒，逻辑峰189231，462回调/12094样本/unprepared0，清理raw/temporary0；响应497574B，SHA256 3B7F23BF2CDF71C02CC2C01DD4051C5860117FAB3B418459707B00C542FD645A，TS解码12报告及8+58+5对照通过。Root计划/纯业务投影和Repo上游仍待；该捕获仍不是原生配置准备、FIN实机或JVM堆测量。

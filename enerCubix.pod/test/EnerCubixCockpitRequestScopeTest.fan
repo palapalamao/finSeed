@@ -3,6 +3,46 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testHistoryProofSurvivesMetadataWorkspaceAndRawHeaderCleanup()
+  {
+    scope:=EnerCubixCockpitRequestScope("history-proof","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
+    stats:=Str:Obj?["nativeReadCount":2]
+    raw:=Str:Obj?["pointId":"p","configRefs":[["id":"profile","mod":"2026-10-01T00:00:00Z"]],"cleaning":["profileId":"profile","profileVersion":1,"parameters":["deltaMin":0f]],"streaming":stats,"sourceLastObservedAt":"2026-10-01T01:00:00Z"]
+    try
+    {
+      headers:=scope.freezeHistoryHeaders([raw,["pointId":"other","streaming":stats]])
+      verify(headers.first["streaming"]===headers.last["streaming"])
+      work:=scope.metadataWorkspace(1)
+      meta:=EnerCubixCockpitHistoryMeta(["p"],DateTime.fromIso("2026-10-01T02:00:00Z"),work,scope.historyOutput)
+      headers.each |header| {meta.observe(header)}
+      proof:=meta.snapshot;scope.finishMetadata
+      verifyEq(work.entries,0);verifyErr(ArgErr#) {meta.observe(headers.first)}
+      ((Map)((Map)raw["cleaning"])["parameters"])["deltaMin"]=99f;stats["nativeReadCount"]=999;raw.clear
+      verifyEq(((Map)((List)proof["streaming"]).first)["nativeReadCount"],2)
+      verifyEq(((Map)((Map)((List)proof["appliedCleaning"]).first)["parameters"])["deltaMin"],0f)
+      verifyEq(((Map)((List)proof["configRefs"]).first)["id"],"profile")
+      verifyEq(proof["sourceLastObservedAt"],"2026-10-01T01:00:00Z")
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.deliver(proof,|Buf bytes| {verify(bytes.size>0)})
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testThinHeaderCopyCannotBePublishedBeforeItsAdmission()
+  {
+    scope:=EnerCubixCockpitRequestScope("history-header-limit","a");peer:=EnerCubixPreparedOwner(scope.stream.state)
+    peer.hold(scope.stream.state.remaining-24);held:=peer.entries
+    headers:=[Str:Obj?][["pointId":"p","configRefs":[["id":"profile","mod":"version"]]]]
+    try
+    {
+      verifyErr(EnerCubixHttpErr#) {scope.freezeHistoryHeaders(headers)}
+      verifyEq(headers.first["pointId"],"p");verify(!scope.responseStarted)
+      scope.close;verifyEq(scope.stream.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
   Void testPlanningCatalogCanReleaseItsOwnersWithoutClearingInputRecords()
   {
     scope:=EnerCubixCockpitRequestScope("planning-scope","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
