@@ -25,3 +25,8 @@ it('states that a scope graph does not prove parent/submeter coverage or a compl
 });
 
 it('gives the overview usable plotting space without changing points, axes or the professional chart',()=>{const snapshot=structuredClone(raw) as unknown as Parameters<typeof cockpitProfileSnapshot>[0],report=cockpitProfileSnapshot(snapshot)!,options=chartOptions(report.result,{}, {type:'line',request:report.request}),before={...options},compact=compactChartOptions(options);expect(compact.series).toBe(options.series);expect(compact.xAxis).toBe(options.xAxis);expect(compact.dataZoom).toEqual([]);expect(compact.grid).toMatchObject({top:28,bottom:30});expect(compact.legend).toMatchObject({show:false});expect((compact.yAxis as any[])[0]).toMatchObject({splitNumber:3,axisLabel:{hideOverlap:true}});expect(options).toEqual(before);});
+
+it('leaves a readable plot beside long organization labels in a narrow cockpit without changing the report',()=>{
+ const label='Unassigned organization / a very long native business name (kWh)',options={grid:{left:140,right:35},xAxis:{type:'value'},yAxis:{type:'category',data:[label]},series:[{type:'bar',data:[180]}]},before=structuredClone(options),compact=compactChartOptions(options),grid=compact.grid as {left:number;right:number};
+ expect(244-grid.left-grid.right).toBeGreaterThanOrEqual(130);expect(compact.xAxis).toMatchObject({splitNumber:3,axisLabel:{hideOverlap:true}});expect(compact.yAxis).toMatchObject({data:[label],axisLabel:{overflow:'truncate'}});expect(compact.series).toBe(options.series);expect(options).toEqual(before);
+});

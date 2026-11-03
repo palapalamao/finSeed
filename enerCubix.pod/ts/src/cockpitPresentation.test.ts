@@ -2,12 +2,20 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {CockpitIssues} from './CockpitIssues';
 import budgetRaw from '../tests/fixtures/cockpit-budget-24day.json';
+import spaceRaw from '../tests/fixtures/cockpit-space-response.json';
 import {afterEach,expect,it,vi} from 'vitest';
 import raw from '../tests/fixtures/cockpit-faces-response.json';
 import type {CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
 import {freezeCockpitExport,cockpitExportTables,cockpitPrintEvidence} from './cockpitExports';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
+for(const language of ['zh-CN','en-US'] as const)it('keeps the actual isometric buildings in the read-only business brief '+language,async()=>{
+ const {initializeLocale}=await import('./i18n'),{CockpitBrief}=await import('./CockpitBrief');initializeLocale(language);
+ const snapshot=structuredClone(spaceRaw) as unknown as CockpitSnapshot,before=structuredClone(snapshot),catalog:Catalog={version:'test',project:snapshot.context.project,user:{name:'test',canWrite:false},records:[]};
+ const html=renderToStaticMarkup(createElement(CockpitBrief,{snapshot,catalog,onProfile:()=>{},onFlow:()=>{}}));
+ const diagram=html.match(/<svg class="cockpit-isometric"[\s\S]+?<\/svg>/)?.[0];expect(diagram).toBeDefined();expect(diagram!.match(/data-native-site=/g)).toHaveLength(1);expect(diagram).toContain('cockpit-building-floor');expect(diagram).not.toContain('tabindex=');expect(diagram).not.toContain('role="button"');expect(snapshot).toEqual(before);
+ snapshot.modules.space!.data!.nodes=[];const empty=renderToStaticMarkup(createElement(CockpitBrief,{snapshot,catalog,onProfile:()=>{},onFlow:()=>{}}));expect(empty).not.toContain('cockpit-isometric');expect(empty).toContain(language==='zh-CN'?'不生成虚构楼栋':'buildings are not invented');
+});
 for(const language of ['zh-CN','en-US'] as const)it('uses the frozen budget state in the business brief '+language,async()=>{
  const {initializeLocale,t}=await import('./i18n'),{CockpitBrief}=await import('./CockpitBrief');initializeLocale(language);
  const snapshot=structuredClone(budgetRaw) as unknown as CockpitSnapshot,b=snapshot.modules.kpis!.data!.budget!,before=structuredClone(snapshot);

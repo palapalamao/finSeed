@@ -11,6 +11,8 @@ export const loadBandColors={sharp:'#b94052',mixed:'#7865af',peak:'#dc9f36',vall
 export type AxisBounds=Record<string,{min?:number;max?:number}>;
 /** Compact overview presentation only; series, time coordinates and values are unchanged. */
 export function compactChartOptions(options:EChartsCoreOption):EChartsCoreOption{
+ const category=options.yAxis as Record<string,unknown>;
+ if(!Array.isArray(category)&&category?.type==='category')return {...options,legend:{...(options.legend as object),show:false},grid:{...(options.grid as object),left:88,right:18,top:25,bottom:40},xAxis:{...(options.xAxis as object),splitNumber:3,axisLabel:{hideOverlap:true}},yAxis:{...category,axisLabel:{width:78,overflow:'truncate',ellipsis:'…'}}};
  const legend=Array.isArray(options.series)&&options.series.length>1;
  return {...options,dataZoom:[],legend:{...(options.legend as object),show:legend,bottom:0},grid:{...(options.grid as object),left:58,top:28,bottom:legend?48:30},yAxis:(options.yAxis as Record<string,unknown>[]).map(axis=>({...axis,splitNumber:3,axisLabel:{...(axis.axisLabel as object),hideOverlap:true}}))};
 }

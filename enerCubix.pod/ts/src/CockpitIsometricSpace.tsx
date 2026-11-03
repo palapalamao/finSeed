@@ -3,9 +3,9 @@ import {cockpitMetricValue} from './cockpitMetrics';
 import {t} from './i18n';
 
 /** A diagram of real references, never a floor plan or a source of calculated energy. */
-export function CockpitIsometricSpace({sites,focusedId,onFocus,path}:{sites:{site:CockpitSpaceNode;floors:CockpitSpaceNode[]}[];focusedId?:string;onFocus:(id:string)=>void;path:(id:string)=>string}){
+export function CockpitIsometricSpace({sites,focusedId,onFocus,path}:{sites:{site:CockpitSpaceNode;floors:CockpitSpaceNode[]}[];focusedId?:string;onFocus?:(id:string)=>void;path:(id:string)=>string}){
  const columns=Math.min(3,sites.length),rows=Math.ceil(sites.length/columns),width=Math.max(420,columns*250),rowHeight=Math.max(310,...sites.map(({floors})=>floors.length*24+120)),height=rowHeight*rows;
- const activate=(node:CockpitSpaceNode)=>({role:'button',tabIndex:0,'aria-label':path(node.id),'aria-pressed':focusedId===node.id,'data-space-object':node.id,onClick:()=>onFocus(node.id),onKeyDown:(event:React.KeyboardEvent<SVGGElement>)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onFocus(node.id);}}});
+ const activate=(node:CockpitSpaceNode)=>!onFocus?{role:'group','aria-label':path(node.id),'data-space-object':node.id}:({role:'button',tabIndex:0,'aria-label':path(node.id),'aria-pressed':focusedId===node.id,'data-space-object':node.id,onClick:()=>onFocus(node.id),onKeyDown:(event:React.KeyboardEvent<SVGGElement>)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onFocus(node.id);}}});
  return <div className="cockpit-space-schematic"><svg className="cockpit-isometric" viewBox={`0 0 ${width} ${height}`} style={{minWidth:width,height:height*250/310}} role="group" aria-label={t('真实站点与楼层示意')}>
   <title>{t('按 FIN 真实站点与楼层示意，无实际比例；图与列表使用同一对象。')}</title>
   {sites.map(({site,floors},index)=>{const count=Math.min(columns,sites.length-Math.floor(index/columns)*columns),x=width/(count+1)*(index%columns+1),y=Math.floor(index/columns)*rowHeight+rowHeight-95,buildingHeight=Math.max(155,floors.length*24),top=y-buildingHeight;
