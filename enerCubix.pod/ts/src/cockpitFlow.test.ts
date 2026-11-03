@@ -13,6 +13,8 @@ for(const language of ['zh-CN','en-US'] as const)it('focuses a returned child gr
  const graph=energyFlowGraphs(cockpitBalanceSnapshot(source)!.result).find(g=>g.objectId==='t')!,child=graph.nodes.find(n=>n.nodeType==='meter'&&n.parentId===graph.focusId&&!n.referenceOnly)!;
  const html=renderToStaticMarkup(createElement(CockpitFlow,{snapshot:source,focusObjectId:child.nodeId||child.id,compact:true,onOpen:()=>{}}));
  expect(html.match(/class="cockpit-destination-root"[\s\S]*?<\/strong>/)?.[0]).toContain('>'+child.name+'</strong>');expect(source).toEqual(before);
+ const navigation=createNavigation(source,'energyFlow',{focusObjectId:child.nodeId||child.id,selectedFace:'space',presentationMode:false,scrollY:0,draft:{scope:source.context.reportScope,categoryId:source.context.focusCategoryId,preset:'custom'}}),projected=projectCockpitReport(source,navigation.targetRequest);
+ expect(projected).toBeDefined();const focused=energyFlowData(projected!.result)!;expect(focused.focusId).toBe(child.id);expect(focused.nodes.find(n=>n.id===focused.focusId)).toMatchObject({value:child.value,sourceIds:child.sourceIds});expect(projected!.request.nodeIds).toEqual([child.nodeId||child.id]);expect(source).toEqual(before);
  const fallback=renderToStaticMarkup(createElement(CockpitFlow,{snapshot:source,focusObjectId:'unloaded-focus',compact:true,onOpen:()=>{}}));
  expect(fallback).toContain(language==='zh-CN'?'当前焦点没有已返回的能流':'No energy flow was returned for the current focus');expect(source).toEqual(before);
 });

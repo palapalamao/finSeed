@@ -1,13 +1,14 @@
 import type {CockpitSnapshot} from './cockpitTypes';
 import type {ReportSnapshot} from './types';
-import {energyFlowData,energyFlowGraphs,energyFlowGraphSnapshot} from './energyFlow';
+import {energyFlowData,energyFlowGraphs,energyFlowGraphSnapshot,focusEnergyFlowSnapshot} from './energyFlow';
 import {t} from './i18n';
 export function cockpitBalanceSnapshot(snapshot:CockpitSnapshot,nodeIds=snapshot.context.reportScope.nodeIds):ReportSnapshot|undefined{
  const ref=snapshot.modules.balance?.data?.reportRef,raw=ref?snapshot.reports[ref]:undefined;if(!raw)return;
  const c=snapshot.context,report:ReportSnapshot={project:c.project,title:t('计量平衡'),generatedAt:snapshot.generatedAt,request:{kind:'energyFlow',nodeIds:[...c.reportScope.nodeIds],dimension:c.reportScope.dimension,...(c.reportScope.dimension==='space'?{spaceSource:'fin' as const}:{}),categoryId:c.focusCategoryId,from:c.time.from,to:c.time.to,asOf:c.asOf,period:c.time.period,metric:'energy',perArea:false,flowMode:'relations'},result:structuredClone(raw)};
  if(JSON.stringify(nodeIds)===JSON.stringify(c.reportScope.nodeIds))return report;
- if(nodeIds.length!==1)return;const graph=energyFlowGraphs(report.result).find(g=>nodeIds[0]===(g.objectId||g.focusId));if(!graph)return;
- const one=energyFlowGraphSnapshot(report,graph.graphId||graph.objectId||graph.focusId);one.result.extra={...one.result.extra,energyFlowGraphs:[graph]};return one;
+ if(nodeIds.length!==1)return;const graphs=energyFlowGraphs(report.result),graph=graphs.find(g=>nodeIds[0]===(g.objectId||g.focusId))||graphs.find(g=>g.nodes.some(n=>!n.referenceOnly&&n.nodeType!=='difference'&&(n.nodeId||n.id)===nodeIds[0]));if(!graph)return;
+ const root=energyFlowGraphSnapshot(report,graph.graphId||graph.objectId||graph.focusId),child=graph.nodes.find(n=>!n.referenceOnly&&n.nodeType!=='difference'&&(n.nodeId||n.id)===nodeIds[0]);
+ const one=child?focusEnergyFlowSnapshot(root,child.id):root;one.result.extra={...one.result.extra,energyFlowGraphs:[energyFlowData(one.result)!]};return one;
 }
 // View-only pruning: never combine hidden branches or recalculate any energy.
 export function cockpitCompactFlow(snapshot:ReportSnapshot):{snapshot:ReportSnapshot;hiddenCount:number}{
