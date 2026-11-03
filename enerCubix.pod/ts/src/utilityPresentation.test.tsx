@@ -18,14 +18,21 @@ async function render(s:ReportSnapshot,language:string){
 describe('end-use presentation',()=>{
  it.each(['zh-CN','en-US'])('presents one shared end-use pie and own-meter details in %s',async language=>{
   const s=source(),before=structuredClone(s),html=await render(s,language);
-  expect(html).toContain(language==='zh-CN'?'所选表计的分项构成':'End uses of selected meters');
+  expect(html).toContain(language==='zh-CN'?'所选范围的分项构成':'End uses in the selected scope');
   expect((html.match(/class="utility-chart"/g)||[])).toHaveLength(1);
   expect(html).toContain('Light A');expect(html).toContain('Power C');expect(html).toContain('Lighting');expect(html).toContain('600');
   expect(s).toEqual(before);
  });
+ it.each(['zh-CN','en-US'])('explains automatic scope expansion and retains resolved meter details in %s',async language=>{
+  const s=source();s.request.dimension='space';s.request.nodeIds=['site'];
+  const before=structuredClone(s),html=await render(s,language);
+  expect(html).toContain(language==='zh-CN'?'选择空间、组织或总表，自动汇总下级末级表；各表读取自身主能耗点历史。':'Select a space, organization or main meter to aggregate its terminal meters. Each meter uses its own primary energy-point history.');
+  expect(html).toContain('Light A');expect(html).toContain('Light B');expect(html).toContain('Power C');
+  expect(html).toContain('600');expect(s).toEqual(before);
+ });
  it.each(['zh-CN','en-US'])('keeps own amounts but suppresses an overlapping pie in %s',async language=>{
   const html=await render(source('overlappingScopes'),language);
-  expect(html).toContain(language==='zh-CN'?'计量范围重叠':'selected scopes overlap');
+  expect(html).toContain(language==='zh-CN'?'计量范围重叠':'scopes overlap');
   expect(html).not.toContain('class="utility-chart"');expect(html).toContain('Light A');expect(html).toContain('Power C');
  });
  it('permits own-meter and nested scope selection in every current view',()=>{

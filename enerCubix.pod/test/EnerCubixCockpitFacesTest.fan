@@ -43,7 +43,7 @@ class EnerCubixCockpitFacesTest : Test
     verifyEq(((List)time["excludedDays"]).size,2)
   }
 
-  Void testOverlappingMasterSelectionKeepsMembersWithoutAnAdditiveShare()
+  Void testOverlappingScopeKeepsOtherModulesSafeAndEndUseLeavesIndependent()
   {
     rs:=records
     rs.findAll |r| {["a","b"].contains(r["id"])}.each |r| {r["meterParentId"]="t"}
@@ -56,8 +56,9 @@ class EnerCubixCockpitFacesTest : Test
     modules:=(Map)r["modules"];uses:=(Map)((Map)modules["endUse"])["data"]
     verifyEq(uses["additive"],false)
     report:=(Map)((Map)r["reports"])[uses["reportRef"]]
-    verifyEq(((List)((Map)report["extra"])["utilityMembers"]).size,3)
-    verify(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).all |s| {s["knownPercentage"] == null})
+    verifyEq(((List)((Map)report["extra"])["utilityMembers"]).size,2)
+    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).find |s| {s["utilityId"]=="lighting"}["knownPercentage"],40f)
+    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).find |s| {s["utilityId"]=="motive"}["knownPercentage"],60f)
     verify(EnerCubixMath.maps(((Map)((Map)modules["organization"])["data"])["nodes"]).all |n| {n["value"] == null})
   }
 

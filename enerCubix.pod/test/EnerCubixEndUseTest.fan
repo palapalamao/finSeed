@@ -12,17 +12,17 @@ class EnerCubixEndUseTest : Test
     verifyEq(EnerCubixMath.maps(((Map)r["summary"])["selectionTotals"]).first["value"],600f)
   }
 
-  Void testMasterOwnPrimaryAndCanonicalDedup()
+  Void testMasterScopeExpandsAndCanonicalLeavesDeduplicate()
   {
     rs:=records; rs.add(meter("alias","pa","main","lighting").set("canonicalId","a"))
     r:=EnerCubixEngine.report(request("utility",["main","a","alias"]),rs,histories)
-    verifyEq(extra(r,"utilityMembers").map |m->Str| {m["nodeId"].toStr}.sort,["a","main"])
-    verifyEq(extra(r,"utilityShares").find |s| {s["utilityId"] == "lighting"}["percentageBasis"],"overlappingScopes")
-    verifyNull(EnerCubixMath.maps(((Map)r["summary"])["selectionTotals"]).first["value"])
+    verifyEq(extra(r,"utilityMembers").map |m->Str| {m["nodeId"].toStr}.sort,["a","b","c"])
+    verifyEq(extra(r,"utilityShares").find |s| {s["utilityId"] == "lighting"}["percentageBasis"],"knownUsage")
+    verifyEq(EnerCubixMath.maps(((Map)r["summary"])["selectionTotals"]).first["value"],600f)
     only:=run("utility",["main"])
-    verifyEq(extra(only,"utilityShares").size,1)
-    verifyEq(extra(only,"utilityShares").first["value"],1000f)
-    verifyEq(EnerCubixHistory.pointIds(request("utility",["main"]),records),["pm"])
+    verifyEq(extra(only,"utilityShares").size,2)
+    verifyEq(extra(only,"utilityShares").find |s| {s["utilityId"]=="lighting"}["value"],300f)
+    verifyEq(EnerCubixHistory.pointIds(request("utility",["main"]),records).sort,["pa","pb","pc"])
   }
 
   Void testScopeUsesCommonMeterSetAtAnyDepthAndDirectEveryView()

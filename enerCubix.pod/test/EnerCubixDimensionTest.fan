@@ -104,7 +104,7 @@ class EnerCubixDimensionTest : Test
     near(value(run(rs,histories.dup.add(["pointId":"pv","unit":"kWh","mode":"interval","samples":[[Str:Obj?]["ts":"2026-01-01T00:00:00Z","value":60f]]]),"space",["floor"])),90f)
   }
 
-  Void testUtilityScopeKeepsTheCommonAuthoritativeMeter()
+  Void testUtilityScopeResolvesOwnLeafMeters()
   {
     rs:=base
     rs.find |m| { m["id"] == "floorMeter" }["utilityId"]="lighting"
@@ -112,10 +112,10 @@ class EnerCubixDimensionTest : Test
     req:=request("space",["building"]); req["kind"]="utility"
     r:=EnerCubixEngine.report(req,rs,histories)
     ss:=([Str:Obj?][])r["series"]
-    verifyEq(ss.size,1); near(value(r),100f)
-    verifyEq(EnerCubixMath.maps(((Map)r["extra"])["utilityMembers"]).first["nodeId"],"master")
+    verifyEq(ss.size,1); near(value(r),30f)
+    verifyEq(EnerCubixMath.maps(((Map)r["extra"])["utilityMembers"]).first["nodeId"],"floorMeter")
     totals:=([Str:Obj?][])((Str:Obj?)r["extra"])["scopeTotals"]
-    near((Float?)totals.first["value"],100f)
+    near((Float?)totals.first["value"],30f)
   }
 
   Void testDashboardUnionAndHistoryDependencies()

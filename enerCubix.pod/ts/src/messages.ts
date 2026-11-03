@@ -1724,12 +1724,12 @@ Object.assign(englishMessages,{
  '左柱为总表已有用量，右柱按当前关系堆叠各分表已有量。已有用量差值仅作对照；缺测不补零，覆盖不一致时不据此判断泄漏。':'The left bar shows available main-meter usage; the right bar stacks available submeter usage using current relationships. The available usage difference is for comparison only. Missing data is not zero-filled, and unequal coverage cannot establish leakage.'
 });
 Object.assign(englishMessages,{
- '所选表计的分项构成':'End uses of selected meters',
- '所选表计的分项构成，详细数值见下方明细表':'End uses of selected meters; detailed values are in the table below',
- '按所选表计自身用量归入当前分项，同分项合并计算占比。':'Each selected meter’s own consumption is assigned to its current end use. Meters with the same end use share one slice.',
+ '所选范围的分项构成':'End uses in the selected scope',
+ '所选范围的分项构成，详细数值见下方明细表':'End uses in the selected scope; detailed values are in the table below',
+ '按参与表计自身用量归入当前分项，同分项合并计算占比。':'Each participating meter’s own consumption is assigned to its current end use. Meters with the same end use share one slice.',
  '已有用量占比；各表覆盖可能不同，不代表完整区间构成。':'Shares of available usage; coverage may differ between meters and does not establish the complete-period mix.',
- '每块表读取自身主能耗点历史；总表不会自动展开分表。':'Each meter uses its own primary energy-point history. Selecting a main meter does not expand its submeters.',
- '计量范围重叠，相关对象无法计算占比。请取消总表或其下级表，选择互不包含的表计；各表自身用量仍保留。':'The selected scopes overlap; shares cannot be calculated. Deselect the parent meter or its descendants and choose nonoverlapping meters. Each meter’s own usage remains visible.',
+ '选择空间、组织或总表，自动汇总下级末级表；各表读取自身主能耗点历史。':'Select a space, organization or main meter to aggregate its terminal meters. Each meter uses its own primary energy-point history.',
+ '计量范围重叠，无法计算占比。请核对表计关系及重复主点；各表自身用量仍保留。':'Metering scopes overlap; shares cannot be calculated. Check meter relationships and duplicate primary-point assignments. Each meter’s own usage remains visible.',
  '面积归一化结果用于强度对比，不计算分项占比。':'Area-normalized values compare intensities; end-use shares are not calculated.',
  '存在负用量，不计算分项占比；请核对表计数据。':'Negative consumption prevents end-use shares from being calculated. Check the meter data.',
  '此快照使用旧分项口径，请重新查询。':'This snapshot uses the previous end-use calculation. Run the query again.',
@@ -1740,7 +1740,7 @@ Object.assign(englishMessages,{
  '自身用量':'Own consumption',
  '此分项没有可显示的表计':'No meters to display for this end use',
  '此范围没有可显示的分项用量':'No end-use consumption to display in this scope',
- '所选表计用量趋势':'Consumption trends of selected meters',
+ '参与表计用量趋势':'Consumption trends of participating meters',
  '分项能流':'End-use energy flow',
  '按能耗分项':'By end use',
  '按当前关系':'By current relationships',

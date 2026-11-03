@@ -19,17 +19,18 @@ class EnerCubixUtilityMeteringTest : Test
     verifyEq(master["includeInTotals"],false)
   }
 
-  Void testMeterScopeUsesOnlyItsOwnMeasuredTotal()
+  Void testMeterScopeExpandsToNonoverlappingOwnLeafReadings()
   {
     rs:=records; req:=request("master")
     report:=EnerCubixEngine.report(req,rs,histories)
     shares:=EnerCubixMath.maps(((Map)report["extra"])["utilityShares"])
-    verifyEq(shares.size,1);verifyEq(shares.first["utilityId"],"")
-    verifyEq(shares.first["value"],100f);verifyEq(shares.first["percentage"],100f)
-    verifyEq(shares.first["meterIds"],["master"])
+    verifyEq(shares.size,3)
+    verifyEq(shares.find |r| {r["utilityId"]=="lighting"}["value"],20f)
+    verifyEq(shares.find |r| {r["utilityId"]=="cooling"}["value"],10f)
+    verifyEq(shares.find |r| {r["utilityId"]==""}["value"],5f)
     details:=EnerCubixMath.maps(((Map)report["extra"])["utilityMembers"])
-    verifyEq(details.map |r->Str| {r["nodeId"].toStr},["master"])
-    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["scopeTotals"]).first["value"],100f)
+    verifyEq(details.map |r->Str| {r["nodeId"].toStr},["a","b","c"])
+    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["scopeTotals"]).first["value"],35f)
     req["kind"]="profile"
     verifyEq(EnerCubixMath.maps(EnerCubixMath.maps(EnerCubixEngine.report(req,rs,histories)["series"]).first["points"]).first["value"],100f)
   }
@@ -40,7 +41,7 @@ class EnerCubixUtilityMeteringTest : Test
     report:=EnerCubixEngine.report(req,records,histories)
     verifyEq(EnerCubixMath.maps(report["series"]).size,1)
     verifyEq(EnerCubixMath.maps(EnerCubixMath.maps(report["series"]).first["points"]).first["value"],20f)
-    verifyEq(EnerCubixDimension.dependencies(request("master"),records)["points"],["pm"])
+    verifyEq(EnerCubixDimension.dependencies(request("master"),records)["points"],["pa","pb","pc"])
     hs:=histories.findAll |h| { h["pointId"] != "pa" }
     report=EnerCubixEngine.report(req,records,hs)
     p:=EnerCubixMath.maps(EnerCubixMath.maps(report["series"]).first["points"]).first
