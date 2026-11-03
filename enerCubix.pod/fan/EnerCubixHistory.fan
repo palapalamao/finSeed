@@ -45,11 +45,11 @@ class EnerCubixHistory
   }
 
   ** Freeze every planned primary point and its cleaning config before any history read.
-  internal static [Str:Obj?][] loadPrepared(Context cx, Str:Obj? request, [Str:Obj?][] records)
+  internal static [Str:Obj?][] loadPrepared(Context cx, Str:Obj? request, [Str:Obj?][] records,EnerCubixStreamBudget? budget := null)
   {
     prepared:=prepareConfiguration(request,records,|Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},|Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)})
     points:=(Str:Dict?)prepared["points"]; configs:=(Str:Dict)prepared["configs"]
-    out:=EnerCubixCockpitStream.load(cx,request,records,points,configs)
+    out:=EnerCubixCockpitStream.load(cx,request,records,points,configs,budget)
     refs:=(Str:[Str:Obj?][])prepared["configRefs"]
     out.each |h|
     {

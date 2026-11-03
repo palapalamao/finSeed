@@ -6,6 +6,8 @@ const class EnerCubixRest : WebMod
 {
   override Void onService()
   {
+    EnerCubixCockpitRequestScope? cockpitScope
+    Err? failure
     try
     {
       repo := EnerCubixRepo(Context.cur)
@@ -55,7 +57,11 @@ const class EnerCubixRest : WebMod
         case "tree/manage": data=repo.manage(body)
         case "tree/copy": case "tree/move": case "tree/toggle": data=repo.tree(route.split('/').last,str(body,"id"),body["parentId"] as Str,body["mod"])
         case "report": data=repo.report(body)
-        case "cockpit": data=repo.cockpit(body)
+        case "cockpit":
+          cockpitScope=EnerCubixCockpitRequestScope(repo.cx.proj.name,repo.cx.user.username)
+          data=repo.cockpitScoped(body,cockpitScope)
+          cockpitScope.deliver((Str:Obj?)data,|Buf bytes| {sendCockpit(bytes)})
+          return
         case "cleaning/preview": data=EnerCubixCleaningRepo(repo).preview(body)
         case "tasks": data=EnerCubixJobs(repo).run(body)
         case "alarms": data=repo.alarms
@@ -63,22 +69,41 @@ const class EnerCubixRest : WebMod
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw EnerCubixHttpErr(404,"NOT_FOUND","接口不存在")
       }
-      if (route == "cockpit" && JsonOutStream.writeJsonToStr(["ok":true,"data":data]).toBuf.size > 8388608) throw EnerCubixHttpErr(413,"RESPONSE_LIMIT","cockpitResponseLimit")
       send(200,["ok":true,"data":data])
     }
     catch (EnerCubixHttpErr e)
     {
+      failure=e;if(failedAfterResponseStart(cockpitScope,e)) return
       error:=Str:Obj?["code":e.code,"msg":e.msg]
       if (e.status == 429) {error["retryAfterSeconds"]=2;res.headers["Retry-After"]="2"}
       send(e.status,["ok":false,"error":error])
     }
-    catch (ArgErr e) { send(400,["ok":false,"error":["code":"INVALID","msg":e.msg]]) }
-    catch (ParseErr e) { send(400,["ok":false,"error":["code":"INVALID","msg":"请求格式无效"]]) }
+    catch (ArgErr e) {failure=e;if(failedAfterResponseStart(cockpitScope,e)) return;send(400,["ok":false,"error":["code":"INVALID","msg":e.msg]])}
+    catch (ParseErr e) {failure=e;if(failedAfterResponseStart(cockpitScope,e)) return;send(400,["ok":false,"error":["code":"INVALID","msg":"请求格式无效"]])}
     catch (Err e)
     {
+      failure=e;if(failedAfterResponseStart(cockpitScope,e)) return
       Log.get("enerCubix").err("EnerCubix request failed",e)
       send(500,["ok":false,"error":["code":"INTERNAL","msg":"处理失败，请查看 FIN 日志"]])
     }
+    finally
+    {
+      try {cockpitScope?.close}
+      catch(Err cleanup)
+      {if(failure==null && cockpitScope?.responseStarted!=true) throw cleanup;Log.get("enerCubix").err("Cockpit request cleanup failed after response processing",cleanup)}
+    }
+  }
+
+  private Bool failedAfterResponseStart(EnerCubixCockpitRequestScope? scope,Err e)
+  {if(scope?.responseStarted!=true) return false;Log.get("enerCubix").err("Cockpit response write failed; no second response is sent",e);return true}
+
+  private Void sendCockpit(Buf bytes)
+  {
+    res.statusCode=200
+    res.headers["Content-Type"]="application/json; charset=utf-8"
+    res.headers["Content-Length"]=bytes.size.toStr
+    res.headers["Cache-Control"]="no-store"
+    res.out.writeBuf(bytes);res.out.flush;res.done
   }
 
   private Void sendImage(Str:Obj? image)

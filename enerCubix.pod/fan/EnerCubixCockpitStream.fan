@@ -8,9 +8,10 @@ internal class EnerCubixCockpitStream
   static Str key(DateTime a, DateTime b) { "${a.ticks}|${b.ticks}" }
   internal static Str diagnosticKey(Str id,DateTime from,DateTime to) {"cleaning|$id|${from.ticks}|${to.ticks}"}
 
-  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs)
+  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, Str:Dict? points, Str:Dict configs,EnerCubixStreamBudget? shared := null)
   {
-    budget:=EnerCubixStreamBudget(50000,200000,20000000,30sec,request["_cockpitDeadline"] as EnerCubixCockpitDeadline)
+    budget:=shared ?: EnerCubixStreamBudget(50000,200000,20000000,30sec,request["_cockpitDeadline"] as EnerCubixCockpitDeadline)
+    if(request["_cockpitDeadline"]!=null && request["_cockpitDeadline"]!==budget.state.deadline) throw ArgErr("cockpitSourceSessionDeadline")
     return prepare(request,records,points,configs,|Dict p,Span span,|HisItem| sink|
     {
       cx.rt.his.read(p,span,Etc.makeDict(["raw":Marker.val]),sink)

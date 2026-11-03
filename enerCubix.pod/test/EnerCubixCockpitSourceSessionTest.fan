@@ -4,6 +4,32 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testOneRequestDeadlineAndBudgetReachAllModulesAndTheFinalWire()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr;request:=input;request["payloadEncoding"]="compact-v1"
+    points:=Str:Dict[:]
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"])}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pn":[Str:Obj?][,],"pd":[Str:Obj?][,]]].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","controlled-nine-wire");budget:=scope.stream;EnerCubixCockpitSourceSession? session;Buf? escaped;calls:=0
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i)))}});return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+      scope.deliver(snapshot,|Buf bytes|
+      {
+        calls++;escaped=bytes;verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitGate.enter("test","controlled-nine-wire")}
+        packet:=(Map)JsonInStream(bytes.in).readJson;verifyEq(packet["ok"],true)
+        data:=(Map)packet["data"];verifyEq(data["payloadEncoding"],"compact-v1")
+        values:=EnerCubixMath.maps(((Map)((Map)((Map)((Map)data["snapshot"])["modules"])["kpis"])["data"])["values"])
+        verifyEq(values.find |v| {v["id"]=="energy"}["value"],50f)
+        verify(!JsonOutStream.writeJsonToStr(data).contains("publishDiagnostics"))
+      })
+      verifyEq(calls,1);verifyEq(escaped.size,0);session.close;verifyEq(budget.state.temporary.val,scope.entries)
+      verifyEq(budget.nativeReads,2);verifyEq(budget.state.unprepared.val,0)
+    }
+    finally {session?.close;scope.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
   Void testOptionalProjectionFailureOnlyPublishesDiagnosticsForReturnedReports()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");request:=input;request["modules"]=["kpis","trend"]

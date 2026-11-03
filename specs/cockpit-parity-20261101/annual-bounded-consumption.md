@@ -286,3 +286,13 @@ SourceSession 的私有工厂复用 History.prepareConfiguration 的主点/设�
 新增 withBody(body,budget,send,maxBytes)：共享同一deadline/逻辑预算，先完整序列化 {ok,data} 到有界UTF-8 Buf，大小及期限通过后才调用sender一次；回调结束即清自身Buf和lease，不把可变lease塞进JSON。使用实际FIN SDK反射确认的OutStream重载，逐字节限制，包含中英文、emoji、反斜杠/引号/换行/制表转义及完整信封，没有BOM。精确8388608接受，超一字节413；序列化中8KiB后的模拟超时与准入拒绝均不调用sender；sender的原IOErr实例保持，peer额度保留，借用Buf关闭后为空，cleanup错误不覆盖先前异常。
 
 cockpit-wire-final-tests.log 1类4方法45检查通过，2319ms；新helper未接入当前REST，故还不能声称HTTP状态/头、socket不双响应、Gate覆盖发送已实测。现有REST双序列化将在完整scope接线时替换，原生入口仍未切换/部署。内部codec证据hash的未压缩对象不可误套此最终8MiB限制。
+
+请求scope接入REST生命周期（源码/受控联合验证，未部署）
+
+仅cockpit分支在原body解析后建立scope；原2MiB入站Str/解析边界尚在scope之前，未称已全请求堆计账。公开Repo.cockpit(input)签名保留，新增internal cockpitScoped；scope非空时Repo不重复enter或leave，Rest finally持Gate直到计算、完整UTF-8编码及发送/失败清理结束。scope.stream的同一budget和deadline传入现有History.loadPrepared/Stream.load；native读取仍是旧prepared入口，尚未切SourceSession。
+
+成功响应改用预先完整编码的有界Buf直接发送，原application/json; charset=utf-8/no-store保留，Content-Length取最终完整信封字节；四个catch在“已调用发送器的尝试”后只记录而不追加错误JSON。scope禁止deliver中关闭；构造拒绝只回滚已enter的自己；旧scope重复close不释放后来同用户的新槽。cleanup不遮住原异常或已发送响应。此时responseStarted不是客户端已收到的证明；30秒统一检查到send前，socket写出期间的真实超时/完成仍需FIN HTTP验证，200开始后不追加504。
+
+6类29方法625检查通过，7356ms（cockpit-request-joint-tests.log），含REST既有body/readPost约束、旧入口可执行符号、Gate/peer、Wire字节限额、全九模块Root+Session+compact+最终wire受控联合（50kWh/2源读取/unprepared0，发送期间Gate仍占有，关闭只剩scope额度后最终归零）。大字符串夹具最初被Fantom编译期常量折叠成8MiB字面量，触发FTable UTF长度限制；改为运行时夹具生成后，SDK包重建且实际测试加载通过，未改编译器或运行环境。
+
+年度捕获加scope/最终wire另存cockpit-scoped-session-main前缀：16.083秒，30秒时限不提高，8provenance/58业务组与5行窄诊断差异校验继续通过，发送回调Gate已核查占有。462回调/12094样本/44010小时，已接入峰158502（含scope基本对象），raw/temporary关闭0，prepared48不重置；响应497574B，SHA256 59873507530D96743320D5073A7112E4907AF35C5DCF8BB0808CF4B9C0173C67。不是HTTP/FIN I/O或完整输入/投影/codec多图共同准入证明。架构师只读核对本批接线未见阻断冲突，未额外跑测试/FIN；全部未部署，不关闭ALL-59。
