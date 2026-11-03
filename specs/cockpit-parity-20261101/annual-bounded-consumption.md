@@ -356,3 +356,17 @@ Root目录与源计算共享一个模型
 源会话关闭其borrower后，再关闭Root planning state与model；所有业务投影及快照冻结完成前目录仍有效。重复单位准备、不同records身份、重复planning及预算不足均拒绝。4类36方法920检查通过，7537ms（cockpit-shared-planning-final-tests.log），包含peer/Gate保留、失败清理、原输入不改、全部模块和独立registry回归。
 
 捕获cockpit-shared-planning-main在最后仅增加身份/重复单位测试前的相同生产实现通过：13.378秒，峰188894，462读取/12094样本/unprepared0，raw/temporary清理0；497573B，SHA256 2ABBF24F366D097B678BBBF391E1395DB59378C15F10CD3F4323A34B805FD5D8。12报告解码和8+58+5既定比较通过。Root计划/纯业务投影、Repo上游和History配置创建仍待覆盖；不是全请求/JVM/FIN实机完成。
+
+246bf77e集中后端回归
+
+完整隔离SDK后端套件117类831方法273126检查通过，295562ms（cockpit-owned-full-tests.log）。冻结私有包cockpit-owned-offline-test.pod：4430654B，SHA256 378074F59CD91A6C81EDA7DAFADEAE9A8B6FCC10AA4526B0C8230104B0604072，元数据0.14.1，禁止部署；日志哈希和源码见cockpit-owned-full-receipt.json。版本一致性检查通过。包含的容量测试各有自己的测试时限，不能把其1800秒夹具当作生产30秒查询成功。后续配置准备增量不转借这一全套件结果。
+
+FIN Expert connector合同验证接口拒绝原始Fantom文本（ARTIFACT_PARSE:JSONDecodeError，trace-0029f1a4630a40119ef2bfe5d13284d5），版本判断unverified。未将其当作代码编译失败，也未宣称验证通过；实际SDK编译/运行证据独立保留。
+
+配置JSON与历史准备创建点（私有factory，未切原生Repo）
+
+RED复现300字段Folio配置通过原decode先分配JSON树、绕过额度。新owned解码先扫描JSON语法标记、字符串和转义，预留Map/List条目，再调用同一个JsonInStream；重复key按保守上界计，原解析器仍决定类型和语法错误。SDK反射确认readJson非virtual、parseObj/parseArray为private，因此没有虚构parser hook。中英文/emoji/转义、嵌套数组、重复key、null/0、源事实保留和ParseErr/504区分已执行；不是JSON字节数或JVM堆测量。
+
+带scope的SourceSession.prepare现在为History配置准备使用工作owner：引用索引、设备解码、清洗参数转换和比较、配置refs等在创建前准入，已知转换器用保守预留。原生清洗回调使用owned JSON/profile解码；冻结结果交给scope.configurationOwner持有到发送。Folio返回的不可变原生Dict事实仍是借用，工作区关闭前原始可变根清理；新清洗Dict的保留引用另行计入，不因immutable就释放唯一计账owner。scope路径缺少owned回调在lookup前拒绝，不退回未准入回调。原生raw读取选项的小工作区也在回调前准入，查询仍无任何历史写入。
+
+5类48方法861检查通过，6870ms（cockpit-prepare-owned-final-tests.log）。覆盖0历史读取前的额度拒绝、peer保留、配置工作图清理后v1结果及非空refs/fingerprint仍有效、后续改为v2不改变本次冻结、401/403/409/422/429/504原实例透传，以及旧准备/清洗/九模块/scope回归。此批只有受控factory验证，未把捕获main中调用者预先提供的prepared配置冒充原生准备调用；native Context清洗回调尚未实机执行。Root计划/历史元数据/业务投影及Repo上游创建仍待；未部署，ALL-59不关闭。

@@ -106,6 +106,12 @@ class EnerCubixCleaningRepo
   ** Current profile is authoritative for new reads. Report snapshots contain
   ** their own full configuration and do not call this method on replay.
   Dict currentConfig(Dict point, Str:Dict? pending := Str:Dict?[:])
+  {currentConfigImpl(point,pending,null)}
+
+  internal Dict currentConfigOwned(Dict point,EnerCubixPreparedOwner owner)
+  {owner.hold(1);return currentConfigImpl(point,Str:Dict?[:],owner)}
+
+  private Dict currentConfigImpl(Dict point,Str:Dict? pending,EnerCubixPreparedOwner? owner)
   {
     repo.mustRead
     readable(point)
@@ -121,7 +127,8 @@ class EnerCubixCleaningRepo
     profileRecord:=pendingRecord(profileRef,pending) ?: throw ArgErr("清洗方案不存在")
     if (!profileRecord.has("enerCubix") || profileRecord["enerCubixKind"] != "cleaningProfile") throw ArgErr("清洗方案不存在")
     readable(profileRecord)
-    profile:=EnerCubixRepo.decode(profileRecord)
+    profile:=owner==null ? EnerCubixRepo.decode(profileRecord) : EnerCubixRepo.decodeOwned(profileRecord,owner)
+    if(owner!=null) owner.hold(64+16*((profile["parameters"] as Map)?.size ?: 0))
     config:=configFor(profile,point)
     if (point["enerCubixCleaningProfileVersion"] != config["enerCubixProfileVersion"] || point["enerCubixCleaningRollover"] != config["hisTotalizedRollover"]) throw ArgErr("清洗点位版本或回绕属性与方案不一致")
     if (point["hisFuncConfig"] isnot Dict || !same((Dict)point["hisFuncConfig"],config)) throw ArgErr("清洗点位配置与当前方案不一致")

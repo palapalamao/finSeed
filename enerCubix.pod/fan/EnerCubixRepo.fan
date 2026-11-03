@@ -848,6 +848,21 @@ class EnerCubixRepo
     return data
   }
 
+  internal static Str:Obj? decodeOwned(Dict rec,EnerCubixPreparedOwner owner)
+  {
+    if(rec.has("equip"))
+    {
+      owner.hold(11+refTags.size+EnerCubixNativeEquip.scalars.size);Map? result
+      owner.watch |->Void| {result?.clear;result=null}
+      result=EnerCubixNativeEquip.decode(rec);return result
+    }
+    data:=(Str:Obj?)EnerCubixOwnedJson.parse(rec["enerCubixConfig"] as Str ?: "{}",owner)
+    owner.hold(refTags.size+4)
+    refTags.each |tag,key| {if(rec[tag] is Ref) data[key]=((Ref)rec[tag]).id}
+    data["id"]=rec.id.id;data["mod"]=iso(rec["mod"]);data["kind"]=rec["enerCubixKind"];data["name"]=rec.dis
+    return data
+  }
+
   static Str? iso(Obj? v) { v is DateTime ? ((DateTime)v).toIso : v?.toStr }
 }
 

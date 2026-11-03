@@ -29,6 +29,7 @@ internal class EnerCubixCockpitRequestScope
   private [Str:Obj?]? snapshot
   private EnerCubixPreparedOwner? reportOwner
   private EnerCubixPreparedOwner? payloadOwner
+  private EnerCubixPreparedOwner? configurationOwner
   private EnerCubixPreparedOwner? planningModel
   private EnerCubixPreparedOwner? planningState
   private EnerCubixCockpitCatalog? planningCatalog
@@ -40,7 +41,9 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)}
+  EnerCubixPreparedOwner configurationOutput()
+  {checkContext(project,user);if(configurationOwner==null) configurationOwner=EnerCubixPreparedOwner(stream.state);return configurationOwner}
   EnerCubixContext planningContext([Str:Obj?][] records,TimeZone tz,Str dimension,Bool nativeSpace)
   {
     checkContext(project,user)
@@ -115,6 +118,7 @@ internal class EnerCubixCockpitRequestScope
     try {finishPlanning} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit planning cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
+    try {configurationOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit configuration cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}
     if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}
     if(failure!=null) throw failure

@@ -3,6 +3,91 @@ using util
 
 class EnerCubixCockpitPreparationTest : Test
 {
+  Void testScopedConfigurationFreezeSurvivesWorkspaceCleanupAndLaterSourceEdits()
+  {
+    db:=database;records:=catalog(db);request:=cockpitRequest
+    expected:=EnerCubixCockpit.execute(request,records,|q,rs->[Str:Obj?][]| {histories(prepare(rs,db))},"test",TimeZone.utc,at+1hr)
+    scope:=EnerCubixCockpitRequestScope("test","owned-configuration");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
+    EnerCubixCockpitSourceSession? session;EnerCubixPreparedOwner? workspace;Map[] decoded := [,];reads:=0;cleanings:=0
+    try
+    {
+      actual:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] rs->[Str:Obj?][]|
+      {
+        session=EnerCubixCockpitSourceSession.prepare(q,rs,scope.stream,|Str id->Dict?| {db[id]},|Dict p->Bool| {true},|Dict p->Dict| {fail("Scoped native configuration must use its admitted callback");return Etc.emptyDict},|Dict p,Span span,|HisItem| sink|
+        {reads++;[at,at+1hr].each |ts| {if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(ts==at ? 0 : 10)))}},scope,|Dict p,EnerCubixPreparedOwner work->Dict|
+        {
+          cleanings++;workspace=work;profile:=EnerCubixRepo.decodeOwned(db["profile"],work);decoded.add(profile)
+          work.hold(64+16*((Map)profile["parameters"]).size)
+          return EnerCubixCleaningRepo.configFor(profile,p)
+        })
+        verifyEq(reads,0);verifyEq(workspace.entries,0);verify(decoded.all |row| {row.isEmpty})
+        upgrade(db)
+        return session.load
+      },"test",TimeZone.utc,at+1hr,false,null,null,null,scope.deadline,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},null,null,scope)
+      verifyEq(reads,2);verifyEq(cleanings,2)
+      values:=EnerCubixMath.maps(((Map)((Map)((Map)actual["modules"])["kpis"])["data"])["values"])
+      verifyEq(values.first["value"],20f)
+      ["configRefs","configFingerprint","appliedCleaning"].each |key| {verifyEq(((Map)actual["provenance"])[key],((Map)expected["provenance"])[key])}
+      verify(EnerCubixMath.maps(((Map)actual["provenance"])["appliedCleaning"]).all |row| {row["profileVersion"]==1})
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.deliver(actual,|Buf bytes| {verify(!bytes.readAllStr.contains("releaseSources"))})
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {session?.close;scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0);verifyEq(scope.stream.residentRaw,0)
+  }
+  Void testScopedConfigurationAdmissionRejectsBeforeLookupAndKeepsPeer()
+  {
+    scope:=EnerCubixCockpitRequestScope("test","owned-configuration-limit");peer:=EnerCubixPreparedOwner(scope.stream.state)
+    peer.hold(scope.stream.state.remaining-8);held:=peer.entries;lookups:=0;reads:=0
+    try
+    {
+      verifyErr(EnerCubixHttpErr#)
+      {
+        unexpected:=EnerCubixCockpitSourceSession.prepare(request.toImmutable,[Str:Obj?][,].toImmutable,scope.stream,|Str id->Dict?| {lookups++;return null},|Dict p->Bool| {true},|Dict p->Dict| {Etc.emptyDict},|Dict p,Span span,|HisItem| sink| {reads++},scope,|Dict p,EnerCubixPreparedOwner work->Dict| {Etc.emptyDict})
+        unexpected.close
+      }
+      verifyEq(lookups,0);verifyEq(reads,0);verifyEq(peer.entries,held)
+      scope.close;verifyEq(scope.stream.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testScopedFactoryRequiresItsConfigurationAdapterBeforeLookup()
+  {
+    scope:=EnerCubixCockpitRequestScope("test","owned-adapter-required");lookups:=0
+    try
+    {
+      verifyErr(ArgErr#)
+      {
+        unexpected:=EnerCubixCockpitSourceSession.prepare(request.toImmutable,[Str:Obj?][,].toImmutable,scope.stream,|Str id->Dict?| {lookups++;return null},|Dict p->Bool| {true},|Dict p->Dict| {Etc.emptyDict},|Dict p,Span span,|HisItem| sink| {fail("No source reader before a prepared adapter")},scope)
+        unexpected.close
+      }
+      verifyEq(lookups,0);verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testScopedCleaningGlobalErrorsRemainTheOriginalWholeRequestFailure()
+  {
+    [401,403,409,422,429,504].each |status|
+    {
+      db:=database;scope:=EnerCubixCockpitRequestScope("test","owned-config-global");original:=EnerCubixHttpErr(status,"CONTROLLED_GLOBAL","controlled configuration failure")
+      reads:=0;calls:=0;Err? observed
+      try
+      {
+        try
+        {
+          unexpected:=EnerCubixCockpitSourceSession.prepare(request.toImmutable,catalog(db).toImmutable,scope.stream,|Str id->Dict?| {db[id]},|Dict p->Bool| {true},|Dict p->Dict| {fail("Wrong callback");return Etc.emptyDict},|Dict p,Span span,|HisItem| sink| {reads++},scope,|Dict p,EnerCubixPreparedOwner work->Dict| {calls++;throw original})
+          unexpected.close
+        }
+        catch(Err e) {observed=e}
+        verify(observed===original);verifyEq(reads,0);verifyEq(calls,1)
+      }
+      finally {scope.close}
+      verifyEq(scope.stream.state.temporary.val,0)
+    }
+  }
   Void testConfigurationCallbackDoesNotDowngradeGlobalFailuresToMissingCleaning()
   {
     [401,403,409,422,429,504].each |status|

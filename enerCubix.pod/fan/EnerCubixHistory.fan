@@ -39,9 +39,18 @@ class EnerCubixHistory
   }
 
   ** Freeze every planned primary point and its cleaning config before any history read.
-  internal static EnerCubixCockpitSourceSession sourceSession(Context cx,Str:Obj? request,[Str:Obj?][] records,EnerCubixStreamBudget budget)
+  internal static EnerCubixCockpitSourceSession sourceSession(Context cx,Str:Obj? request,[Str:Obj?][] records,EnerCubixStreamBudget budget,EnerCubixCockpitRequestScope? scope := null)
   {
-    return EnerCubixCockpitSourceSession.prepare(request,records,budget,|Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},|Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)},|Dict p,Span span,|HisItem| sink| {cx.rt.his.read(p,span,Etc.makeDict(["raw":Marker.val]),sink)})
+    scope?.checkContext(cx.proj.name,cx.user.username)
+    return EnerCubixCockpitSourceSession.prepare(request,records,budget,
+      |Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},
+      |Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)},
+      |Dict p,Span span,|HisItem| sink|
+      {
+        options:=EnerCubixPreparedOwner(budget.state)
+        try {options.hold(3);cx.rt.his.read(p,span,Etc.makeDict(["raw":Marker.val]),sink)}
+        finally {options.close}
+      },scope,|Dict p,EnerCubixPreparedOwner work->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfigOwned(p,work)})
   }
 
   ** Freeze every planned primary point and its cleaning config before any history read.
@@ -62,16 +71,22 @@ class EnerCubixHistory
 
   ** Pure lookup seam for checking preparation without a live FIN context.
   internal static Str:Obj? prepareConfiguration(Str:Obj? request, [Str:Obj?][] records,
-    |Str->Dict?| read, |Dict->Bool| readable, |Dict->Dict| currentConfig)
+    |Str->Dict?| read, |Dict->Bool| readable, |Dict->Dict| currentConfig,EnerCubixPreparedOwner? work := null)
   {
+    work?.hold(16+records.size+((request["_cockpitPointIds"] as List)?.size ?: 0))
     observedFrom:=DateTime.now
     points:=Str:Dict?[:]; configs:=Str:Dict[:]
+    work?.watch |->Void| {points.clear;configs.clear}
     ids:=EnerCubixMath.strings(request["_cockpitPointIds"])
     owners:=records.findAll |r| {r["nativeEquip"] == true && ids.contains(r["pointId"] as Str ?: "")}
     guards:=Str:Dict?[:]
+    work?.watch |->Void| {ids.clear;owners.clear;guards.clear}
     // Flow formulas and current scope/relationship revisions participate in the
     // same freeze as primary bindings, before the first native history block.
-    EnerCubixMath.strings(request["_cockpitConfigIds"]).each |id|
+    work?.hold(1+((request["_cockpitConfigIds"] as List)?.size ?: 0))
+    configIds:=EnerCubixMath.strings(request["_cockpitConfigIds"])
+    work?.watch |->Void| {configIds.clear}
+    configIds.each |id|
     {
       expected:=records.find |r| {r["id"] == id}
       if (expected == null) configurationChanged
@@ -79,6 +94,7 @@ class EnerCubixHistory
       actual:=read(source)
       if (actual != null && !readable(actual)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
       if (actual == null || EnerCubixRepo.iso(actual["mod"]) != expected["mod"]) configurationChanged
+      if(!guards.containsKey(source)) work?.hold(1)
       guards[source]=actual
     }
     owners.each |owner|
@@ -87,8 +103,11 @@ class EnerCubixHistory
       actual:=read(id)
       if (actual != null && !readable(actual)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
       if (actual == null || EnerCubixRepo.iso(actual["mod"]) != owner["mod"]) configurationChanged
+      work?.hold(11+EnerCubixRepo.refTags.size+EnerCubixNativeEquip.scalars.size)
       decoded:=EnerCubixNativeEquip.decode(actual)
+      work?.watch |->Void| {decoded.clear}
       if (["pointId","cleaningEnabled","cleaningProfileId","historyMode"].any |key| {decoded[key] != owner[key]}) configurationChanged
+      if(!guards.containsKey(id)) work?.hold(1)
       guards[id]=actual
       if (owner["cleaningEnabled"] != true) return
       profileId:=owner["cleaningProfileId"] as Str ?: ""
@@ -96,6 +115,7 @@ class EnerCubixHistory
       current:=profileId.isEmpty ? null : read(profileId)
       if (current != null && !readable(current)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
       if (profile == null || current == null || EnerCubixRepo.iso(current["mod"]) != profile["mod"]) configurationChanged
+      if(!guards.containsKey(profileId)) work?.hold(1)
       guards[profileId]=current
     }
     ids.each |id|
@@ -103,9 +123,13 @@ class EnerCubixHistory
       point:=read(id)
       // Opaque permission failure: no point ID/name is returned to this caller.
       if (point != null && !readable(point)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
+      work?.hold(1)
       points[id]=point
+      if(!guards.containsKey(id)) work?.hold(1)
       guards[id]=point
+      work?.hold(1+owners.size)
       own:=owners.findAll |r| {r["pointId"] == id}
+      work?.watch |->Void| {own.clear}
       if (point != null) own.each |owner|
       {
         if ((point["equipRef"] as Ref)?.id != owner["id"]) configurationChanged
@@ -113,18 +137,22 @@ class EnerCubixHistory
         if ((owner["cleaningEnabled"] == true) != managed) configurationChanged
         if (!managed) return
         profile:=records.find |r| {r["id"] == owner["cleaningProfileId"] && r["kind"] == "cleaningProfile"}
+        work?.hold(64+16*((profile["parameters"] as Map)?.size ?: 0))
         expected:=EnerCubixCleaningRepo.configFor(profile,point)
         actual:=point["hisFuncConfig"] as Dict
+        work?.hold(80+8*(configurationSize(expected)+configurationSize(actual)))
         if ((point["enerCubixCleaningProfileRef"] as Ref)?.id != profile["id"] || point["enerCubixCleaningProfileVersion"] != expected["enerCubixProfileVersion"] || actual == null || !sameCleaningConfiguration(actual,expected)) configurationChanged
       }
       if (point?.get("hisFunc") == "enerCubixCleanHis")
       {
+        if(!configs.containsKey(id)) work?.hold(1)
         try { configs[id]=point.has("enerCubixCleaningOwned") ? currentConfig(point) : (point["hisFuncConfig"] as Dict ?: Etc.emptyDict) }
         catch (EnerCubixHttpErr e) {throw e}
         catch (Err e) { configs[id]=Etc.emptyDict }
         if (point.has("enerCubixCleaningOwned") && !configs[id].isEmpty)
         {
           actual:=point["hisFuncConfig"] as Dict
+          work?.hold(80+8*(configurationSize(configs[id])+configurationSize(actual)))
           if (actual == null || !sameCleaningConfiguration(configs[id],actual)) configurationChanged
         }
       }
@@ -137,16 +165,21 @@ class EnerCubixHistory
       if (after != null && !readable(after)) throw EnerCubixHttpErr(403,"PERMISSION","cockpitScopeForbidden")
       if ((before == null) != (after == null) || (before != null && before["mod"] != after?.get("mod"))) configurationChanged
     }
+    work?.hold(1+points.size)
     refs:=Str:[Str:Obj?][][:]
+    work?.watch |->Void| {refs.each |list| {list.each |ref| {ref.clear};list.clear};refs.clear}
     points.each |point,id|
     {
+      work?.hold(1)
       list:=[Str:Obj?][,]
+      if(point!=null) work?.hold(4)
       if (point != null) list.add(["id":id,"mod":EnerCubixRepo.iso(point["mod"])])
       profileId:=(configs[id]?.get("enerCubixProfileRef") as Ref)?.id
       profile:=profileId == null ? null : guards[profileId]
-      if (profile != null) list.add(["id":profileId,"mod":EnerCubixRepo.iso(profile["mod"])])
+      if (profile != null) {work?.hold(4);list.add(["id":profileId,"mod":EnerCubixRepo.iso(profile["mod"])])}
       refs[id]=list
     }
+    work?.hold(6)
     return ["points":points,"configs":configs,"configRefs":refs,"observedFrom":observedFrom.toIso,"observedTo":DateTime.now.toIso]
   }
 
@@ -154,6 +187,9 @@ class EnerCubixHistory
   {
     return (a["enerCubixProfileRef"] as Ref)?.id == (b["enerCubixProfileRef"] as Ref)?.id && a["enerCubixProfileVersion"] == b["enerCubixProfileVersion"] && a["enerCubixMode"] == b["enerCubixMode"] && EnerCubixCleaning.jsonConfig(a) == EnerCubixCleaning.jsonConfig(b)
   }
+
+  internal static Int configurationSize(Dict? config)
+  {n:=0;config?.each |v,k| {n++};return n}
 
   private static Void configurationChanged()
   {throw EnerCubixHttpErr(409,"CONFIGURATION_CHANGED","cockpitConfigurationChanged")}

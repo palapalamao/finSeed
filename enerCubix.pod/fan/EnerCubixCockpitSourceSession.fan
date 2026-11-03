@@ -8,12 +8,27 @@ internal class EnerCubixCockpitSourceSession
   ** Reuse the native point/configuration freeze and final revision guards.
   ** No history callback is invoked until the returned session is loaded.
   static EnerCubixCockpitSourceSession prepare(Str:Obj? request,[Str:Obj?][] records,EnerCubixStreamBudget budget,
-    |Str->Dict?| lookup,|Dict->Bool| readable,|Dict->Dict| cleaning,|Dict,Span,|HisItem|->Void| read)
+    |Str->Dict?| lookup,|Dict->Bool| readable,|Dict->Dict| cleaning,|Dict,Span,|HisItem|->Void| read,EnerCubixCockpitRequestScope? scope := null,|Dict,EnerCubixPreparedOwner->Dict|? ownedCleaning := null)
   {
     budget.check;checkDeadline(request,budget)
-    prepared:=EnerCubixHistory.prepareConfiguration(request,records,lookup,readable,cleaning)
-    budget.check
-    return EnerCubixCockpitSourceSession(request,records,prepared.toImmutable,budget,read)
+    if(scope==null)
+    {
+      prepared:=EnerCubixHistory.prepareConfiguration(request,records,lookup,readable,cleaning)
+      budget.check
+      return EnerCubixCockpitSourceSession(request,records,prepared.toImmutable,budget,read)
+    }
+    if(scope.stream!==budget) throw ArgErr("cockpitSourceSessionScope")
+    if(ownedCleaning==null) throw ArgErr("cockpitOwnedCleaningRequired")
+    output:=scope.configurationOutput;work:=EnerCubixPreparedOwner(budget.state);Map? prepared
+    try
+    {
+      prepared=EnerCubixHistory.prepareConfiguration(request,records,lookup,readable,|Dict p->Dict| {ownedCleaning(p,work)},work)
+      ((Map)prepared["configs"]).each |Dict config| {output.hold(1+EnerCubixHistory.configurationSize(config))}
+      frozen:=(Str:Obj?)EnerCubixCockpitFreeze.value(prepared,output)
+      budget.check
+      return EnerCubixCockpitSourceSession(request,records,frozen,budget,read,scope)
+    }
+    finally {prepared?.clear;work.close}
   }
   new make(Str:Obj? request,[Str:Obj?][] records,Str:Obj? prepared,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read,EnerCubixCockpitRequestScope? requestScope := null)
   {
