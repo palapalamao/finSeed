@@ -10,7 +10,7 @@ export interface CockpitAreaFormula {version:1;expression:'energy / areaM2';ener
 export interface CockpitRequest {
  schemaVersion:1;requestId:string;reportScope:CockpitScope;focusCategoryId:string;auxiliaryCategoryId?:string;
  time:{preset:'today'|'thisMonth'|'thisYear'|'custom';period:'hour'|'day'|'month';from?:string;to?:string};
- asOf?:string;modules:(typeof cockpitModules)[number][];comparison?:{mode:'none'|'presetDefault'|'custom';from?:string;to?:string};
+ asOf?:string;modules:(typeof cockpitModules)[number][];comparison?:{mode:'none'|'presetDefault'|'previousMonth'|'custom';from?:string;to?:string};
 }
 export interface CockpitMetric {
  id:string;categoryId?:string;currencyStatus?:'ok'|'unavailable';currencyBasis?:string;currencyReasonCodes?:string[];value:number|null;valueType:'number'|'na'|'null';unit:string;quality:string;

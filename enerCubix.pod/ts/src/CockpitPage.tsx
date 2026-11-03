@@ -12,7 +12,7 @@ import {reportQualityText} from './reportQuality';
 import {cockpitProfileSnapshot,cockpitCompleteValue} from './cockpitReport';
 import {absoluteCockpitRequest,createFaceNavigation,createNavigation,type CockpitTargetKind,focusRecords,type CockpitReturnState,type CockpitViewState,type NavigationContextV1} from './cockpitNavigation';
 import {CockpitKpis} from './CockpitKpis';
-import {CockpitDates,type CockpitDateDraft} from './CockpitDates';
+import {CockpitDates,cockpitComparisonForPreset,type CockpitDateDraft} from './CockpitDates';
 import {cockpitAuxiliaryCategory} from './cockpitMetrics';
 import {CockpitMain} from './CockpitMain';
 import {CockpitFlow} from './CockpitFlow';
@@ -83,7 +83,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
    <section hidden={!conditionsOpen} id="cockpit-query-fields" className="cockpit-controls" aria-label={t('驾驶舱查询条件')}>
     <div className="cockpit-controls-primary"><label>{t('统计范围')}<Select aria-label={t('统计范围')} mode="multiple" maxTagCount={1} value={scope?.nodeIds} onChange={nodeIds=>setScope(current=>({...current!,nodeIds}))} options={scopeRows.map(r=>({value:r.id,label:r.name}))}/></label>
     <label>{t('关注能源')}<Select aria-label={t('关注能源')} value={categoryId} onChange={value=>{setCategoryId(value);setAuxiliarySelection(undefined);}} options={categories.map(r=>({value:r.id,label:r.name}))}/></label>
-    <label>{t('统计时间')}<Select aria-label={t('统计时间')} value={preset} onChange={setPreset} options={[{value:'today',label:t('今日')},{value:'thisMonth',label:t('本月')},{value:'thisYear',label:t('本年')},{value:'custom',label:t('自定义时间')}]}/></label>
+    <label>{t('统计时间')}<Select aria-label={t('统计时间')} value={preset} onChange={value=>{setPreset(value);setDates(current=>({...current,comparison:cockpitComparisonForPreset(current.comparison,value)}));}} options={[{value:'today',label:t('今日')},{value:'thisMonth',label:t('本月')},{value:'thisYear',label:t('本年')},{value:'custom',label:t('自定义时间')}]}/></label>
     </div>
     <details className="cockpit-controls-more" open={preset==='custom'||undefined}><summary>{t('更多条件与比较')}</summary><div className="cockpit-controls-advanced">
     <label>{t('范围选择方式')}<Select aria-label={t('范围选择方式')} value={scope?.selectionIntent} onChange={selectionIntent=>setScope(current=>({...current!,selectionIntent}))} options={[{value:'range',label:t('范围')},{value:'explicitObjects',label:t('明确对象')}]}/></label>

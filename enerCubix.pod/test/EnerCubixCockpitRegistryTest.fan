@@ -4,12 +4,19 @@ using haystack
 class EnerCubixCockpitRegistryTest : Test
 {
   Void testDisjointComparisonCyclesReuseOnlyTheRealCyclePrefixes()
+  {comparisonCycles(DateTime.fromIso("2026-01-01T00:00:00Z"),DateTime.fromIso("2025-01-01T00:00:00Z"),"custom")}
+
+  Void testPreviousMonthPreparedCyclesKeepIndependentBillingPrefixes()
+  {comparisonCycles(DateTime.fromIso("2026-02-01T00:00:00Z"),DateTime.fromIso("2026-01-01T00:00:00Z"),"previousMonth")}
+
+  private Void comparisonCycles(DateTime current,DateTime previous,Str mode)
   {
-    current:=DateTime.fromIso("2026-01-01T00:00:00Z");previous:=DateTime.fromIso("2025-01-01T00:00:00Z")
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","pointId":"p","categoryId":"c"],["id":"t","kind":"tariff","categoryId":"c","isDefault":true,"mode":"monthlyBlock","blocks":[["limit":1f,"rate":1f],["rate":3f]]]]
     q:=Str:Obj?["kind":"profile","metric":"energy","dimension":"metering","nodeIds":["m"],"categoryIds":["c"],"_cockpitCategoryId":"c","period":"hour","from":(current+2hr).toIso,"to":(current+4hr).toIso,"asOf":(current+4hr).toIso,"tz":"UTC"]
     reference:=q.dup.setAll(["from":(previous+2hr).toIso,"to":(previous+4hr).toIso])
-    comparison:=Str:Obj?["mode":"custom","referenceRange":["from":reference["from"],"to":reference["to"]]]
+    comparison:=mode=="previousMonth" ? EnerCubixCockpitMetrics.comparison(["time":["preset":"custom"],"comparison":["mode":mode]],q,TimeZone.utc) : Str:Obj?["mode":"custom","referenceRange":["from":reference["from"],"to":reference["to"]]]
+    verifyEq(((Map)comparison["referenceRange"])["from"],reference["from"])
+    verifyEq(((Map)comparison["referenceRange"])["to"],reference["to"])
     boundary:=Str:Obj?["meterIds":["m"],"sourcePointIds":["p"]]
     budget:=EnerCubixStreamBudget();registry:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,boundary.toImmutable,["kpis"],comparison,null,[:],budget,["p":"kWh"],["p"])
     point:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"kWh","tz":"UTC"])

@@ -309,9 +309,11 @@ class EnerCubixCockpit
       auxiliary:=text(input,"auxiliaryCategoryId"); ref(auxiliary,project)
       if (auxiliary == category) throw ArgErr("cockpitAuxiliaryCategory")
     }
-    if (input["comparison"] != null && !["none","presetDefault","custom"].contains(object(input,"comparison")["mode"])) throw ArgErr("cockpitComparison")
+    comparisonMode:=input["comparison"] == null ? "presetDefault" : object(input,"comparison")["mode"]
+    if (!["none","presetDefault","custom","previousMonth"].contains(comparisonMode)) throw ArgErr("cockpitComparison")
     period:=text(time,"period"); preset:=text(time,"preset")
     if (!["hour","day","month"].contains(period) || !["today","thisMonth","thisYear","custom"].contains(preset)) throw ArgErr("cockpitTime")
+    if (comparisonMode == "previousMonth" && !["thisMonth","custom"].contains(preset)) throw ArgErr("cockpitComparison")
     cutoff:=input["asOf"] == null ? now : instant(input,"asOf")
     if (cutoff > now) cutoff=now
     cutoff=cutoff.toTimeZone(tz)

@@ -22,9 +22,10 @@ internal class EnerCubixCockpitMetrics
     }
     else
     {
-      kind=preset == "today" ? "previousDaySameCutoff" : "yearSameElapsedCalendar"
-      a=calendarShift(from,preset == "today",reasons,adjustments,"from")
-      b=calendarShift(to,preset == "today",reasons,adjustments,"to")
+      unit:=mode == "previousMonth" ? "month" : (preset == "today" ? "day" : "year")
+      kind=mode == "previousMonth" ? "previousMonthSameElapsedCalendar" : (preset == "today" ? "previousDaySameCutoff" : "yearSameElapsedCalendar")
+      a=calendarShift(from,unit,reasons,adjustments,"from")
+      b=calendarShift(to,unit,reasons,adjustments,"to")
       if (b <= a) throw ArgErr("cockpitComparisonRange")
     }
     if (from.toRel.ticks-from.ticks != a.toRel.ticks-a.ticks || to.toRel.ticks-to.ticks != b.toRel.ticks-b.ticks) reasons.add("TIMEZONE_OFFSET_CHANGED")
@@ -33,15 +34,28 @@ internal class EnerCubixCockpitMetrics
     return ["mode":mode,"kind":kind,"from":a.toIso,"to":b.toIso,"currentRange":["from":from.toIso,"to":to.toIso],"referenceRange":["from":a.toIso,"to":b.toIso],"reasonCodes":reasons.unique,"adjustments":adjustments,"durationDifferenceSeconds":delta]
   }
 
-  private static DateTime calendarShift(DateTime at, Bool day, Str[] reasons, [Str:Obj?][] adjustments, Str boundary)
+  private static DateTime calendarShift(DateTime at, Str unit, Str[] reasons, [Str:Obj?][] adjustments, Str boundary)
   {
-    date:=day ? at.date-1day : Date(at.year-1,at.month,at.month == Month.feb && at.day == 29 ? 28 : at.day)
-    leap:=!day && at.month == Month.feb && at.day == 29
-    if (leap) reasons.add("LEAP_DAY_CLAMPED")
+    date:=at.date
+    Str? reason
+    if (unit == "day") date=at.date-1day
+    else if (unit == "month")
+    {
+      last:=Date(at.year,at.month,1)-1day
+      date=Date(last.year,last.month,at.day.min(last.day))
+      if (date.day != at.day) reason="MONTH_DAY_CLAMPED"
+    }
+    else
+    {
+      leap:=at.month == Month.feb && at.day == 29
+      date=Date(at.year-1,at.month,leap ? 28 : at.day)
+      if (leap) reason="LEAP_DAY_CLAMPED"
+    }
+    requestedDate:=date.toStr
+    if (reason != null) {reasons.add(reason);requestedDate=date.toStr[0..<8]+at.day.toStr.padl(2,'0')}
     shifted:=date.toDateTime(at.time,at.tz)
     // Native timezone resolution defines gaps/folds. Roundtrip exposes any gap adjustment.
     normalized:=DateTime.makeTicks(shifted.ticks,at.tz)
-    reason:=leap ? "LEAP_DAY_CLAMPED" : null
     if (normalized.date != date || normalized.time != at.time) {reason="LOCAL_TIME_ADJUSTED";reasons.add(reason)}
     dst:=at.tz.dstOffset(date.year)
     if (dst != null && dst != 0sec)
@@ -49,7 +63,7 @@ internal class EnerCubixCockpitMetrics
       alternatives:=[normalized+dst,normalized-dst]
       if (alternatives.any |t| {t.date == date && t.time == at.time}) {reason="LOCAL_TIME_AMBIGUOUS";reasons.add(reason)}
     }
-    if (reason != null) adjustments.add(["boundary":boundary,"reasonCode":reason,"requestedLocal":(leap ? (at.year-1).toStr+"-02-29" : date.toStr)+"T"+at.time.toStr,"resolved":normalized.toIso])
+    if (reason != null) adjustments.add(["boundary":boundary,"reasonCode":reason,"requestedLocal":requestedDate+"T"+at.time.toStr,"resolved":normalized.toIso])
     return normalized
   }
 

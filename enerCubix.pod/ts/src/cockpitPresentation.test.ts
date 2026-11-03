@@ -7,7 +7,11 @@ import type {CockpitSnapshot} from './cockpitTypes';
 import {freezeCockpitExport,cockpitExportTables,cockpitPrintEvidence} from './cockpitExports';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 it('freezes complete snapshot, language and native names without rounding0/NA/null',()=>{
- const snapshot=structuredClone(raw) as unknown as CockpitSnapshot;const packet=freezeCockpitExport(snapshot,'en-US',{a:'设备A原名'});snapshot.boundary.meterIds.length=0;expect(packet.snapshot.boundary.meterIds).toEqual(['a','b']);expect(packet.language).toBe('en-US');expect(packet.objects.a).toBe('设备A原名');
+ const snapshot=structuredClone(raw) as unknown as CockpitSnapshot;
+ snapshot.context.comparison={mode:'previousMonth',from:'2026-09-01T00:00:00Z',to:'2026-09-03T02:00:00Z'};
+ const packet=freezeCockpitExport(snapshot,'en-US',{a:'设备A原名'});snapshot.boundary.meterIds.length=0;snapshot.context.comparison.mode='none';snapshot.context.comparison.from='2030-01-01T00:00:00Z';
+ expect(packet.snapshot.boundary.meterIds).toEqual(['a','b']);expect(packet.language).toBe('en-US');expect(packet.objects.a).toBe('设备A原名');
+ expect(packet.snapshot.context.comparison).toEqual({mode:'previousMonth',from:'2026-09-01T00:00:00Z',to:'2026-09-03T02:00:00Z'});
  const reports=cockpitExportTables(packet);expect(reports.some(table=>table.id==='face-daily')).toBe(true);expect(reports.some(table=>table.id==='face-endUse')).toBe(true);expect(reports.flatMap(table=>table.rows).some(row=>row.includes(120))).toBe(true);
 });
 it('switches per-user language in place and refreshes shared report and quality labels',async()=>{

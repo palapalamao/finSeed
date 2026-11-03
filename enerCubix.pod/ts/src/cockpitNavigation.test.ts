@@ -4,6 +4,14 @@ import raw from '../tests/fixtures/cockpit-response.json';
 import type {CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
 const snapshot=raw as CockpitSnapshot;
+it('preserves monthly comparison intent while freezing the exact reference interval for drill-down',()=>{
+ const monthly={...snapshot,context:{...snapshot.context,comparison:{mode:'previousMonth' as const,from:'2026-09-03T00:00:00Z',to:'2026-09-03T02:00:00Z'}}};
+ const nav=createNavigation(monthly,'profile',view);
+ const decoded=decodeNavigation(encodeNavigation(nav),'test');
+ expect(decoded?.parentComparison?.mode).toBe('previousMonth');
+ expect(decoded?.appliedContext.comparison).toEqual({mode:'custom',from:'2026-09-03T00:00:00Z',to:'2026-09-03T02:00:00Z'});
+ expect(decoded?.targetRequest.otherFrom).toBe('2026-09-03T00:00:00Z');
+});
 const catalog:Catalog={project:'test',version:'test',user:{name:'u',canWrite:false},records:[{id:'s',kind:'space',name:'Site',nativeReadonly:true},{id:'f',kind:'space',name:'Floor',parentId:'s',nativeReadonly:true},{id:'c',kind:'category',name:'Energy'},{id:'a',kind:'meter',name:'A',pointId:'pa',spaceId:'f'},{id:'b',kind:'meter',name:'B',pointId:'pb',spaceId:'s'},{id:'np-pa',kind:'nativePoint',name:'Readable primary A',nativeSourceId:'pa',his:true},{id:'np-pb',kind:'nativePoint',name:'Readable primary B',nativeSourceId:'pb',his:true}]};
 const view={focusObjectId:'f',selectedFace:'space' as const,presentationMode:false,scrollY:123,draft:{scope:snapshot.context.reportScope,categoryId:'c',preset:'thisMonth' as const}};
 describe('cockpit navigation contract',()=>{
