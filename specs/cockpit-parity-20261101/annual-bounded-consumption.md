@@ -280,3 +280,9 @@ SourceSession 的私有工厂复用 History.prepareConfiguration 的主点/设�
 5类33方法5208检查通过，8024ms（source-session-publication-tests.log），含费用局部失败仍返回20能耗、0次回退、仅返回报告refs、删去未发报告的父/子诊断计数、共享ref筛选、全/部分/无报告、原冻结Map与样本身份不变、peer占满时关闭以及准入拒绝。原全局错误测试仍执行。新包未重跑全套，不能套用11939ed3的113类完整回归结论。
 
 新前缀 source-session-published-main 单独保存本次捕获回放，不覆盖11939ed3回执。30秒时限内12.226秒，仍8provenance/58严格分组+5行窄诊断差异通过，全池1000/峰158473/unprepared0/关闭raw及temporary0。响应497574B，SHA256 61C36EADF99E6FF54AFDF302CE3261AE593B6D62FB82F9CC7B46EEA70384D3EE。原生入口/输入与最终图共同创建时准入仍未切换或宣称完成；未部署。
+
+最终 UTF-8 信封写入器（私有基础，尚未接 REST）
+
+新增 withBody(body,budget,send,maxBytes)：共享同一deadline/逻辑预算，先完整序列化 {ok,data} 到有界UTF-8 Buf，大小及期限通过后才调用sender一次；回调结束即清自身Buf和lease，不把可变lease塞进JSON。使用实际FIN SDK反射确认的OutStream重载，逐字节限制，包含中英文、emoji、反斜杠/引号/换行/制表转义及完整信封，没有BOM。精确8388608接受，超一字节413；序列化中8KiB后的模拟超时与准入拒绝均不调用sender；sender的原IOErr实例保持，peer额度保留，借用Buf关闭后为空，cleanup错误不覆盖先前异常。
+
+cockpit-wire-final-tests.log 1类4方法45检查通过，2319ms；新helper未接入当前REST，故还不能声称HTTP状态/头、socket不双响应、Gate覆盖发送已实测。现有REST双序列化将在完整scope接线时替换，原生入口仍未切换/部署。内部codec证据hash的未压缩对象不可误套此最终8MiB限制。
