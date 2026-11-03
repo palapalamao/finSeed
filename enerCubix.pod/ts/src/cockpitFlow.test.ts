@@ -8,6 +8,11 @@ import type {CockpitSnapshot} from './cockpitTypes';
 import {cockpitBalanceSnapshot,cockpitCompactFlow} from './cockpitFlowProjection';
 import {energyFlowGraphs,energyFlowGraphSnapshot,energyFlowData} from './energyFlow';
 import {createNavigation,decodeNavigation,encodeNavigation,projectCockpitReport} from './cockpitNavigation';
+it('keeps the full root projection and its unassigned evidence unchanged',()=>{
+ const source=structuredClone(raw) as unknown as CockpitSnapshot,graphs=source.reports[source.modules.balance!.data!.reportRef].extra!.energyFlowGraphs as ReturnType<typeof energyFlowGraphs>,graph=graphs.find(g=>g.objectId==='t')!;
+ graph.unassigned.push({...graph.nodes[1],id:'unassigned-evidence',nodeId:'unassigned-evidence'});const before=structuredClone(source),original=energyFlowGraphSnapshot(cockpitBalanceSnapshot(source)!,'metering|t'),projected=cockpitBalanceSnapshot(source,['t'])!;
+ expect(energyFlowData(projected.result)!.unassigned).toHaveLength(1);expect(projected.result.rows).toEqual(original.result.rows);expect(projected.result.summary).toEqual(original.result.summary);expect(source).toEqual(before);
+});
 for(const language of ['zh-CN','en-US'] as const)it('focuses a returned child graph without changing the reporting scope '+language,()=>{
  initializeLocale(language);const source=structuredClone(raw) as unknown as CockpitSnapshot,before=structuredClone(source);
  const graph=energyFlowGraphs(cockpitBalanceSnapshot(source)!.result).find(g=>g.objectId==='t')!,child=graph.nodes.find(n=>n.nodeType==='meter'&&n.parentId===graph.focusId&&!n.referenceOnly)!;

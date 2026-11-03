@@ -8,7 +8,7 @@ export function cockpitBalanceSnapshot(snapshot:CockpitSnapshot,nodeIds=snapshot
  if(JSON.stringify(nodeIds)===JSON.stringify(c.reportScope.nodeIds))return report;
  if(nodeIds.length!==1)return;const graphs=energyFlowGraphs(report.result),graph=graphs.find(g=>nodeIds[0]===(g.objectId||g.focusId))||graphs.find(g=>g.nodes.some(n=>!n.referenceOnly&&n.nodeType!=='difference'&&(n.nodeId||n.id)===nodeIds[0]));if(!graph)return;
  const root=energyFlowGraphSnapshot(report,graph.graphId||graph.objectId||graph.focusId),child=graph.nodes.find(n=>!n.referenceOnly&&n.nodeType!=='difference'&&(n.nodeId||n.id)===nodeIds[0]);
- const one=child?focusEnergyFlowSnapshot(root,child.id):root;one.result.extra={...one.result.extra,energyFlowGraphs:[energyFlowData(one.result)!]};return one;
+ const one=child&&nodeIds[0]!==(graph.objectId||graph.focusId)?focusEnergyFlowSnapshot(root,child.id):root;one.result.extra={...one.result.extra,energyFlowGraphs:[energyFlowData(one.result)!]};return one;
 }
 // View-only pruning: never combine hidden branches or recalculate any energy.
 export function cockpitCompactFlow(snapshot:ReportSnapshot):{snapshot:ReportSnapshot;hiddenCount:number}{
