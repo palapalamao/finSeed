@@ -106,7 +106,7 @@ class EnerCubixCockpit
     if(preparedReport!=null) historyRequest["_cockpitConsumers"]=["request":request,"boundary":boundary,"enabled":enabled,"comparison":comparison,"auxiliary":auxiliary,"owned":ownedConfig,"flow":flow,"efficiency":efficiency]
     observedFrom:=readClock()
     deadline?.check
-    histories:=plan.isEmpty && preparedReport==null ? [Str:Obj?][,] : load((Str:Obj?)historyRequest.toImmutable,frozen)
+    histories:=plan.isEmpty && preparedReport==null ? [Str:Obj?][,] : load(requestScope==null ? (Str:Obj?)historyRequest.toImmutable : requestScope.freezeSourcePlan(historyRequest),frozen)
     Str:Obj? requestMeta:=[:]
     if(histories.any |h| {h.containsKey("_cockpitRequestMeta")})
     {

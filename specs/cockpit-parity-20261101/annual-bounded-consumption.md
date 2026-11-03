@@ -376,3 +376,11 @@ RED复现300字段Folio配置通过原decode先分配JSON树、绕过额度。�
 Root的私有scope路径将薄header的不可变副本纳入historyOwner，保留同一stats对象的别名；历史元数据工作区在创建和收集refs/清洗参数/时段信息前准入。provenance元数据冻结到historyOwner后立即清理工作区，historyOwner持续到发送，所以SourceSession释放后不存在只靠immutable名义放掉唯一owner的情况。旧非scope路径继续原行为。
 
 3类37方法771检查通过，7620ms（cockpit-history-meta-owned-final-tests.log），含原始header/参数/stats修改及清空不影响冻结proof、工作区关闭后拒绝继续读取、复制额度拒绝、peer与发送边界、配置factory与九模块回归。捕获cockpit-history-meta-owned-main在最后仅追加测试前的相同生产实现通过：12.625秒，逻辑峰189231，462回调/12094样本/unprepared0，清理raw/temporary0；响应497574B，SHA256 3B7F23BF2CDF71C02CC2C01DD4051C5860117FAB3B418459707B00C542FD645A，TS解码12报告及8+58+5对照通过。Root计划/纯业务投影和Repo上游仍待；该捕获仍不是原生配置准备、FIN实机或JVM堆测量。
+
+冻结查询计划复用已拥有的不可变事实
+
+Root的historyRequest不再绕过计账执行toImmutable，改由sourcePlanOwner创建并持有到源释放及最终业务快照完成。首次捕获真实触发200002/422，定位为face-heatmap报告冻结时叠加重复的计划内设备配置（cockpit-source-plan-owned-main及trace保留）。只对本请求inputOwner仍持有的设备事实做精确复用：业务ID、完整Map值、类型及ordered属性一致才借用；字段不同则照常复制，普通无ID的相等Map仍不合并。临时索引也预先准入并在复制后关闭，不新建跨请求缓存或按名称推断关系。
+
+4类45方法824检查通过，7392ms（cockpit-source-plan-shared-final-tests.log），覆盖精确事实身份、修改隔离、相等普通Map不误合并、不可变与容器类型校验以及原冻结/准备/九模块/scope回归。新增测试最初把无序Map原始JSON的桶顺序当作复制契约；实际旧冻结也重排无序Map，改为对照既有冻结的JSON和源对象不改，ordered容器规则不放宽。
+
+捕获cockpit-source-plan-shared-main在最后仅追加测试前的相同生产实现通过：12.977秒，峰191240，462读取/12094样本/unprepared0，raw/temporary清理0；497574B，SHA256 D4CEFCD9DCCEBEC5D6BF76FF1DA2B30D4995F409E3813C24596A545C486BBFD2，TS解码12报告及8+58+5比较通过。这里覆盖计划不可变副本，Root原计划/纯业务DTO创建及Repo上游仍待计账；未部署，仍不是完整请求或FIN实机完成。

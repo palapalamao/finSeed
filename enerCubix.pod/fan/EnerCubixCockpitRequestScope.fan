@@ -9,7 +9,7 @@ internal class EnerCubixCockpitRequestScope
     {
       deadline.check;EnerCubixCockpitGate.enter(project,user);entered=true
       owner=EnerCubixPreparedOwner(this.stream.state)
-      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null;snapshot=null;historyHeaders=null;frozenReports?.clear;frozenReports=null}
+      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null;snapshot=null;historyHeaders=null;sourcePlan=null;frozenReports?.clear;frozenReports=null}
     }
     catch(Err e)
     {
@@ -33,6 +33,8 @@ internal class EnerCubixCockpitRequestScope
   private EnerCubixPreparedOwner? historyOwner
   private EnerCubixPreparedOwner? historyMetadataWork
   private [Str:Obj?][]? historyHeaders
+  private EnerCubixPreparedOwner? sourcePlanOwner
+  private [Str:Obj?]? sourcePlan
   private EnerCubixPreparedOwner? planningModel
   private EnerCubixPreparedOwner? planningState
   private EnerCubixCockpitCatalog? planningCatalog
@@ -44,7 +46,30 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)+(sourcePlanOwner?.entries ?: 0)}
+  Str:Obj? freezeSourcePlan(Str:Obj? request)
+  {
+    checkContext(project,user)
+    if(sourcePlanOwner!=null) throw ArgErr("cockpitSourcePlanAlreadyFrozen")
+    sourcePlanOwner=EnerCubixPreparedOwner(stream.state)
+    rows:=(List)(inputs?.get("records") ?: throw ArgErr("cockpitSourcePlanInputs"))
+    scratch:=EnerCubixPreparedOwner(stream.state);[Str:Map]? facts
+    try
+    {
+      scratch.hold(1+rows.size);facts=Str:Map[:]
+      rows.each |Map row| {id:=row["id"] as Str;if(id!=null && row.isImmutable) facts[id]=row}
+      // Reuse only exact copies of a still-owned, frozen business fact. This
+      // does not merge arbitrary equal maps or alter ordered containers.
+      sourcePlan=(Str:Obj?)EnerCubixCockpitFreeze.value(request,sourcePlanOwner,|Obj value->Obj?|
+      {
+        row:=value as Map;if(row==null) return null
+        id:=row["id"] as Str;fact:=id==null ? null : facts[id]
+        return fact!=null && row.typeof==fact.typeof && row.ordered==fact.ordered && row==fact ? fact : null
+      })
+      return sourcePlan
+    }
+    finally {facts?.clear;scratch.close}
+  }
   EnerCubixPreparedOwner historyOutput()
   {checkContext(project,user);if(historyOwner==null) historyOwner=EnerCubixPreparedOwner(stream.state);return historyOwner}
   [Str:Obj?][] freezeHistoryHeaders([Str:Obj?][] headers)
@@ -78,7 +103,7 @@ internal class EnerCubixCockpitRequestScope
     if(planningCatalog==null || planningRecords!==records || planningCatalog.tz!=tz) throw ArgErr("cockpitSourceCatalogContext")
     planningCatalog.prepareUnits(units);return planningCatalog
   }
-  Void finishPlanning() {planningState?.close;planningModel?.close;planningCatalog=null;planningRecords=null}
+  Void finishPlanning() {planningState?.close;planningModel?.close;planningCatalog=null;planningRecords=null;sourcePlan=null;sourcePlanOwner?.close}
   EnerCubixPreparedOwner payloadOutput()
   {checkContext(project,user);if(payloadOwner==null) payloadOwner=EnerCubixPreparedOwner(stream.state);return payloadOwner}
   Void checkContext(Str project,Str user)

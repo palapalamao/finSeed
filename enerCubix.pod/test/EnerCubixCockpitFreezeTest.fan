@@ -4,6 +4,18 @@ using concurrent
 ** Copy ownership over already supplied fixture inputs, not complete request heap.
 class EnerCubixCockpitFreezeTest : Test
 {
+  Void testBorrowedFactsMustBeImmutableAndKeepTheOriginalContainerType()
+  {
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget)
+    try
+    {
+      verifyErr(NotImmutableErr#) {EnerCubixCockpitFreeze.value(["id":"m"],output,|Obj value->Obj?| {Str:Obj?["id":"m"]})}
+      verifyErr(NotImmutableErr#) {EnerCubixCockpitFreeze.value(["id":"m"],output,|Obj value->Obj?| {["m"].toImmutable})}
+      verifyEq(budget.temporary.val,output.entries)
+    }
+    finally {output.close}
+    verifyEq(budget.temporary.val,0)
+  }
   Void testFrozenCopyKeepsSharedIdentityDistinctEqualMapsAndOriginalJson()
   {
     shared:=Str:Obj?["name":"中文 😀","values":[12.5f,null,0f]];equal:=shared.dup

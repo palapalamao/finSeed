@@ -4,13 +4,13 @@ using [java] java.util::IdentityHashMap
 ** before allocation; existing immutable values remain borrowed from their owner.
 internal const class EnerCubixCockpitFreeze
 {
-  static Obj? value(Obj? source,EnerCubixPreparedOwner output)
+  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null)
   {
     if(source==null || source.isImmutable) return source
     work:=EnerCubixPreparedOwner(output.budget);EnerCubixCockpitFreezer? freezer
     try
     {
-      work.hold(16);freezer=EnerCubixCockpitFreezer(output,work)
+      work.hold(16);freezer=EnerCubixCockpitFreezer(output,work,borrow)
       result:=freezer.copy(source)
       output.hold(2);roots:=Obj?[result]
       output.watch |->Void| {roots.clear}
@@ -22,16 +22,23 @@ internal const class EnerCubixCockpitFreeze
 
 internal class EnerCubixCockpitFreezer
 {
-  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work)
-  {this.output=output;this.work=work}
+  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow)
+  {this.output=output;this.work=work;this.borrow=borrow}
   private EnerCubixPreparedOwner output
   private EnerCubixPreparedOwner work
+  private |Obj->Obj?|? borrow
   private IdentityHashMap memo := IdentityHashMap()
   Obj? copy(Obj? source)
   {
     work.budget.deadline.check
     if(source==null || source.isImmutable) return source
     if(source isnot Map && source isnot List) throw NotImmutableErr("cockpitSnapshotMutableValue")
+    borrowed:=borrow?.call(source)
+    if(borrowed!=null)
+    {
+      if(!borrowed.isImmutable || source.typeof!=borrowed.typeof) throw NotImmutableErr("cockpitSnapshotBorrowedValue")
+      return borrowed
+    }
     cached:=memo.get(source)
     if(cached is Str) throw NotImmutableErr("cockpitSnapshotCycle")
     if(cached!=null) return cached

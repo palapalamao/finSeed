@@ -3,6 +3,34 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testSourcePlanReusesOnlyExactFrozenInputFacts()
+  {
+    scope:=EnerCubixCockpitRequestScope("source-plan-facts","a");baseline:=EnerCubixPreparedOwner(scope.stream.state)
+    record:=Str:Obj?["id":"meter","kind":"meter","name":"原始表名","pointId":"point"]
+    plainA:=Str:Obj?["value":1];plainB:=Str:Obj?["value":1]
+    source:=Str:Obj?["same":[record.dup,record.dup],"changed":record.dup.set("name","modified"),"plain":[plainA,plainB]]
+    before:=JsonOutStream.writeJsonToStr(source)
+    try
+    {
+      expected:=EnerCubixCockpitFreeze.value(source,baseline)
+      bundle:=scope.freezeInputs(["schemaVersion":1],[:],[record]);fact:=((List)bundle["records"]).first
+      frozen:=scope.freezeSourcePlan(source)
+      verify(((List)frozen["same"]).all |row| {row===fact})
+      verify(frozen["changed"]!==fact);verifyEq(((Map)frozen["changed"])["name"],"modified")
+      verify(((List)frozen["plain"]).first!==((List)frozen["plain"]).last)
+      // Unordered Map copies may use a different bucket iteration order. The
+      // existing freeze, rather than the mutable input's JSON, is the baseline.
+      verifyEq(JsonOutStream.writeJsonToStr(frozen),JsonOutStream.writeJsonToStr(expected))
+      verifyEq(JsonOutStream.writeJsonToStr(source),before);baseline.close
+      record["name"]="later edit";plainA["value"]=99
+      verifyEq(((Map)((List)frozen["same"]).first)["name"],"原始表名")
+      verifyEq(((Map)((List)frozen["plain"]).first)["value"],1)
+      verifyErr(ArgErr#) {scope.freezeSourcePlan(source)}
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {scope.close;baseline.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
   Void testHistoryProofSurvivesMetadataWorkspaceAndRawHeaderCleanup()
   {
     scope:=EnerCubixCockpitRequestScope("history-proof","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
