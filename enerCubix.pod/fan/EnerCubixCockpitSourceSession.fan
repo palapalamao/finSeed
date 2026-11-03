@@ -5,11 +5,22 @@ using haystack
 ** Native entry points remain unchanged until the complete request is admitted.
 internal class EnerCubixCockpitSourceSession
 {
+  ** Reuse the native point/configuration freeze and final revision guards.
+  ** No history callback is invoked until the returned session is loaded.
+  static EnerCubixCockpitSourceSession prepare(Str:Obj? request,[Str:Obj?][] records,EnerCubixStreamBudget budget,
+    |Str->Dict?| lookup,|Dict->Bool| readable,|Dict->Dict| cleaning,|Dict,Span,|HisItem|->Void| read)
+  {
+    budget.check;checkDeadline(request,budget)
+    prepared:=EnerCubixHistory.prepareConfiguration(request,records,lookup,readable,cleaning)
+    budget.check
+    return EnerCubixCockpitSourceSession(request,records,prepared.toImmutable,budget,read)
+  }
   new make(Str:Obj? request,[Str:Obj?][] records,Str:Obj? prepared,EnerCubixStreamBudget budget,|Dict,Span,|HisItem|->Void| read)
   {
     this.budget=budget;owner=EnerCubixPreparedOwner(budget.state)
     try
     {
+      checkDeadline(request,budget)
       if(!request.isImmutable || !records.isImmutable || !prepared.isImmutable || request["_cockpitConsumers"] isnot Map || prepared["points"] isnot Map || prepared["configs"] isnot Map || prepared["configRefs"] isnot Map) throw ArgErr("cockpitSourceSessionPlan")
       owner.hold(48);this.request=request;this.records=records;this.prepared=prepared;reader=read
       owner.watch |->Void|
@@ -49,6 +60,7 @@ internal class EnerCubixCockpitSourceSession
           }
         }
         budget.normalizedWindows=windows.size
+        expectHistoricalCoverage(q)
         enabled:=EnerCubixMath.strings(plan["enabled"]);comparison:=(Map)plan["comparison"]
         if(enabled.contains("kpis") && comparison["mode"]!="none")
         {
@@ -79,6 +91,17 @@ internal class EnerCubixCockpitSourceSession
   private Bool closed := false
   private Err? failure
   private static DateTime ceiling(DateTime at) {hour:=EnerCubixMath.floorHour(at);return hour<at ? hour+1hr : hour}
+  private static Void checkDeadline(Str:Obj? request,EnerCubixStreamBudget budget)
+  {if(request["_cockpitDeadline"]!=null && request["_cockpitDeadline"]!==budget.state.deadline) throw ArgErr("cockpitSourceSessionDeadline")}
+  private Void expectHistoricalCoverage(Str:Obj? q)
+  {
+    from:=DateTime.fromIso(q["from"].toStr);to:=DateTime.fromIso(q["to"].toStr);cutoff:=DateTime.fromIso(q["asOf"].toStr)
+    if(to>cutoff) to=cutoff
+    if(to<=from) return
+    left:=EnerCubixMath.floorHour(from);right:=ceiling(to)
+    EnerCubixMath.strings(request["_cockpitPointIds"]).each |id|
+    {budget.check;if(!windows.any |w| {w.id==id && w.from<=left && w.to>=right}) throw ArgErr("cockpitSourceSessionHistoricalPlan")}
+  }
 
   [Str:Obj?][] load()
   {

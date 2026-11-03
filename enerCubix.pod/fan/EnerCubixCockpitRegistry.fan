@@ -13,7 +13,6 @@ internal class EnerCubixCockpitRegistry
     try
     {
       generation.hold(64+2*(q.size+8))
-      if(DateTime.fromIso(q["to"].toStr)>DateTime.fromIso(q["asOf"].toStr)) throw ArgErr("cockpitRegistryFuturePlan")
       if(!q.isImmutable || !records.isImmutable || !boundary.isImmutable || enabled.any |id| {!["kpis","trend","space","time","endUse","organization","balance","efficiency","issues"].contains(id)}) throw ArgErr("cockpitRegistryPlan")
       if(enabled.contains("issues") && !owned.isImmutable) throw ArgErr("cockpitRegistryRulePlan")
       if(enabled.contains("balance") && (!flowPlan.isImmutable || (flowEnabled && (flowPlan["canonicalRecords"] isnot List || flowPlan["request"] isnot Map)))) throw ArgErr("cockpitRegistryFlowPlan")

@@ -109,8 +109,7 @@ class EnerCubixCockpitRegistryTest : Test
       verifyEq(budget.state.temporary.val,before)
       verifyErr(ArgErr#) {invalid:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,boundary.toImmutable,["balance"],["mode":"none"],null,[:],budget,[:],["p"])}
       verifyEq(budget.state.temporary.val,before)
-      future:=q.dup.set("to",(b+1hr).toIso)
-      verifyErr(ArgErr#) {invalid:=EnerCubixCockpitRegistry(future.toImmutable,rs.toImmutable,boundary.toImmutable,["trend"],["mode":"none"],null,[:],budget,[:],["p"])}
+      verifyErr(ArgErr#) {invalid:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,boundary.toImmutable,["unknown-module"],["mode":"none"],null,[:],budget,[:],["p"])}
       verifyEq(budget.state.temporary.val,before);verifyEq(budget.nativeReads,0);verifyNull(budget.diagnosticCapture)
     }
     finally {peer.close}

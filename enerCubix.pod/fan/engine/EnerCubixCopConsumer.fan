@@ -8,7 +8,7 @@ internal class EnerCubixCopConsumer
     if(!q.isImmutable || !item.isImmutable || state===output || state.budget!==output.budget || state.budget!==catalog.owner.budget || q["perArea"]==true) throw ArgErr("copConsumerPlan")
     this.q=q;this.state=state;this.output=output
     from=DateTime.fromIso(q["from"].toStr).toTimeZone(catalog.tz);to=DateTime.fromIso(q["to"].toStr).toTimeZone(catalog.tz);at=from
-    if(to<=from || to>DateTime.fromIso(q["asOf"].toStr)) throw ArgErr("copConsumerRange")
+    if(to<=from) throw ArgErr("copConsumerRange")
     reason=item["reason"] as Str;factor=EnerCubixMath.num(item["factor"]) ?: 1f
     calc=EnerCubixPreparedOwner(state.budget)
     state.watch |->Void| {calc.close;cursor=null;report=null;ctx=null;rawNumerator=null;rawDenominator=null;stateClosed=true};state.hold(14)
@@ -73,6 +73,8 @@ internal class EnerCubixCopConsumer
       period.finish;line:=cursor.finish
       numerator=freeze(rawNumerator);denominator=freeze(rawDenominator)
       ratio:=period.total
+      if(DateTime.fromIso(q["asOf"].toStr)<to)
+      {output.hold(6+ratio.sources.size);ratio=EnerCubixValue(null,"COP_INCOMPLETE_HISTORY",ratio.sources.dup)}
       if(ratio.value==null && reason!=null)
       {output.hold(12);expire(numerator);expire(denominator);numerator=EnerCubixValue(null,reason);denominator=EnerCubixValue(null,reason)}
       output.hold(6);line.consumedTotals=Str:EnerCubixValue[:]

@@ -256,3 +256,17 @@ nonWorking consumer 在原生主点小时帧仍活动时读取严格值及闭合
 密度夹具最初随分块起点生成不同采样钟，结果为空；改成固定原始分钟序列后，强制二分仍得到 60kWh。随后 RED 实际发现新 Session 漏掉 primaryReadAllowed；补齐后禁止旧辅助源并保留空值。5 类24方法516校验通过（source-session-foundation-tests.log，9992ms），包含全九模块+COP+规则、清洗、空/缺失/不支持、读错及关闭后借用失效。独立快照的质量线索 ID 本来包含新 boundary UUID；新夹具验证原 hash 和 topIds 顺序，再仅按语义比对这些不可重现身份，旧严格回放规范不改变。
 
 前端 i18n 与原快照保留测试共34项通过，TypeScript检查通过。仅新增中英文服务端错误词条，沿用已有“保留上次成功快照”提示。完整套件最新仍是2183fec4；本次仅上述专项。不增加版本、不部署、不重启、不访问浏览器；未来桶、配置工厂及创建时准入、最终投影/freeze/codec/REST共同存活、原生年度82点/双项目/M4/UI/PDF仍待。只读账号按用户要求暂缓。
+
+未来桶、配置工厂与完整捕获回放（源码验证，未切原生入口）
+
+SourceSession 的私有工厂复用 History.prepareConfiguration 的主点/设备/清洗配置与最终 revision 守卫，完成冻结才返回 Session；Context 适配直接使用现有原始 his.read。受控拒绝权限、设备 revision、外设备主点及最后一次点 revision 变化均在0历史读取前发生；冻结后修改原设备点单位不改变当次使用的主点元数据。工厂拒绝另一请求的 deadline，源与消费者继续共享同一预算。配置生成/toImmutable 及上游输入创建本身尚未接入完整所有权，不以此工厂声称全请求已计账。
+
+取消私有 Registry/COP/Flow 对 requested.to>asOf 的拒绝，保留用户桶与严格不足质量；Flow 的 knownEnd 使用 min(to,asOf)，COP 比率沿用 COP_INCOMPLETE_HISTORY，规则只算已经发生的小时。旧 prepare 对未来未准备小时返回 streamingReadNotPrepared，会把此前有效小计一并作废，属于明确正确性修正，架构师已确认不复制此实现缺陷；不作为“所有字段零差异”。整点例原旧 modules 84叶变化及跨未来桶长区间例28叶变化已定位到该传播及其派生。两例改以真实截止前固定主点样本，经原 History.normalize/原 Root 为独立oracle，全九模块完整DTO相等，不整体排除任何模块。
+
+七例包含非整点、全未来、历史部分小时、整点、跨截止长区间、真实0/NA、asOf早于请求开始。独立确认请求00–02/asOf01时10kWh已有量、完整值null、请求7200秒/覆盖3600秒、未来点null/missing；未闭合跨截止区间用量null/覆盖0，0保留且NA证据仍在，REQUEST_END_AFTER_AS_OF保留。故意把asOf前计划截断会在0历史读取时被拒绝，不把历史漏洞变成正常缺测。专项 SourceSession 11方法459检查通过（source-session-final-tests.log，6471ms）；相邻Registry/COP/Flow/Rule/Preparation29方法的较早专项另有通过记录，当前完整套件另行记录。
+
+捕获 zeda 年度 main 源首次通过完整 Root+Session+实际TypeScript解码链路，30秒时限未提高：13.878秒，6规范窗口/44010逻辑小时/462源回调/12094样本，unprepared0，计入的峰158473，关闭raw/temporary0，prepared48继续保留。8个必需provenance字段完全相等；12报告中58个业务分组严格相等（只归一化periodsCaptureId）。能流5行其余业务字段及每行7335完整时段数相等；诊断公平分配使periods55→76/77，仅periods列表、真实诊断ref、returnedCount、truncationReason及opaque captureId变化。旧55样本仍是新列表前缀，新metadata逐项对照共享池，总returned含子证据严格1000。不能称这份新公平诊断输出为旧59分组全字段相等。
+
+回放响应497573B，SHA256 B8B4937ED2E93F3272966E17BC185E7E7C758CF3ED23AE6BD9158B7B804F3552；证据 source-session-captured-main.stats.json / parity.json / response.verification.json。该捕获无COP或规则配置，实际正向仍由受控夹具证明；没有把缺失的17源或全站82源当作已知空。最终模块投影/freeze/codec/REST与配置输入共同创建时准入尚未完成，因此峰是已接入部分的逻辑计账下界，不是JVM堆/原生年度/现场30秒证明。默认Repo读取来源不变，未部署、未重启、未做FIN/浏览器或配置历史写入；只读仍暂缓。
+
+本批精确完整回归113类800方法272769检查通过，284832ms（source-session-full-fantom.log）。冻结私有包 source-session-offline-test.pod，4354809字节，SHA256 55C1E3E4DF34C786465D83AC4D13A3DAAB78590928F24504D398C3F32F696AB8；该包仍为0.14.1测试元数据，不可当作新版现场发布。年度10秒高密度旧容量夹具采用1800秒离线预算，其中一次8MiB以上快照是旧容量边界证据，不能拿来声称原生30秒或REST响应通过。新捕获Root回放另有30秒时限/13.878秒证据，未调高其时限。

@@ -9,7 +9,6 @@ internal class EnerCubixNonWorkingConsumer
     from=DateTime.fromIso(q["from"].toStr).toTimeZone(catalog.tz)
     to:=DateTime.fromIso(q["to"].toStr).toTimeZone(catalog.tz);asOf:=DateTime.fromIso(q["asOf"].toStr).toTimeZone(catalog.tz)
     end=to<asOf ? to : asOf;at=EnerCubixMath.floorHour(from)
-    if(end<=from) throw ArgErr("nonWorkingConsumerRange")
     state.hold(40+((List)boundary["meterIds"]).size);ids=EnerCubixMath.strings(boundary["meterIds"])
     state.watch |->Void| {ctx=null;calendar=null;ids.clear;stateClosed=true}
     output.hold(72);output.watch |->Void|

@@ -4,6 +4,148 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testFactoryRejectsAForeignDeadlineBeforeConfigurationOrHistoryReads()
+  {
+    request:=Str:Obj?["_cockpitDeadline":EnerCubixCockpitDeadline()].toImmutable
+    budget:=EnerCubixStreamBudget();lookups:=0;reads:=0
+    try
+    {EnerCubixCockpitSourceSession.prepare(request,[Str:Obj?][,].toImmutable,budget,|Str id->Dict?| {lookups++;return null},|Dict p->Bool| {true},|Dict p->Dict| {Etc.emptyDict},|Dict p,Span span,|HisItem| sink| {reads++});fail("Foreign deadline must not start a new source session")}
+    catch(ArgErr e) {verifyEq(e.msg,"cockpitSourceSessionDeadline")}
+    verifyEq(lookups,0);verifyEq(reads,0);verifyEq(budget.state.temporary.val,0)
+  }
+  Void testMissingHistoricalPlanIsRejectedBeforeIoRatherThanTreatedAsFutureMissing()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");request:=input;request["modules"]=["trend"]
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
+    reads:=0;budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+    try
+    {
+      EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        broken:=q.dup.set("_cockpitRanges",[["from":a.toIso,"to":(a+1hr).toIso,"pointIds":["pd"]]])
+        session=EnerCubixCockpitSourceSession(broken.toImmutable,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {reads++})
+        return session.load
+      },"test",TimeZone.utc,a+2hr,false,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)})
+      fail("A historical plan hole must not turn into a successful missing-value snapshot")
+    }
+    catch(ArgErr e) {verifyEq(e.msg,"cockpitSourceSessionHistoricalPlan");verifyEq(reads,0);verifyEq(budget.nativeReads,0)}
+    finally {session?.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  Void testConfigurationFactoryGuardsBeforeIoAndKeepsFrozenPrimaryMetadata()
+  {
+    (0..<5).each |variant|
+    {
+      a:=DateTime.fromIso("2026-10-01T00:00:00Z");rs:=records;db:=Str:Dict[:]
+      ["n","d"].each |id|
+      {
+        point:=id=="n" ? "pn" : "pd"
+        db[id]=Etc.makeDict(["id":Ref(id),"equip":Marker.val,"mod":a,"navName":id,"enerCubixKind":"meter","enerCubixPointRef":Ref(point),"enerCubixCategoryRef":Ref(id=="n" ? "cn" : "cd")])
+        db[point]=Etc.makeDict(["id":Ref(point),"point":Marker.val,"his":Marker.val,"hisTotalized":Marker.val,"mod":a,"unit":id=="n" ? "MWh" : "kWh","equipRef":Ref(id),"tz":"UTC"])
+        rs.find |r| {r["id"]==id}.setAll(EnerCubixNativeEquip.decode(db[id]))
+      }
+      if(variant==1) db["d"]=Etc.makeDict(Etc.dictToMap(db["d"]).set("mod",a+1sec))
+      if(variant==2) db["pd"]=Etc.makeDict(Etc.dictToMap(db["pd"]).set("equipRef",Ref("n")))
+      pointLookups:=0;reads:=0;request:=input;request["modules"]=["trend"]
+      lookup:=|Str id->Dict?|
+      {
+        if(id=="pd") {pointLookups++;if(variant==3 && pointLookups==2) return Etc.makeDict(Etc.dictToMap(db[id]).set("mod",a+1sec))}
+        return db[id]
+      }
+      raw:=|Dict point,Span span,|HisItem| sink|
+      {reads++;verifyEq(point["unit"],"kWh");(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(100f+10f*i)))}}
+      budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+      try
+      {
+        actual:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {
+          session=EnerCubixCockpitSourceSession.prepare(q,frozen,budget,lookup,|Dict p->Bool| {variant!=0 || p.id.id!="pd"},|Dict p->Dict| {fail("Unexpected cleaning lookup");return Etc.emptyDict},raw)
+          verifyEq(reads,0)
+          db["pd"]=Etc.makeDict(Etc.dictToMap(db["pd"]).set("unit","MWh").set("mod",a+1sec))
+          return session.load
+        },"test",TimeZone.utc,a+2hr,false,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)})
+        verifyEq(variant,4);verifyEq(reads,1)
+        report:=(Map)((Map)actual["reports"])["profile-energy"]
+        verifyEq(EnerCubixMath.maps(((Map)report["summary"])["totals"]).first["value"],20f)
+        verifyNotNull(((Map)actual["provenance"])["historyConfigObservedFrom"]);verifyNotNull(((Map)actual["provenance"])["historyConfigObservedTo"])
+      }
+      catch(EnerCubixHttpErr e) {verify(variant<4);verifyEq(e.status,variant==0 ? 403 : 409);verifyEq(reads,0);verifyEq(budget.nativeReads,0)}
+      finally {session?.close}
+      verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+    }
+  }
+  Void testRequestedFutureAndPartialBucketsMatchOriginalWithoutFutureZeros()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z")
+    bounds:=[[a+15min,a+2hr,a+90min],[a,a+2hr,a],[a+30min,a+90min,a+2hr],[a,a+2hr,a+1hr],[a,a+3hr,a+90min],[a,a+3hr,a+150min],[a+1hr,a+3hr,a]]
+    bounds.each |range,variant|
+    {
+      from:=(DateTime)range[0];to:=(DateTime)range[1];cutoff:=(DateTime)range[2]
+      request:=input;request["time"]=["preset":"custom","period":"hour","from":from.toIso,"to":to.toIso];request["asOf"]=cutoff.toIso
+      rs:=records;owned:=configuration
+      points:=Str:Dict["pn":Etc.makeDict(["id":Ref("pn"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"MWh","tz":"UTC"]),"pd":Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])]
+      read:=|Dict point,Span span,|HisItem| sink|
+      {
+        (-2..3).each |i|
+        {
+          if(variant==4 && point.id.id=="pd" && i==1) return
+          at:=a+1hr*i;Obj? value:=Number(point.id.id=="pn" ? 0.1f*i : 100f+10f*i*i)
+          if(variant==5 && point.id.id=="pd") {if(i==1) value=Number(100);if(i==2) value=NA.val}
+          if(at>=span.start && at<span.end) sink(HisItem(at,value))
+        }
+      }
+      expected:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        if(variant!=3 && variant!=4) return EnerCubixCockpitStream.prepare(q,frozen,points,[:],read,EnerCubixStreamBudget())
+        // At an exact cutoff the old prepared path poisons valid earlier usage
+        // with an unprepared future lookup. Use the original raw-history engine
+        // as the independent oracle for this explicitly corrected boundary.
+        return points.vals.map |point->Str:Obj?|
+        {items:=HisItem[,];read(point,Span.makeAbs(from-1day,to+1day),|HisItem item| {if(item.ts<=cutoff) items.add(item)});return EnerCubixHistory.normalize(point,items,from,to)}
+      },"test",TimeZone.utc,cutoff,true,|->DateTime| {cutoff},null,null,null,owned)
+      prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pn":[Str:Obj?][,],"pd":[Str:Obj?][,]]].toImmutable
+      budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+      try
+      {
+        actual:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,read);return session.load},"test",TimeZone.utc,cutoff,true,|->DateTime| {cutoff},null,null,null,owned,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+        artifactDir:=Env.cur.vars["ENERCUBIX_SOURCE_SESSION_DIFF_DIR"]
+        if(artifactDir!=null)
+        {File.os(artifactDir+"/source-session-future-${variant}.expected.json").out.print(JsonOutStream.writeJsonToStr(normalize(expected["modules"],expected))).close;File.os(artifactDir+"/source-session-future-${variant}.actual.json").out.print(JsonOutStream.writeJsonToStr(normalize(actual["modules"],actual))).close}
+        verifyEq(normalize(actual["modules"],actual),normalize(expected["modules"],expected),variant.toStr)
+        report:=(Map)((Map)actual["reports"])["profile-energy"]
+        old:=(Map)((Map)expected["reports"])["profile-energy"]
+        ["from","to","asOf","summary","series","rows","warnings"].each |key| {verifyEq(report[key],old[key],variant.toStr+"/"+key)}
+        verifyEq(report["from"],from.toIso);verifyEq(report["to"],to.toIso);verifyEq(budget.state.unprepared.val,0)
+        if(to>cutoff) verify(((List)actual["limitations"]).contains("REQUEST_END_AFTER_AS_OF"))
+        if(variant==1 || variant==6) verifyEq(budget.nativeReads,0)
+        if(variant==3)
+        {
+          value:=EnerCubixMath.maps(((Map)((Map)((Map)actual["modules"])["kpis"])["data"])["values"]).find |v| {v["id"]=="energy"}
+          verifyEq(value["value"],10f);verifyEq(value["completeValue"],null);verifyEq(value["valueBasis"],"knownSubtotal")
+          coverage:=EnerCubixMath.maps(((Map)report["extra"])["usageCoverage"]).first
+          verifyEq(coverage["expectedSeconds"],7200f);verifyEq(coverage["coveredSeconds"],3600f);verifyEq(coverage["complete"],false)
+          future:=EnerCubixMath.maps(EnerCubixMath.maps(report["series"]).first["points"]).last
+          verifyNull(future["value"]);verifyEq(future["quality"],"missing")
+        }
+        if(variant==4)
+        {
+          value:=EnerCubixMath.maps(((Map)((Map)((Map)actual["modules"])["kpis"])["data"])["values"]).find |v| {v["id"]=="energy"}
+          verifyNull(value["value"]);verifyNull(value["knownValue"])
+          verifyEq(EnerCubixMath.maps(((Map)report["extra"])["usageCoverage"]).first["coveredSeconds"],0f)
+        }
+        if(variant==5)
+        {
+          value:=EnerCubixMath.maps(((Map)((Map)((Map)actual["modules"])["kpis"])["data"])["values"]).find |v| {v["id"]=="energy"}
+          verifyEq(value["knownValue"],0f);verifyNull(value["completeValue"])
+          reads:=EnerCubixMath.maps(((Map)((Map)report["extra"])["knownUsage"])["sourceUsage"])
+          verify(reads.any |row| {EnerCubixMath.maps(row["intervals"]).any |i| {i["quality"]=="na"}})
+        }
+      }
+      finally {session?.close}
+      verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+    }
+  }
   Void testNativeWrapperAroundDensityControlStillBisectsAndKeepsUsage()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+1hr;request:=input;request["modules"]=["trend"];request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso

@@ -8,7 +8,7 @@ internal class EnerCubixFlowConsumer
     if(!q.isImmutable || state===output || state.budget!==output.budget || state.budget!==catalog.owner.budget || pool.budget!==state.budget || q["kind"]!="energyFlow" || q["metric"]!="energy" || q["flowMode"]=="endUse" || q["meterHistorySegments"]!=null) throw ArgErr("flowConsumerPlan")
     this.q=q;this.state=state;this.output=output;this.pool=pool;this.usageKey=usageKey
     from=DateTime.fromIso(q["from"].toStr).toTimeZone(catalog.tz);to=DateTime.fromIso(q["to"].toStr).toTimeZone(catalog.tz);at=from
-    if(to<=from || to>DateTime.fromIso(q["asOf"].toStr)) throw ArgErr("flowConsumerRange")
+    if(to<=from) throw ArgErr("flowConsumerRange")
     calc=EnerCubixPreparedOwner(state.budget)
     try
     {
@@ -178,7 +178,7 @@ internal class EnerCubixFlowDevice
     // The independent own-history overview has no spatial masking. The graph
     // applies native-source metadata separately, as the ordinary path does.
     strict=EnerCubixContext.shared(catalog,"metering",false,owner);strict.orderWarnings
-    known=EnerCubixContext.known(strict,to)
+    cutoff:=DateTime.fromIso(q["asOf"].toStr);known=EnerCubixContext.known(strict,to<cutoff ? to : cutoff)
     strictFold=EnerCubixValueFold.strict(owner);knownFold=EnerCubixValueFold.known(owner)
     coverage=EnerCubixCoverageFold(point.isEmpty ? Str[,] : [point],from,to,owner)
   }

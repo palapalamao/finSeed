@@ -39,6 +39,12 @@ class EnerCubixHistory
   }
 
   ** Freeze every planned primary point and its cleaning config before any history read.
+  internal static EnerCubixCockpitSourceSession sourceSession(Context cx,Str:Obj? request,[Str:Obj?][] records,EnerCubixStreamBudget budget)
+  {
+    return EnerCubixCockpitSourceSession.prepare(request,records,budget,|Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},|Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)},|Dict p,Span span,|HisItem| sink| {cx.rt.his.read(p,span,Etc.makeDict(["raw":Marker.val]),sink)})
+  }
+
+  ** Freeze every planned primary point and its cleaning config before any history read.
   internal static [Str:Obj?][] loadPrepared(Context cx, Str:Obj? request, [Str:Obj?][] records)
   {
     prepared:=prepareConfiguration(request,records,|Str id->Dict?| {cx.db.readById(Ref(id),false)},|Dict p->Bool| {cx.canRead(p)},|Dict p->Dict| {EnerCubixCleaningRepo(EnerCubixRepo(cx)).currentConfig(p)})
