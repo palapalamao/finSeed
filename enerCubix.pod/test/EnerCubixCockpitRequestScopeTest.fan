@@ -3,6 +3,42 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testPlanningCatalogCanReleaseItsOwnersWithoutClearingInputRecords()
+  {
+    scope:=EnerCubixCockpitRequestScope("planning-scope","a");peer:=EnerCubixPreparedOwner(scope.stream.state);peer.hold(31)
+    records:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space"],["id":"m","kind":"meter","pointId":"p","categoryId":"c","spaceId":"s"]].toImmutable
+    try
+    {
+      context:=scope.planningContext(records,TimeZone.utc,"space",false)
+      verifyErr(ArgErr#) {scope.sourceCatalog(records.dup.toImmutable,TimeZone.utc,[:])}
+      catalog:=scope.sourceCatalog(records,TimeZone.utc,["p":"kWh"])
+      verifyEq(catalog.primaryUnit("p"),"kWh")
+      verifyErr(ArgErr#) {scope.sourceCatalog(records,TimeZone.utc,["p":"Wh"])}
+      verifyEq(context.scopeMeters("s","c").first["id"],"m")
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.finishPlanning;scope.finishPlanning
+      verifyEq(((Map)records.last)["pointId"],"p");verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      verifyErr(ArgErr#) {scope.planningContext(records,TimeZone.utc,"space",false)}
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testPlanningCatalogAdmissionFailureDoesNotReleasePeerOrTheGate()
+  {
+    scope:=EnerCubixCockpitRequestScope("planning-limit","a");peer:=EnerCubixPreparedOwner(scope.stream.state)
+    records:=[Str:Obj?][,];(0..<300).each |i| {records.add(["id":"m$i","kind":"meter"])};records=records.toImmutable
+    peer.hold(scope.stream.state.remaining-100);held:=peer.entries
+    try
+    {
+      verifyErr(EnerCubixHttpErr#) {scope.planningContext(records,TimeZone.utc,"metering",false)}
+      verifyEq(peer.entries,held);verifyEq(scope.stream.nativeReads,0)
+      verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitGate.enter("planning-limit","a")}
+      scope.close;verifyEq(scope.stream.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
   Void testFinalSnapshotBorrowsFrozenInputsAndKeepsItsCopyOwnedThroughTheSender()
   {
     scope:=EnerCubixCockpitRequestScope("request-snapshot","a");Map? frozen

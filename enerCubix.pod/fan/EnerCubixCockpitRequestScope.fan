@@ -29,6 +29,10 @@ internal class EnerCubixCockpitRequestScope
   private [Str:Obj?]? snapshot
   private EnerCubixPreparedOwner? reportOwner
   private EnerCubixPreparedOwner? payloadOwner
+  private EnerCubixPreparedOwner? planningModel
+  private EnerCubixPreparedOwner? planningState
+  private EnerCubixCockpitCatalog? planningCatalog
+  private [Str:Obj?][]? planningRecords
   private [Str:[Str:Obj?]]? frozenReports
   private Bool entered := false
   private Bool closed := false
@@ -36,7 +40,23 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)}
+  EnerCubixContext planningContext([Str:Obj?][] records,TimeZone tz,Str dimension,Bool nativeSpace)
+  {
+    checkContext(project,user)
+    if(planningModel!=null) throw ArgErr("cockpitPlanningAlreadyCreated")
+    planningModel=EnerCubixPreparedOwner(stream.state)
+    catalog:=EnerCubixCockpitCatalog(records,tz,planningModel);planningCatalog=catalog;planningRecords=records
+    planningState=EnerCubixPreparedOwner(stream.state)
+    return EnerCubixContext.shared(catalog,dimension,nativeSpace,planningState)
+  }
+  EnerCubixCockpitCatalog sourceCatalog([Str:Obj?][] records,TimeZone tz,Str:Str units)
+  {
+    checkContext(project,user)
+    if(planningCatalog==null || planningRecords!==records || planningCatalog.tz!=tz) throw ArgErr("cockpitSourceCatalogContext")
+    planningCatalog.prepareUnits(units);return planningCatalog
+  }
+  Void finishPlanning() {planningState?.close;planningModel?.close;planningCatalog=null;planningRecords=null}
   EnerCubixPreparedOwner payloadOutput()
   {checkContext(project,user);if(payloadOwner==null) payloadOwner=EnerCubixPreparedOwner(stream.state);return payloadOwner}
   Void checkContext(Str project,Str user)
@@ -92,6 +112,7 @@ internal class EnerCubixCockpitRequestScope
     Err? failure
     try {owner?.close} catch(Err e) {failure=e}
     try {payloadOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit payload cleanup also failed",e)}
+    try {finishPlanning} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit planning cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
     try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}

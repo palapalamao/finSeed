@@ -69,7 +69,7 @@ internal class EnerCubixCockpitSourceSession
           ref:=(Map)comparison["referenceRange"];a:=EnerCubixMath.floorHour(DateTime.fromIso(ref["from"].toStr).toTimeZone(tz));b:=ceiling(DateTime.fromIso(ref["to"].toStr).toTimeZone(tz))
           if(a<clockFrom) clockFrom=a;if(b>clockTo) clockTo=b
         }
-        registry=EnerCubixCockpitRegistry(q,records,(Str:Obj?)plan["boundary"],enabled,(Str:Obj?)comparison,plan["auxiliary"] as Str,(Str:Obj?)plan["owned"],budget,units,((Map)prepared["points"]).keys,cleaningPlan,(Str:Obj?)plan["flow"],(Str:Obj?)plan["efficiency"])
+        registry=EnerCubixCockpitRegistry(q,records,(Str:Obj?)plan["boundary"],enabled,(Str:Obj?)comparison,plan["auxiliary"] as Str,(Str:Obj?)plan["owned"],budget,units,((Map)prepared["points"]).keys,cleaningPlan,(Str:Obj?)plan["flow"],(Str:Obj?)plan["efficiency"],requestScope?.sourceCatalog(records,tz,units))
       }
       finally {scratch.close}
     }

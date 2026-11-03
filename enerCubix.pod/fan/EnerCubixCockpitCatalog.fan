@@ -44,6 +44,14 @@ internal class EnerCubixCockpitCatalog
   internal Obj[] protectedRoots := [,]
   private EnerCubixPreparedOwner[] bindings := [,]
   private Bool closed := false
+  private Bool unitsPrepared := false
+
+  internal Void prepareUnits(Str:Str units)
+  {
+    check
+    if(unitsPrepared || !pointUnits.isEmpty) throw ArgErr("catalogUnitsAlreadyPrepared")
+    owner.hold(units.size);pointUnits.setAll(units);unitsPrepared=true
+  }
 
   internal Str:[Str:Obj?] byId() {check;return originalIndex ?: projection.byId}
   internal [Str:Obj?][] records() {check;return originalRecords ?: projection.records}

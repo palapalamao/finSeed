@@ -3,7 +3,7 @@
 ** history report. All work shares one source clock and one diagnostic row pool.
 internal class EnerCubixCockpitRegistry
 {
-  new make(Str:Obj? q,[Str:Obj?][] records,Str:Obj? boundary,Str[] enabled,Str:Obj? comparison,Str? auxiliary,Str:Obj? owned,EnerCubixStreamBudget budget,Str:Str units,Str[] loadedPoints,Str:[Str:Obj?] cleaningPlan := [:],Str:Obj? flowPlan := [:],Str:Obj? efficiencyPlan := [:])
+  new make(Str:Obj? q,[Str:Obj?][] records,Str:Obj? boundary,Str[] enabled,Str:Obj? comparison,Str? auxiliary,Str:Obj? owned,EnerCubixStreamBudget budget,Str:Str units,Str[] loadedPoints,Str:[Str:Obj?] cleaningPlan := [:],Str:Obj? flowPlan := [:],Str:Obj? efficiencyPlan := [:],EnerCubixCockpitCatalog? sharedCatalog := null)
   {
     this.budget=budget
     model=EnerCubixPreparedOwner(budget.state);metadata=EnerCubixPreparedOwner(budget.state);diagnosticOwner=EnerCubixPreparedOwner(budget.state)
@@ -19,7 +19,8 @@ internal class EnerCubixCockpitRegistry
       if(enabled.contains("efficiency") && (!efficiencyPlan.isImmutable || (copEnabled && (efficiencyPlan["records"] isnot List || efficiencyPlan["request"] isnot Map || efficiencyPlan["items"] isnot List)))) throw ArgErr("cockpitRegistryCopPlan")
       metadata.watch |->Void| {works.clear;queries.each |v| {v.clear};queries.clear;space.clear;currentPoints.clear;tariffs.clear;billing.clear;attachedCleaning.clear;flowMeters.clear;flowPeriods.clear;copWorks.clear;copKeys.clear;ruleWorks.clear;diagnostics=Str:Obj?[:];planning=null;flowCatalog=null;copCatalog=null}
       metadata.hold(32+loadedPoints.size);currentPoints=loadedPoints.dup
-      catalog=EnerCubixCockpitCatalog(records,TimeZone(q["tz"].toStr),model,units)
+      if(sharedCatalog!=null && (sharedCatalog.owner.budget!==budget.state || sharedCatalog.tz!=TimeZone(q["tz"].toStr))) throw ArgErr("cockpitRegistryCatalog")
+      catalog=sharedCatalog ?: EnerCubixCockpitCatalog(records,TimeZone(q["tz"].toStr),model,units)
       planning=EnerCubixContext.shared(catalog,q["dimension"].toStr,q["spaceSource"]=="fin",metadata)
       if(flowEnabled)
       {

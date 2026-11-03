@@ -348,3 +348,11 @@ RED复现300个普通字段（不经过shared证据hash）可绕过codec额度�
 8组29方法676检查通过，6156ms（cockpit-codec-owned-final-tests.log），覆盖普通字段限额、原wire逐字节一致、literal控制键、表格/null/0/中英文、源对象不改、只有输出及peer额度保留、编码中统一超时清理、九模块到发送链。捕获cockpit-codec-owned-main在最后仅增加测试前的相同生产实现通过：14.927秒，峰188853，462读取/12094样本/unprepared0，raw/temporary关闭0；响应497574B，SHA256 05DFCFE8A110DB192AA7D467804D97FCB2F5DE14317F8C98AD24C4F7060B2E80，12报告解码及8+58+5比较通过。
 
 这是已接入对象的逻辑Map/List/Value计账，并非JVM堆测量；Repo上游、Root目录/计划/业务投影及History准备配置仍须覆盖。未部署，ALL-59继续进行中。
+
+Root目录与源计算共享一个模型
+
+先把Root原Dimension/Context目录创建接入既有owned Catalog，真实回放在Flow.account.workspace触发200976/422（cockpit-planning-owned-main，失败证据保留）。原因是查询准备与primary registry各保留了一份相同的规范化目录。现在由scope在查询前创建一个owned目录和轻量planning context，SourceSession以相同冻结records身份、时区和budget借用该目录，在I/O前一次性补入已冻结的主点单位；Flow/COP有差异的特殊目录仍保持原规则。没有提高限额或改变业务选表规则。
+
+源会话关闭其borrower后，再关闭Root planning state与model；所有业务投影及快照冻结完成前目录仍有效。重复单位准备、不同records身份、重复planning及预算不足均拒绝。4类36方法920检查通过，7537ms（cockpit-shared-planning-final-tests.log），包含peer/Gate保留、失败清理、原输入不改、全部模块和独立registry回归。
+
+捕获cockpit-shared-planning-main在最后仅增加身份/重复单位测试前的相同生产实现通过：13.378秒，峰188894，462读取/12094样本/unprepared0，raw/temporary清理0；497573B，SHA256 2ABBF24F366D097B678BBBF391E1395DB59378C15F10CD3F4323A34B805FD5D8。12报告解码和8+58+5既定比较通过。Root计划/纯业务投影、Repo上游和History配置创建仍待覆盖；不是全请求/JVM/FIN实机完成。

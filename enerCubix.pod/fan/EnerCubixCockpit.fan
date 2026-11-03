@@ -30,8 +30,11 @@ class EnerCubixCockpit
     request["_cockpitCategoryId"]=category
     if(input["payloadEncoding"] == "compact-v1") request["_cockpitDiagnosticCapture"]=true
     request["_cockpitExplicitObjects"]=scope["selectionIntent"] == "explicitObjects"
-    dim:=EnerCubixDimension(request["dimension"].toStr,frozen,request["spaceSource"] == "fin")
-    ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],tz,dim)
+    EnerCubixContext? ctx
+    if(requestScope==null)
+    {original:=EnerCubixDimension(request["dimension"].toStr,frozen,request["spaceSource"] == "fin");ctx=EnerCubixContext(original.records,[Str:Obj?][,],tz,original)}
+    else ctx=requestScope.planningContext(frozen,tz,request["dimension"].toStr,request["spaceSource"] == "fin")
+    dim:=ctx.dimension
     if (!frozen.any |r| {r["id"] == category && r["kind"] == "category"}) forbidden
     ids.each |id|
     {
@@ -253,6 +256,7 @@ class EnerCubixCockpit
     snapshot:=requestScope==null ? (Str:Obj?)snapshotData.toImmutable : requestScope.freezeSnapshot(snapshotData)
     releaseSources:=requestMeta["releaseSources"] as |->Void|
     releaseSources?.call
+    requestScope?.finishPlanning
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline,requestScope?.stream?.state,requestScope?.payloadOutput) : snapshot
     deadline?.check
