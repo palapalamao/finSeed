@@ -1,11 +1,25 @@
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {CockpitIssues} from './CockpitIssues';
+import budgetRaw from '../tests/fixtures/cockpit-budget-24day.json';
 import {afterEach,expect,it,vi} from 'vitest';
 import raw from '../tests/fixtures/cockpit-faces-response.json';
 import type {CockpitSnapshot} from './cockpitTypes';
+import type {Catalog} from './types';
 import {freezeCockpitExport,cockpitExportTables,cockpitPrintEvidence} from './cockpitExports';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
+for(const language of ['zh-CN','en-US'] as const)it('uses the frozen budget state in the business brief '+language,async()=>{
+ const {initializeLocale,t}=await import('./i18n'),{CockpitBrief}=await import('./CockpitBrief');initializeLocale(language);
+ const snapshot=structuredClone(budgetRaw) as unknown as CockpitSnapshot,b=snapshot.modules.kpis!.data!.budget!,before=structuredClone(snapshot);
+ const catalog:Catalog={version:'test',project:snapshot.context.project,user:{name:'test',canWrite:false},records:[]};
+ const render=()=>renderToStaticMarkup(createElement(CockpitBrief,{snapshot,catalog,onProfile:()=>{},onFlow:()=>{}}));
+ const absent=language==='zh-CN'?'未配置预算，不作预算达标判断。':'No budget is configured; budget compliance is not assessed.';
+ const complete=render();expect(complete).toContain('240,000');expect(complete).toContain('224,600');expect(complete).not.toContain(absent);expect(snapshot).toEqual(before);
+ Object.assign(b,{status:'unavailable',budgetStatus:'ok',comparisonStatus:'unavailable',variancePct:null,monthUsagePct:null,referenceVariancePct:9.74,referenceMonthUsagePct:10.45,costQuality:'partial',costValueBasis:'knownSubtotal',reasonCodes:['BUDGET_COST_INCOMPLETE']});
+ const reference=render();expect(reference).toContain(language==='zh-CN'?'参考偏差':'Reference variance');expect(reference).toContain('9.74');expect(reference).toContain(t('已有费用含不完整或估算数据；比例仅供参考，不作达标判断。'));expect(reference).not.toContain(absent);
+ delete snapshot.modules.kpis!.data!.budget;
+ const missing=render();expect(missing).toContain(language==='zh-CN'?'预算':'budget');expect(missing).not.toContain('240,000');expect(missing).not.toContain('9.74');
+});
 it('freezes complete snapshot, language and native names without rounding0/NA/null',()=>{
  const snapshot=structuredClone(raw) as unknown as CockpitSnapshot;
  snapshot.context.comparison={mode:'previousMonth',from:'2026-09-01T00:00:00Z',to:'2026-09-03T02:00:00Z'};

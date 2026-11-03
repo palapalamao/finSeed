@@ -1,9 +1,21 @@
 import {expect,it} from 'vitest';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {CockpitFlow} from './CockpitFlow';
+import {initializeLocale} from './i18n';
 import raw from '../tests/fixtures/cockpit-balance-response.json';
 import type {CockpitSnapshot} from './cockpitTypes';
 import {cockpitBalanceSnapshot,cockpitCompactFlow} from './cockpitFlowProjection';
 import {energyFlowGraphs,energyFlowGraphSnapshot,energyFlowData} from './energyFlow';
 import {createNavigation,decodeNavigation,encodeNavigation,projectCockpitReport} from './cockpitNavigation';
+for(const language of ['zh-CN','en-US'] as const)it('focuses a returned child graph without changing the reporting scope '+language,()=>{
+ initializeLocale(language);const source=structuredClone(raw) as unknown as CockpitSnapshot,before=structuredClone(source);
+ const graph=energyFlowGraphs(cockpitBalanceSnapshot(source)!.result).find(g=>g.objectId==='t')!,child=graph.nodes.find(n=>n.nodeType==='meter'&&n.parentId===graph.focusId&&!n.referenceOnly)!;
+ const html=renderToStaticMarkup(createElement(CockpitFlow,{snapshot:source,focusObjectId:child.nodeId||child.id,compact:true,onOpen:()=>{}}));
+ expect(html.match(/class="cockpit-destination-root"[\s\S]*?<\/strong>/)?.[0]).toContain('>'+child.name+'</strong>');expect(source).toEqual(before);
+ const fallback=renderToStaticMarkup(createElement(CockpitFlow,{snapshot:source,focusObjectId:'unloaded-focus',compact:true,onOpen:()=>{}}));
+ expect(fallback).toContain(language==='zh-CN'?'当前焦点没有已返回的能流':'No energy flow was returned for the current focus');expect(source).toEqual(before);
+});
 it('projects independent graphs and preserves an unavailable mixed accounting total',()=>{
  const source=structuredClone(raw) as unknown as CockpitSnapshot,before=structuredClone(source),report=cockpitBalanceSnapshot(source)!;
  expect(energyFlowGraphs(report.result)).toHaveLength(3);expect(report.result.extra!.energyFlowAccounting).toMatchObject({unionValue:null});
