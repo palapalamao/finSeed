@@ -270,3 +270,5 @@ SourceSession 的私有工厂复用 History.prepareConfiguration 的主点/设�
 回放响应497573B，SHA256 B8B4937ED2E93F3272966E17BC185E7E7C758CF3ED23AE6BD9158B7B804F3552；证据 source-session-captured-main.stats.json / parity.json / response.verification.json。该捕获无COP或规则配置，实际正向仍由受控夹具证明；没有把缺失的17源或全站82源当作已知空。最终模块投影/freeze/codec/REST与配置输入共同创建时准入尚未完成，因此峰是已接入部分的逻辑计账下界，不是JVM堆/原生年度/现场30秒证明。默认Repo读取来源不变，未部署、未重启、未做FIN/浏览器或配置历史写入；只读仍暂缓。
 
 本批精确完整回归113类800方法272769检查通过，284832ms（source-session-full-fantom.log）。冻结私有包 source-session-offline-test.pod，4354809字节，SHA256 55C1E3E4DF34C786465D83AC4D13A3DAAB78590928F24504D398C3F32F696AB8；该包仍为0.14.1测试元数据，不可当作新版现场发布。年度10秒高密度旧容量夹具采用1800秒离线预算，其中一次8MiB以上快照是旧容量边界证据，不能拿来声称原生30秒或REST响应通过。新捕获Root回放另有30秒时限/13.878秒证据，未调高其时限。
+
+最终源码11939ed3及上述同哈希私有包完整回归后，因新增了同deadline验证，又用该精确包重新执行捕获Root回放：13.355秒，响应仍497573B，SHA256 1242ADB2B31909F8DC659EED195DE7E8B3DAE7F6159B2F6A9B3C38A9745EF03B。当前 captured-main 文件为本次最终回放，8provenance/58严格分组及5行窄诊断差异校验仍通过；前述13.878秒/B8B4937...是较早回放，不作为当前文件的哈希。完整包回执 source-session-offline-receipt.json。未部署与其余验收边界不变。
