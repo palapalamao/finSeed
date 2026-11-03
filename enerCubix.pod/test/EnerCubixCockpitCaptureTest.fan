@@ -1,6 +1,35 @@
 ** Diagnostic samples only; this pool is never a numeric report data source.
 class EnerCubixCockpitCaptureTest : Test
 {
+  Void testPublishedMetadataDropsAbsentReportsWithoutResamplingOrMutatingFrozenEvidence()
+  {
+    (0..<3).each |variant|
+    {
+      budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+      spec:=plan.dup;spec["clean"]=spec["clean"].dup.set("reportRefs",["profile-energy","profile-cost"])
+      pool:=EnerCubixCockpitCapture(spec,owner)
+      pool.put("clean",row(1));pool.put("reads",row(1).set("intervals",[row(1)]).set("intervalCount",1));pool.put("flow",row(1))
+      ["clean","reads","flow"].each |key| {pool.seal(key)}
+      frozen:=pool.freeze;before:=frozen.toStr;sample:=pool.rows("reads").first
+      reports:=variant==0 ? Str:Obj?["profile-energy":[:],"profile-cost":[:],"energy-flow":[:]] : (variant==1 ? Str:Obj?["profile-energy":[:]] : Str:Obj?[:])
+      published:=pool.publish(reports);rows:=EnerCubixMath.maps(published["entries"])
+      verifyEq(published["returnedCount"],variant==0 ? 4 : (variant==1 ? 3 : 0))
+      verifyEq(published["returnedCount"],rows.reduce(0) |Int n,Map r->Int| {n+(Int)r["returnedCount"]})
+      verify(rows.all |r| {EnerCubixMath.strings(r["reportRefs"]).all |ref| {reports.containsKey(ref)}})
+      verifyEq(frozen.toStr,before);verify(pool.rows("reads").first===sample);verifyErr(ArgErr#) {pool.publish(reports)}
+      peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+      owner.close;verify(published.isEmpty);verify(sample.isEmpty);verifyEq(budget.temporary.val,held)
+      peer.close;verifyEq(budget.temporary.val,0)
+    }
+  }
+  Void testRejectedPublicationPreservesTheOtherOwnersAllocation()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+    pool:=EnerCubixCockpitCapture(plan,owner);["clean","reads","flow"].each |key| {pool.seal(key)};pool.freeze
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+    verifyErr(EnerCubixHttpErr#) {pool.publish(["profile-energy":[:]])}
+    verifyEq(peer.entries,held);owner.close;verifyEq(budget.temporary.val,held);peer.close;verifyEq(budget.temporary.val,0)
+  }
   Void testLateDiagnosticGroupsReceiveFairSamplesWithinWholePacketLimit()
   {
     budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)

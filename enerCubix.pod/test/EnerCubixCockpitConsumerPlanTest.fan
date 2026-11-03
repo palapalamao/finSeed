@@ -28,7 +28,7 @@ class EnerCubixCockpitConsumerPlanTest : Test
     budget:=EnerCubixStreamBudget()
     diagnostics:=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":0,"returnedByKind":[:],"truncated":false,"entries":Obj?[,]]
     base:=Str:Obj?["schemaVersion":1,"diagnostics":diagnostics,"preparedBudget":budget.state]
-    [base.dup.set("diagnostics",[:]),base.dup.set("diagnostics",diagnostics.dup.set("returnedCount",1001)),base.dup.set("preparedBudget",null),base.dup.set("streaming","invalid"),base.dup.set("historyConfigObservedFrom","invalid")].each |candidate|
+    [base.dup.set("diagnostics",[:]),base.dup.set("diagnostics",diagnostics.dup.set("returnedCount",1001)),base.dup.set("preparedBudget",null),base.dup.set("streaming","invalid"),base.dup.set("historyConfigObservedFrom","invalid"),base.dup.set("publishDiagnostics","invalid")].each |candidate|
     {
       projected:=0
       verifyErr(ArgErr#) {EnerCubixCockpit.execute(input,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {[Str:Obj?][["_cockpitRequestMeta":candidate]]},"test",TimeZone.utc,end,true,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {projected++;return EnerCubixHistory.report(q,records,histories)})}

@@ -42,10 +42,43 @@ internal class EnerCubixCockpitCapture
   private Int kept := 0
   private Bool closed := false
   private Bool frozen := false
+  private Bool published := false
   private Err? failure
   Int retainedRows() {check;return kept}
   internal Bool finalized() {check;return frozen}
   internal EnerCubixPreparedBudget budget() {owner.budget}
+  ** Publication may omit a locally failed optional report. Keep the existing
+  ** sample allocation and IDs; count only evidence that the response returns.
+  Str:Obj? publish(Str:Obj? reports)
+  {
+    check;if(!frozen || published) throw ArgErr("diagnosticsPublication")
+    published=true
+    if(metadataEntries.all |entry| {refs:=entry["reportRefs"] as List;return refs!=null && !refs.isEmpty && refs.all |ref| {reports.containsKey(ref)}}) return snapshot
+    scratch:=EnerCubixPreparedOwner(owner.budget)
+    try
+    {
+      references:=0;metadataEntries.each |entry| {refs:=entry["reportRefs"] as List;references+=refs?.size ?: 0}
+      scratch.hold(16+3*metadataEntries.size+2*references)
+      owner.hold(16+metadataEntries.size)
+      rows:=[Str:Obj?][,];counts:=Str:Int[:]
+      result:=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":0,"returnedByKind":counts,"truncated":false,"entries":rows]
+      owner.watch |->Void| {rows.each |row| {(row["reportRefs"] as List)?.clear;row.clear};rows.clear;counts.clear;result.clear}
+      returned:=0
+      metadataEntries.each |entry|
+      {
+        refs:=EnerCubixMath.strings(entry["reportRefs"]).findAll |ref| {reports.containsKey(ref)}
+        if(refs.isEmpty) return
+        owner.hold(3+entry.size+refs.size);copy:=entry.dup.set("reportRefs",refs);rows.add(copy)
+        kind:=entry["kind"].toStr;n:=(Int)entry["returnedCount"]
+        if(!counts.containsKey(kind)) owner.hold(1)
+        counts[kind]=(counts[kind] ?: 0)+n;returned+=n
+      }
+      result["returnedCount"]=returned;result["truncated"]=rows.any |entry| {entry["truncated"]==true}
+      owner.hold(1);protectedRoots.add(result);return result
+    }
+    catch(Err e) {failure=e;throw e}
+    finally {scratch.close}
+  }
   Void bind(EnerCubixPreparedOwner borrower)
   {
     check

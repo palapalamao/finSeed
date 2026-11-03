@@ -104,7 +104,7 @@ class EnerCubixCockpit
       metadataRows:=histories.findAll |h| {h.containsKey("_cockpitRequestMeta")}
       if(preparedReport==null || metadataRows.size!=1 || metadataRows.first.size!=1) throw ArgErr("cockpitPreparedRequestMeta")
       candidate:=metadataRows.first["_cockpitRequestMeta"] as Map
-      if(candidate==null || candidate["schemaVersion"]!=1 || candidate["diagnostics"] isnot Map || candidate["preparedBudget"] isnot EnerCubixPreparedBudget || (candidate["streaming"]!=null && candidate["streaming"] isnot Map) || candidate.keys.any |key| {!["schemaVersion","diagnostics","preparedBudget","streaming","historyConfigObservedFrom","historyConfigObservedTo"].contains(key)}) throw ArgErr("cockpitPreparedRequestMeta")
+      if(candidate==null || candidate["schemaVersion"]!=1 || candidate["diagnostics"] isnot Map || candidate["preparedBudget"] isnot EnerCubixPreparedBudget || (candidate["streaming"]!=null && candidate["streaming"] isnot Map) || (candidate["publishDiagnostics"]!=null && candidate["publishDiagnostics"] isnot |Str:Obj?->Str:Obj?|) || candidate.keys.any |key| {!["schemaVersion","diagnostics","preparedBudget","streaming","historyConfigObservedFrom","historyConfigObservedTo","publishDiagnostics"].contains(key)}) throw ArgErr("cockpitPreparedRequestMeta")
       diagnostic:=(Map)candidate["diagnostics"];count:=diagnostic["returnedCount"] as Int
       if(diagnostic["schemaVersion"]!=1 || diagnostic["rowBudget"]!=1000 || count==null || count<0 || count>1000 || diagnostic["entries"] isnot List) throw ArgErr("cockpitPreparedRequestMeta")
       if(candidate.containsKey("historyConfigObservedFrom") || candidate.containsKey("historyConfigObservedTo"))
@@ -239,7 +239,11 @@ class EnerCubixCockpit
     faces:=enabled.findAll |m| {["time","endUse","organization","efficiency","balance"].contains(m)}
     if (!faces.isEmpty || enabled.contains("space")) faces.insert(0,"space")
     snapshotData:=Str:Obj?["schemaVersion":1,"snapshotId":snapshotId,"requestId":input["requestId"],"generatedAt":readClock().toIso,"context":context,"provenance":provenance,"boundary":boundary,"modules":modules,"reports":reports,"quality":coverage,"capabilities":["canRead":true,"canManage":canManage,"availableFaces":faces],"limitations":limitations]
-    if(!requestMeta.isEmpty) snapshotData["diagnostics"]=requestMeta["diagnostics"]
+    if(!requestMeta.isEmpty)
+    {
+      publisher:=requestMeta["publishDiagnostics"] as |Str:Obj?->Str:Obj?|
+      snapshotData["diagnostics"]=publisher==null ? requestMeta["diagnostics"] : publisher(reports)
+    }
     snapshot:=(Str:Obj?)snapshotData.toImmutable
     deadline?.check
     result:=input["payloadEncoding"] == "compact-v1" ? EnerCubixCockpitPayload.encode(EnerCubixCockpitDiagnostics.project(snapshot,deadline),deadline) : snapshot

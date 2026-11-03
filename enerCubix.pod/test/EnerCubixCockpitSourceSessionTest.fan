@@ -4,6 +4,28 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testOptionalProjectionFailureOnlyPublishesDiagnosticsForReturnedReports()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");request:=input;request["modules"]=["kpis","trend"]
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
+    budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(100f+10f*i)))}});return session.load},"test",TimeZone.utc,a+2hr,false,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?|
+      {if(key=="profile-cost") throw Err("controlled optional projection failure");return session.read(key,q)})
+      reports:=(Map)snapshot["reports"];verify(!reports.containsKey("profile-cost"));verify(reports.containsKey("profile-energy"))
+      values:=EnerCubixMath.maps(((Map)((Map)((Map)snapshot["modules"])["kpis"])["data"])["values"])
+      verifyEq(values.find |v| {v["id"]=="energy"}["value"],20f);verifyNull(values.find |v| {v["id"]=="cost"}["value"])
+      diagnostic:=(Map)snapshot["diagnostics"];entries:=EnerCubixMath.maps(diagnostic["entries"])
+      verify(entries.all |e| {EnerCubixMath.strings(e["reportRefs"]).all |ref| {reports.containsKey(ref)}})
+      verifyEq(diagnostic["returnedCount"],entries.reduce(0) |Int n,Map entry->Int| {n+(Int)entry["returnedCount"]})
+      verifyEq(budget.nativeReads,1);verifyEq(budget.state.unprepared.val,0)
+    }
+    finally {session?.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
   Void testFactoryRejectsAForeignDeadlineBeforeConfigurationOrHistoryReads()
   {
     request:=Str:Obj?["_cockpitDeadline":EnerCubixCockpitDeadline()].toImmutable
@@ -336,7 +358,7 @@ class EnerCubixCockpitSourceSessionTest : Test
       ["configFingerprint","configRefs","appliedCleaning","sourceLastObservedAt","historyLimitations","historyConfigObservedFrom","historyConfigObservedTo","historyPlan"].each |key| {verifyEq(((Map)actual["provenance"])[key],((Map)expected["provenance"])[key],key)}
       verify((Int)((Map)actual["diagnostics"])["returnedCount"]<=1000)
       verify(headers.all |h| {!h.containsKey("samples") && !h.containsKey("_preparedReads") && !h.containsKey("_preparedSparse")})
-      body:=JsonOutStream.writeJsonToStr(actual);verify(!body.contains("_cockpitRequestMeta"));verify(!body.contains("preparedBudget"))
+      body:=JsonOutStream.writeJsonToStr(actual);verify(!body.contains("_cockpitRequestMeta"));verify(!body.contains("preparedBudget"));verify(!body.contains("publishDiagnostics"))
       verifyErr(ArgErr#) {session.load}
       report:=session.read("profile-energy",(Str:Obj?)sourceRequest);session.close;verify(report.isEmpty);verify(headers.isEmpty)
       verifyEq(ratio["value"],6f,"The committed immutable result survives source/output cleanup")

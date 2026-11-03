@@ -183,6 +183,8 @@ internal class EnerCubixCockpitRegistry
   private DateTime? watermark
   private Err? failure
   Str[] keys() {check;return queries.keys}
+  Str:Obj? publishDiagnostics(Str:Obj? reports)
+  {check;if(!done) throw ArgErr("cockpitRegistryReportNotPrepared");return pool.publish(reports)}
 
   private Void metrics(Str:Obj? q,Str prefix,Str? auxiliary)
   {["cost","co2",auxiliary==null ? "area" : "auxiliary"].each |id| {add(prefix+"profile-"+id,EnerCubixCockpitReports.metricQuery(q,id,auxiliary))}}

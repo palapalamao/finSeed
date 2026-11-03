@@ -272,3 +272,11 @@ SourceSession 的私有工厂复用 History.prepareConfiguration 的主点/设�
 本批精确完整回归113类800方法272769检查通过，284832ms（source-session-full-fantom.log）。冻结私有包 source-session-offline-test.pod，4354809字节，SHA256 55C1E3E4DF34C786465D83AC4D13A3DAAB78590928F24504D398C3F32F696AB8；该包仍为0.14.1测试元数据，不可当作新版现场发布。年度10秒高密度旧容量夹具采用1800秒离线预算，其中一次8MiB以上快照是旧容量边界证据，不能拿来声称原生30秒或REST响应通过。新捕获Root回放另有30秒时限/13.878秒证据，未调高其时限。
 
 最终源码11939ed3及上述同哈希私有包完整回归后，因新增了同deadline验证，又用该精确包重新执行捕获Root回放：13.355秒，响应仍497573B，SHA256 1242ADB2B31909F8DC659EED195DE7E8B3DAE7F6159B2F6A9B3C38A9745EF03B。当前 captured-main 文件为本次最终回放，8provenance/58严格分组及5行窄诊断差异校验仍通过；前述13.878秒/B8B4937...是较早回放，不作为当前文件的哈希。完整包回执 source-session-offline-receipt.json。未部署与其余验收边界不变。
+
+可选投影失败后的诊断发布（后续专项，完整回归证据仍归11939ed3）
+
+新RED实际复现：费用prepared投影抛局部Err后能耗20仍正常、费用null且报告缺席，但诊断reportRefs仍指向未返回的费用报告。仅在所有模块已完成后，通过私有请求信封的强类型publishDiagnostics回调筛选最终报告的诊断元数据：不重算、不重新采样、不改样本/ID/原冻结元数据，重新计算实际返回行数及按类计数。新元数据图在Capture原owner中创建前准入，一直保留到Session结束；关闭或拒绝不释放peer额度。回调不进入历史解析、指纹或公开JSON，错误类型在元数据入口即拒绝；默认旧loader路径不变。
+
+5类33方法5208检查通过，8024ms（source-session-publication-tests.log），含费用局部失败仍返回20能耗、0次回退、仅返回报告refs、删去未发报告的父/子诊断计数、共享ref筛选、全/部分/无报告、原冻结Map与样本身份不变、peer占满时关闭以及准入拒绝。原全局错误测试仍执行。新包未重跑全套，不能套用11939ed3的113类完整回归结论。
+
+新前缀 source-session-published-main 单独保存本次捕获回放，不覆盖11939ed3回执。30秒时限内12.226秒，仍8provenance/58严格分组+5行窄诊断差异通过，全池1000/峰158473/unprepared0/关闭raw及temporary0。响应497574B，SHA256 61C36EADF99E6FF54AFDF302CE3261AE593B6D62FB82F9CC7B46EEA70384D3EE。原生入口/输入与最终图共同创建时准入仍未切换或宣称完成；未部署。
