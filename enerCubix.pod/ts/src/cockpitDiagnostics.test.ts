@@ -53,7 +53,7 @@ it('opaque capture identities stay in evidence but not business columns; sidecar
 
 it('explains resource-limited diagnostic samples in both UI and frozen exports without changing numerical data',()=>{
  const snapshot=actual();snapshot.diagnostics={...metadata,returnedCount:0,preparedEntryLimited:true};const before=structuredClone(snapshot);
- for(const language of ['zh-CN','en-US']){
+ for(const language of ['zh-CN','en-US'] as const){
   initializeLocale(language);const html=renderToStaticMarkup(createElement(DiagnosticNotice,{metadata:snapshot.diagnostics})),packet=freezeCockpitExport(snapshot,language,{});
   const phrase=language==='zh-CN'?'为统计计算保留空间':'reserve capacity for statistical computation';expect(html).toContain(phrase);expect(packet.diagnosticNotice).toContain(phrase);
   expect(cockpitPrintEvidence(packet).diagnostics).toMatchObject({preparedEntryLimited:true,returnedCount:0,rowBudget:1000});
