@@ -9,7 +9,7 @@ internal class EnerCubixCockpitRequestScope
     {
       deadline.check;EnerCubixCockpitGate.enter(project,user);entered=true
       owner=EnerCubixPreparedOwner(this.stream.state)
-      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null}
+      owner.hold(24);owner.watch |->Void| {envelope?.clear;envelope=null;inputs=null}
     }
     catch(Err e)
     {
@@ -23,15 +23,30 @@ internal class EnerCubixCockpitRequestScope
   EnerCubixCockpitDeadline deadline() {stream.state.deadline}
   private EnerCubixPreparedOwner? owner
   private [Str:Obj?]? envelope
+  private EnerCubixPreparedOwner? inputOwner
+  private [Str:Obj?]? inputs
   private Bool entered := false
   private Bool closed := false
   private Bool attempted := false
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {owner?.entries ?: 0}
+  Int entries() {(owner?.entries ?: 0)+(inputOwner?.entries ?: 0)}
   Void checkContext(Str project,Str user)
   {if(closed || !entered || this.project!=project || this.user!=user) throw ArgErr("cockpitRequestScopeContext");deadline.check}
+  Str:Obj? freezeInputs(Str:Obj? input,Str:Obj? owned,[Str:Obj?][] records)
+  {
+    checkContext(project,user)
+    if(inputs!=null) throw ArgErr("cockpitRequestInputsAlreadyFrozen")
+    if(inputOwner==null) inputOwner=EnerCubixPreparedOwner(stream.state)
+    scratch:=EnerCubixPreparedOwner(stream.state);Map? bundle
+    try
+    {
+      scratch.hold(4);bundle=["input":input,"owned":owned,"records":records]
+      inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);return inputs
+    }
+    finally {bundle?.clear;scratch.close}
+  }
   Void deliver(Str:Obj? data,|Buf| send)
   {
     checkContext(project,user)
@@ -50,7 +65,10 @@ internal class EnerCubixCockpitRequestScope
     if(closed) return
     if(delivering) throw ArgErr("cockpitRequestScopeInUse")
     closed=true
-    try {owner?.close}
-    finally {if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}}
+    Err? failure
+    try {owner?.close} catch(Err e) {failure=e}
+    try {inputOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit input cleanup also failed",e)}
+    if(entered) {entered=false;EnerCubixCockpitGate.leave(project,user)}
+    if(failure!=null) throw failure
   }
 }

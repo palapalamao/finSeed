@@ -4,10 +4,16 @@ using util
 class EnerCubixCockpit
 {
   internal static Str:Obj? execute(Str:Obj? input, [Str:Obj?][] records,
-    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:], |Str,Str:Obj?->Str:Obj?|? preparedReport := null,|Str,Str:Obj?->Str:Obj?|? preparedCop := null,|Str,Str:Obj?->Str:Obj?|? preparedRule := null)
+    |Str:Obj?,[Str:Obj?][]->[Str:Obj?][]| load, Str project, TimeZone tz, DateTime now, Bool canManage := false, |->DateTime|? clock := null, |->[Str:Obj?][]|? activeEvents := null, |Str:Obj?,[Str:Obj?][],[Str:Obj?][]->Str:Obj?|? kpiReport := null, EnerCubixCockpitDeadline? deadline := null, Str:Obj? ownedConfig := [:], |Str,Str:Obj?->Str:Obj?|? preparedReport := null,|Str,Str:Obj?->Str:Obj?|? preparedCop := null,|Str,Str:Obj?->Str:Obj?|? preparedRule := null,EnerCubixCockpitRequestScope? requestScope := null)
   {
-    input=(Str:Obj?)input.toImmutable
-    ownedConfig=(Str:Obj?)ownedConfig.toImmutable
+    if(requestScope==null) {input=(Str:Obj?)input.toImmutable;ownedConfig=(Str:Obj?)ownedConfig.toImmutable}
+    else
+    {
+      requestScope.checkContext(project,requestScope.user)
+      if(deadline!=null && deadline!==requestScope.deadline) throw ArgErr("cockpitRequestScopeDeadline")
+      deadline=requestScope.deadline;bundle:=requestScope.freezeInputs(input,ownedConfig,records)
+      input=(Str:Obj?)bundle["input"];ownedConfig=(Str:Obj?)bundle["owned"];records=([Str:Obj?][])bundle["records"]
+    }
     snapshotId:=Uuid().toStr
     readClock:=clock ?: |->DateTime| {DateTime.now}
     request:=query(input,project,tz,now)

@@ -433,7 +433,7 @@ class EnerCubixRepo
       {
         return EnerCubixCockpitIssues.readableEvents(EnerCubixNativeAlarms(this).list,cx.proj.name) |id->Bool|
         {source:=cx.db.readById(Ref(id),false);return source != null && cx.canRead(source)}
-      },null,deadline,owned)
+      },null,deadline,owned,null,null,null,scope)
       if (Duration.nowTicks-started > 30sec.ticks) throw EnerCubixHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
       return result
     }

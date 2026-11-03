@@ -4,6 +4,25 @@ using util
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testInputCopyLimitRejectsBeforeAnySourceCallbackAndPreservesPeer()
+  {
+    scope:=EnerCubixCockpitRequestScope("test","controlled-input-limit");budget:=scope.stream
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-100);held:=peer.entries;loads:=0
+    request:=input;request["modules"]=["trend"]
+    try
+    {
+      try
+      {
+        EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]| {loads++;return [Str:Obj?][,]},"test",TimeZone.utc,DateTime.fromIso(request["asOf"].toStr),false,null,null,null,null,[:],null,null,null,scope)
+        fail("Input clone admission must finish before a source callback")
+      }
+      catch(EnerCubixHttpErr e) {verifyEq(e.status,422);verifyEq(e.code,"PREPARED_READ_LIMIT")}
+      verifyEq(loads,0);verifyEq(budget.nativeReads,0);verify(!scope.responseStarted);verify(scope.canSendError)
+      verifyEq(peer.entries,held);scope.close;verifyEq(budget.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
   Void testOneRequestDeadlineAndBudgetReachAllModulesAndTheFinalWire()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr;request:=input;request["payloadEncoding"]="compact-v1"
@@ -14,7 +33,7 @@ class EnerCubixCockpitSourceSessionTest : Test
     try
     {
       snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
-      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i)))}});return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+      {verify(q["_cockpitDeadline"]===scope.deadline);session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(p.id.id=="pn" ? 0.1f*i : 10f*i*i)))}});return session.load},"test",TimeZone.utc,b,true,null,null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
       scope.deliver(snapshot,|Buf bytes|
       {
         calls++;escaped=bytes;verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitGate.enter("test","controlled-nine-wire")}

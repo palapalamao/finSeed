@@ -304,3 +304,11 @@ cockpit-wire-final-tests.log 1类4方法45检查通过，2319ms；新helper未�
 3类13方法112检查通过，2476ms（cockpit-freeze-final-tests.log）。覆盖500次引用1000行同一证据只复制一次，独立相等Map不误合并，明确null与0，复制中限额/统一期限失败及peer保护。首轮真实复现Fantom默认List泛型对null强制非空，改用Obj?[]及Obj:Obj?容器视图后保留null，未改数据。冻结器此批还未挂到Root，完整请求创建时准入仍待；不是JVM堆或FIN实机证明。
 
 补充入站边界的准确单位：既有cockpit readBody的2097152限制按StrBuf.size计字符，默认不启用UTF-8字节限制；字节限制仅用于既有素材上传分支。前文“2MiB入站”应以此为准，不能当作cockpit的2MiB UTF-8保证。此次保持原readBody与其他route行为；最终响应的8388608限制则已按完整UTF-8信封字节测试。
+
+冻结输入接入同一scope（仍未完成其创建上游及投影准入）
+
+Root在带requestScope的私有路径将input/ownedConfig/records作为一个复合输入一次冻结，保留owned.modelRecords与records真实别名；新不可变图提前准入并由独立inputOwner持续保留到最终发送/清理。公共旧路径requestScope=null沿用原冻结。Repo的scoped路径传递scope；Root也检查同一deadline，不能另起计时。scope先放下信封/输入根，再关自身和inputOwner，保留第一清理异常；不清其他请求或peer。
+
+4类29方法626检查通过，6132ms（cockpit-inputs-final-tests.log），含主点全九模块/compact/wire链、复合记录身份与原记录后续修改隔离；输入副本限额在0次source loader和0历史读取前拒绝，responseStarted=false且peer保留。这里准入的是从已提供输入生成的副本；Repo/Folio模型生成、History配置及Root目录/计划/模块投影等创建本身仍需继续覆盖，不能后数图冒充前置准入。
+
+输入冻结同scope的捕获回放另存cockpit-inputs-scoped-main前缀，包含共享modelRecords/modelComplete的模拟原生owned输入：11.627秒/30秒限额，8provenance/58严格组和5行窄诊断校验均通过，全池1000，462回调/12094样本/unprepared0。计入输入副本后峰177136，关闭raw/temporary0，prepared48不重置，发送回调Gate仍占有；响应497574B，SHA256 BA044CF2107870D08BE273DB9F8F906773DCFA8B33D839AC641182D00C221C7F。新增的owned模型元数据属于受控回放装配，未冒充实际FIN读取。该回放在最后仅追加输入拒绝测试前执行，生产实现相同，不当作最终发布包实机验收。未部署，默认历史入口仍未切SourceSession。

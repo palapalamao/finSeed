@@ -3,6 +3,23 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testInputBundleSharesFrozenModelRecordsAndKeepsTheirOwnerThroughSending()
+  {
+    record:=Str:Obj?["id":"m","name":"Original 中文","kind":"meter"]
+    records:=[record];owned:=Str:Obj?["modelRecords":records,"modelComplete":true]
+    scope:=EnerCubixCockpitRequestScope("request-inputs","a");Map? inputs
+    try
+    {
+      inputs=scope.freezeInputs(["schemaVersion":1],owned,records)
+      verify(inputs.isImmutable);model:=(List)((Map)inputs["owned"])["modelRecords"]
+      verify(model===inputs["records"]);verify(model.first===((List)inputs["records"]).first)
+      record["name"]="later edit";verifyEq(((Map)model.first)["name"],"Original 中文")
+      scope.deliver(["schemaVersion":1],|Buf bytes| {verify(scope.stream.state.temporary.val>scope.entries);verify(inputs.isImmutable)})
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {inputs=null;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0);verify(!records.isImmutable)
+  }
   Void testGateRemainsHeldThroughWireSendingAndAnOldCloseCannotReleaseANewRequest()
   {
     project:="request-scope-success";user:="a";scope:=EnerCubixCockpitRequestScope(project,user);calls:=0
