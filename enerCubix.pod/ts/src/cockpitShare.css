@@ -1,0 +1,11 @@
+.cockpit-share-chart{container:cockpit-shares / inline-size;min-width:0}
+.cockpit-share-legend{display:none;list-style:none;margin:0 0 16px;padding:0}
+.cockpit-share-legend>li{min-width:0;padding:10px 0;border-bottom:1px solid #dce6e9}
+.cockpit-share-heading{display:flex;align-items:baseline;gap:8px;min-width:0}
+.cockpit-share-swatch{width:10px;height:10px;flex:0 0 10px;border-radius:2px}
+.cockpit-share-name,.cockpit-share-value,.cockpit-share-percentage,.cockpit-share-context{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.cockpit-share-name{font-size:13px;line-height:1.6}
+.cockpit-share-context{display:block;margin-left:18px;color:#607484}
+.cockpit-share-chart .cockpit-share-legend dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:5px 0 0 18px}
+.cockpit-share-legend dl>div{min-width:0}.cockpit-share-legend dt{font-size:11px;color:#607484}.cockpit-share-legend dd{margin:2px 0 0;font-size:14px;font-variant-numeric:tabular-nums}.cockpit-share-legend dl>div:last-child{text-align:right}
+@container cockpit-shares (max-width:480px){.cockpit-share-legend{display:block}}
