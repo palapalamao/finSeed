@@ -52,13 +52,14 @@ for(const language of ['zh-CN','en-US'])test('homepage starts querying while pag
  expect(errors).toEqual([]);
 });
 
-for(const language of ['zh-CN','en-US'])test('a failed page download retains localized recovery and navigation '+language,async({page})=>{
+for(const language of ['zh-CN','en-US'])test('a failed page download retains localized recovery and navigation '+language,async({page},info)=>{
  const zh=language==='zh-CN';await installTransport(page,{userLocale:language});
  const managementFile=chunk('Management')!.file;
  await page.route('**/'+managementFile,route=>route.abort('failed'));
  await page.goto('/#/tree?project=testproject');
  await expect(page.getByText(zh?'页面加载失败，请重新加载。':'The page could not be loaded. Reload to try again.',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:zh?'重新加载页面':'Reload page',exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('page-download-failure-'+language+'.png'),fullPage:true});
  await page.getByRole('navigation',{name:zh?'主导航':'Main navigation',exact:true}).getByRole('button',{name:zh?'消息中心':'Message center',exact:true}).click();
  await expect(page.getByRole('heading',{name:zh?'消息中心':'Message center',exact:true})).toBeVisible();
 });

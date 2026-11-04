@@ -25,3 +25,5 @@
 最终发布清单实际静态入口为 `index-TsFthAdx.js`、`App-BcK_lY95.js`，与本次原版构建匹配。先前总结中的其他文件名属于旧候选。运行 PID 后来变化而 Pod 哈希仍相同，由发布负责人单独核对，不能把进程变化或页脚版本当作本优化已部署。
 
 本次优化源码尚待集成与统一发布。后端约 4.8 秒的业务查询仍是主要等待，应继续基于同范围请求定位；不宣称前端拆包已修复后端查询。原始证据位于本工作区 `out/homepage-performance/`，含 before／after 依赖闭包 JSON 与 live-before 请求及截图。
+
+2026-11-04 补充交接：前端实现 `bd20dae1` 已由主开发集成至 developer `1d0b6603`，尚未发布。浏览器原生 Resource Timing 另存 `live-before-browser-timing.json`：catalog 在导航后约 1,350ms 发起，cockpit 在 1,669ms 发起、6,470ms 收完；静态脚本本次命中缓存。新增测试补存中英下载失败恢复截图，5/5 重验通过（19.6 秒），JSON 结果 `startup-result.json` 为 5 expected／0 unexpected／0 flaky；320px 中文首页及英文恢复页已打开图像核对。截图仅为受控 UI，不标为 FIN 新版实机证据。
