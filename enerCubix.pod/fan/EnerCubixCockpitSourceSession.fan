@@ -225,8 +225,90 @@ internal class EnerCubixCockpitSourceSession
       Log.get("enerCubix").err("Cockpit native history read failed; unpublished query discarded",e.cause)
       failure=EnerCubixHttpErr(502,"HISTORY_READ_FAILED","cockpitHistoryReadFailed");close;throw failure
     }
-    catch(Err e) {failure=e;close;throw e}
+    catch(Err e) {logAdmissionFailure(e);failure=e;close;throw e}
   }
+  ** Failure diagnostics only: inspect scalar ownership before cleanup drops
+  ** their roots. This never retries a read or changes resource admission.
+  private Void logAdmissionFailure(Err error)
+  {
+    resource:=error as EnerCubixHttpErr
+    if(resource==null || (resource.code!="PREPARED_READ_LIMIT" && resource.code!="QUERY_TIMEOUT")) return
+    try
+    {
+      state:=budget.state
+      text:=StrBuf().add("Cockpit resource census code=").add(resource.code)
+      text.add(" retainedAfterUnwind=true prepared=").add(state.prepared.val).add(" temporary=").add(state.temporary.val)
+      text.add(" peak=").add(state.peak.val).add(" peakTemporary=").add(state.peakTemporary.val)
+      text.add(" sourceOwner=").add(owner.entries).add(" nativeReads=").add(budget.nativeReads)
+      text.add(" scanned=").add(budget.scanned).add(" windows=").add(windows.size)
+      if(requestScope!=null)
+      {
+        text.add(" scope{")
+        ["owner","inputOwner","planningModel","planningState","sourcePlanOwner","configurationOwner","historyOwner","historyMetadataWork","reportOwner","reportBorrowOwner"].each |name|
+        {text.add(name).addChar('=').add(ownerEntries(requestScope,name)).addChar(' ')}
+        text.addChar('}')
+      }
+      if(registry!=null)
+      {
+        text.add(" registry{watermark=").add(fieldValue(registry,"watermark"))
+        ["model","metadata","diagnosticOwner","flowModel","copModel"].each |name|
+        {text.addChar(' ').add(name).addChar('=').add(ownerEntries(registry,name))}
+        pool:=fieldValue(registry,"pool")
+        if(pool!=null) text.add(" samples=").add(fieldValue(pool,"kept")).add(" sampleLimited=").add(fieldValue(pool,"preparedEntryLimited"))
+        works:=fieldValue(registry,"works") as Map
+        works?.each |work,key|
+        {
+          if(work==null || text.size>12000) return
+          text.add(" work[").add(key).add("]{next=").add(fieldValue(work,"next"))
+          text.add(" to=").add(fieldValue(work,"to")).add(" state=").add(ownerEntries(work,"state"))
+          text.add(" stateWithDaily=").add(((EnerCubixCockpitReportWork)work).stateEntries)
+          consumer:=fieldValue(work,"consumer");periodChildren:=0
+          if(consumer!=null) (fieldValue(consumer,"periods") as List)?.each |period| {periodChildren+=ownerEntries(period,"periodOwner")}
+          text.add(" periodChildren=").add(periodChildren).add(" output=").add(ownerEntries(work,"output")).addChar('}')
+        }
+        flow:=fieldValue(registry,"flowWork")
+        if(flow!=null)
+        {
+          text.add(" flow{")
+          ["state","numbers","graph"].each |name| {text.add(name).addChar('=').add(ownerEntries(flow,name)).addChar(' ')}
+          flowConsumer:=fieldValue(flow,"consumer")
+          if(flowConsumer!=null) text.add(" calc=").add(ownerEntries(flowConsumer,"calc"))
+          text.addChar('}')
+        }
+        ["copWorks","ruleWorks"].each |name|
+        {
+          entries:=0;(fieldValue(registry,name) as Map)?.each |work|
+          {["state","output","graph"].each |key| {entries+=ownerEntries(work,key)}}
+          text.addChar(' ').add(name).addChar('=').add(entries)
+        }
+        catalog:=fieldValue(registry,"catalog")
+        if(catalog!=null)
+        {
+          text.add(" catalogOwner=").add(ownerEntries(catalog,"owner"))
+          ["nodeWarningTexts","lineWarningTexts"].each |name|
+          {
+            groups:=fieldValue(catalog,name) as Map;count:=0
+            groups?.each |values| {count+=(values as Map)?.size ?: 0}
+            text.addChar(' ').add(name).addChar('=').add(groups?.size ?: 0).addChar('/').add(count)
+          }
+        }
+        text.addChar('}')
+      }
+      totalPrepared:=0;totalDetail:=0;totalInterval:=0
+      windows.each |window,index|
+      {
+        cursor:=window.cursor;if(cursor==null) return
+        prepared:=(Int)fieldValue(cursor,"cursorPreparedCharge");detail:=(Int)fieldValue(cursor,"cursorDetailCharge");interval:=(Int)fieldValue(cursor,"cursorIntervalCharge")
+        totalPrepared+=prepared;totalDetail+=detail;totalInterval+=interval
+        if(text.size<16000) text.add(" cursor[").add(index).add("]{prepared=").add(prepared).add(" detail=").add(detail).add(" interval=").add(interval).add(" hour=").add(fieldValue(cursor,"hour")).addChar('}')
+      }
+      text.add(" cursorTotals=").add(totalPrepared).addChar('/').add(totalDetail).addChar('/').add(totalInterval)
+      Log.get("enerCubix").warn(text.toStr)
+    }
+    catch(Err ignored) {} // Diagnostics must never replace the original failure.
+  }
+  private static Obj? fieldValue(Obj source,Str name) {source.typeof.field(name,false)?.get(source)}
+  private static Int ownerEntries(Obj source,Str name) {(fieldValue(source,name) as EnerCubixPreparedOwner)?.entries ?: 0}
   ** All source cursors are closed and every public header is immutable. Retire
   ** the consumed source builders/window metadata before report/provenance work;
   ** the registry, frozen headers and diagnostic/catalog owners remain alive.

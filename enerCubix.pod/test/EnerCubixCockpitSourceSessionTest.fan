@@ -5,6 +5,31 @@ using [java] java.util::IdentityHashMap
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testSourcePreparationGuardKeepsPeerAndCleanupAfterFailureCensus()
+  {
+    request:=input;request["modules"]=["trend"];end:=DateTime.fromIso("2026-10-01T02:00:00Z")
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
+    budget:=EnerCubixStreamBudget();peer:=EnerCubixPreparedOwner(budget.state);held:=0;calls:=0
+    EnerCubixCockpitSourceSession? session
+    read:=|Dict p,Span span,|HisItem| sink|
+    {calls++;if(held==0) {peer.hold(budget.state.remaining);held=peer.entries}}
+    try
+    {
+      try
+      {
+        EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,read);return session.load},"test",TimeZone.utc,end,false,null,null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)})
+        fail("Expected the unchanged source preparation guard")
+      }
+      catch(EnerCubixHttpErr e) {verifyEq(e.code,"PREPARED_READ_LIMIT");verifyEq(e.status,422)}
+      verify(calls>0);verifyEq(peer.entries,held);verifyEq(budget.state.temporary.val,held)
+      verifyEq(budget.residentRaw,0);verifyEq(budget.state.prepared.val,0)
+    }
+    finally {session?.close;peer.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testFinalPlanningRetirementPreservesTheWholeSnapshotAndPublishedDiagnostics()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr
