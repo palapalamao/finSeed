@@ -1,5 +1,97 @@
+using [java] java.util::IdentityHashMap
+
 class EnerCubixHeatmapConsumerTest : Test
 {
+  Void testCompleteDaySharesOnlyEqualOrderedSourceVectorsWithinItsOutputOwner()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+48hr,at+48hr,state,output)
+    ids:=(0..<21).map |i->Str| {"p$i"}
+    (0..<48).each |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",ids.dup)))}
+    data:=consumer.finish;cells:=EnerCubixMath.maps(data["heatmap"])
+    try
+    {
+      verifyEq(cells.size,48);verify(cells[0]["sourceIds"]===cells[23]["sourceIds"])
+      verify(cells[24]["sourceIds"]===cells[47]["sourceIds"]);verify(cells[0]["sourceIds"]!==cells[24]["sourceIds"],"days have independent owner transfers")
+      cells.each |row,i| {verifyEq(row["value"],i.toFloat);verifyEq(row["sourceIds"],ids);verifyEq(row["hour"],i%24)}
+      verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()),"charge every actual map/list entry exactly once")
+      state.close;verifyEq(cells[23]["sourceIds"],ids)
+    }
+    finally {state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  private Int graphEntries(Obj? value,IdentityHashMap seen)
+  {
+    if(value==null || (value isnot Map && value isnot List) || seen.containsKey(value)) return 0
+    seen.put(value,true);n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(value is Map) ((Map)value).each |v| {n+=graphEntries(v,seen)}
+    else ((List)value).each |v| {n+=graphEntries(v,seen)}
+    return n
+  }
+
+  Void testOrderedAndEmptySourceVectorsKeepAllHourlyCells()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+24hr,at+24hr,state,output)
+    (0..<24).each |i|
+    {ids:=i==5 || i==7 ? Str[,] : (i%2==0 ? ["p","q"] : ["q","p"]);consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(0f,"ok",ids)))}
+    data:=consumer.finish;cells:=EnerCubixMath.maps(data["heatmap"])
+    try
+    {
+      verifyEq(cells.size,24);verify(cells[0]["sourceIds"]!==cells[1]["sourceIds"])
+      verify(cells[0]["sourceIds"]===cells[2]["sourceIds"]);verify(cells[5]["sourceIds"]===cells[7]["sourceIds"])
+      verifyEq(cells[0]["sourceIds"],["p","q"]);verifyEq(cells[1]["sourceIds"],["q","p"]);verifyEq(cells[5]["sourceIds"],Str[,])
+      verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()))
+      state.close;verifyEq(cells[0]["sourceIds"],["p","q"])
+    }
+    finally {state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testDenseAnnualHeatmapKeeps8760IndividualHoursInsideTheExistingLimit()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+8760hr,at+8760hr,state,output);ids:=(0..<21).map |i->Str| {"p$i"}
+    try
+    {
+      (0..<8760).each |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",ids.dup)))}
+      data:=consumer.finish;cells:=EnerCubixMath.maps(data["heatmap"])
+      verifyEq(cells.size,8760);verifyEq(EnerCubixMath.maps(data["excludedDays"]).size,0)
+      cells.each |row,i| {verifyEq(row["value"],i.toFloat);verifyEq(row["sourceIds"],ids)}
+      verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()));verify(budget.peak.val<110000)
+    }
+    finally {state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testSharedSourcesSurviveDestructiveFreezeAndProducerCleanup()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget);target:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+24hr,at+24hr,state,output)
+    (0..<24).each |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",["p","q"])))}
+    data:=consumer.finish
+    try
+    {
+      frozen:=(Map)EnerCubixCockpitFreeze.value(data,target,null,|Obj value|
+      {
+        count:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+        if(value is Map) ((Map)value).clear;else ((List)value).clear
+        output.release(count)
+      })
+      verifyEq(output.entries,5);state.close;output.close
+      cells:=(List)frozen["heatmap"];verifyEq(cells.size,24)
+      cells.each |Map cell,i| {verifyEq(cell["value"],i.toFloat);verifyEq(cell["sourceIds"],["p","q"])}
+      verify(((Map)cells.first)["sourceIds"]===((Map)cells.last)["sourceIds"])
+    }
+    finally {state.close;output.close;target.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testCompletedHeatmapRetiresOnlyDuplicatePrivateLinks()
   {
     at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
@@ -77,9 +169,7 @@ class EnerCubixHeatmapConsumerTest : Test
     line.ticks.each |tick| {consumer.add(tick)}
     actual:=consumer.finish;data:=(Map)expected["data"]
     verifyEq(actual["heatmap"],data["heatmap"]);verifyEq(actual["excludedDays"],data["excludedDays"])
-    retained:=5+((List)actual["excludedDays"]).size*5
-    ((List)actual["heatmap"]).each |Map row| {retained+=12+((List)row["sourceIds"]).size}
-    verify(output.entries>=retained,"admit the actual retained cell/source graph")
+    verifyEq(output.entries,5+graphEntries(actual,IdentityHashMap()),"admit every actual retained container entry, counting shared arrays once")
     verify(budget.peak.val<200000)
     if(quality=="na" && (to-from)>=1000hr) verify(budget.peak.val<2000,"incomplete hours must not accumulate in the output")
     cells:=(List)actual["heatmap"];excluded:=(List)actual["excludedDays"]

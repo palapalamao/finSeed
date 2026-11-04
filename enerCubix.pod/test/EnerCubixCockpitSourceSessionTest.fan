@@ -210,7 +210,9 @@ class EnerCubixCockpitSourceSessionTest : Test
   }
   Void testFinishedHeatmapFreezeDoesNotRequireASecondResidentPublicGraph()
   {
-    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    // Four complete days keep this fixture larger than the 1024-entry
+    // transfer boundary after equal per-day source vectors are shared.
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+96hr;request:=input
     request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
     rs:=records
     extra:=Str[,];12.times |i| {extra.add("p$i")}
@@ -224,7 +226,7 @@ class EnerCubixCockpitSourceSessionTest : Test
     {
       snapshot:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
       {
-        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope)
+        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..96).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope)
         // This boundary targets the owned report, not a second copy of shared
         // optional diagnostics. Shared nonempty borrows are checked separately.
         registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)

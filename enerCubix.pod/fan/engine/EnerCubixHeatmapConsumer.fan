@@ -86,20 +86,37 @@ internal class EnerCubixHeatmapConsumer
       // Nine cell fields, map and list link, plus the transferred source array.
       // Admit the whole day before copying any cell, so failure cannot publish
       // a partial complete day. Day-owned links expire only after transfer.
-      entries:=pending.reduce(0) |Int n,p->Int| {n+12+((List)p["sourceIds"]).size}
-      output.hold(entries)
-      pending.each |p|
+      entries:=0
+      pending.each |p,i|
       {
-        ts:=DateTime.fromIso(p["ts"].toStr).toTimeZone(from.tz)
-        cells.add(["seriesId":line.id,"nodeId":line.nodeId,"date":date.toStr,"hour":ts.hour,"ts":p["ts"],"value":p["value"],"unit":line.unit,"quality":p["quality"],"sourceIds":p["sourceIds"]])
+        ids:=(List)p["sourceIds"];seen:=false
+        for(j:=0;j<i;j++) {if(pending[j]["sourceIds"]==ids) {seen=true;break}}
+        // Every hourly cell keeps its full map and list link. Only equal,
+        // ordered source vectors within this one day share the same array.
+        entries+=11+(seen ? 0 : 1+ids.size)
       }
+      output.hold(entries)
+      firstCell:=cells.size
+      pending.each |p,i|
+      {
+        ids:=(List)p["sourceIds"]
+        for(j:=0;j<i;j++) {if(pending[j]["sourceIds"]==ids) {ids=(List)cells[firstCell+j]["sourceIds"];break}}
+        ts:=DateTime.fromIso(p["ts"].toStr).toTimeZone(from.tz)
+        cells.add(["seriesId":line.id,"nodeId":line.nodeId,"date":date.toStr,"hour":ts.hour,"ts":p["ts"],"value":p["value"],"unit":line.unit,"quality":p["quality"],"sourceIds":ids])
+      }
+      closeDay(true,firstCell)
     }
-    else {output.hold(5);excluded.add(Str:Obj?["seriesId":line.id,"date":date.toStr,"reasonCode":"INCOMPLETE_DAY"])}
-    closeDay(complete)
+    else {output.hold(5);excluded.add(Str:Obj?["seriesId":line.id,"date":date.toStr,"reasonCode":"INCOMPLETE_DAY"]);closeDay(false)}
   }
-  private Void closeDay(Bool transferred)
+  private Void closeDay(Bool transferred,Int firstCell := 0)
   {
-    pending.each |p| {if(!transferred) ((List)p["sourceIds"]).clear;p.clear}
+    pending.each |p|
+    {
+      ids:=(List)p["sourceIds"];retained:=false
+      if(transferred) for(i:=firstCell;i<cells.size;i++) {if(cells[i]["sourceIds"]===ids) {retained=true;break}}
+      if(!retained) ids.clear
+      p.clear
+    }
     pending.clear;dayOwner?.close;dayOwner=null;date=null
   }
   private Void check()
