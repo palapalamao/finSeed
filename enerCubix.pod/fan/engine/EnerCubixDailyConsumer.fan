@@ -75,13 +75,15 @@ internal class EnerCubixDailyBin
   new make(EnerCubixLine line,Bool intervalTotal,EnerCubixPreparedOwner state)
   {
     state.watch |->Void| {hour=null;interval=null;observed=null;firstBand=null;samples=0;knownSamples=0;closed=true};state.hold(8)
-    if(intervalTotal) interval=EnerCubixValueFold.strict(state)
+    // Ordinary energy is an ordered scalar sum. Keep the line wrapper only
+    // where its duration weighting or COP operands actually carry state.
+    if(intervalTotal || (!line.gauge && !line.ratio)) interval=EnerCubixValueFold.strict(state)
     else hour=EnerCubixLineFold(line,"value",state)
-    observed=EnerCubixLineFold(line,"known",state)
+    observed=EnerCubixValueFold.known(state)
   }
   private EnerCubixLineFold? hour
   private EnerCubixValueFold? interval
-  private EnerCubixLineFold? observed
+  private EnerCubixValueFold? observed
   private Bool closed := false
   Int samples := 0
   Int knownSamples := 0
@@ -95,10 +97,10 @@ internal class EnerCubixDailyBin
     else if(firstBand != band) mixed=true
     if(interval != null) interval.add(tick.value)
     else hour.add(tick)
-    observed.add(tick)
+    observed.add(tick.known ?: EnerCubixValue())
   }
   Str band() {mixed ? "mixed" : (firstBand ?: "unknown")}
   EnerCubixValue value() {interval?.finish ?: hour.finish}
   EnerCubixValue known() {observed.finish}
-  Int sourceEntries() {(interval == null ? hour.outputEntries : 4+interval.sourceCount)+observed.outputEntries}
+  Int sourceEntries() {(interval == null ? hour.outputEntries : 4+interval.sourceCount)+4+observed.sourceCount}
 }

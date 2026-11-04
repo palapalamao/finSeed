@@ -1,6 +1,27 @@
 ** Fixed bins preserve independent hour and interval reductions, including DST.
 class EnerCubixDailyConsumerTest : Test
 {
+  Void testPhysicalEnergyHoursRetainOnlyScalarReductionState()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("m|c","m","M","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixDailyConsumer(line,state,output)
+    (0..<48).each |i|
+    {
+      value:=EnerCubixValue(i==25 ? null : i.toFloat,i==25 ? "missing" : "ok",["p"])
+      tick:=EnerCubixTick(at+1hr*i,at+1hr*(i+1),value)
+      tick.known=i==25 ? EnerCubixValue(3f,"filtered",["p"]) : value
+      consumer.add(tick,"flat");line.ticks.add(tick)
+    }
+    verify(consumer.stateEntries<=1100,"24 physical-energy bins must fit scalar folds, without retaining gauge/COP wrappers: ${consumer.stateEntries}")
+    data:=consumer.finish
+    EnerCubixMath.maps(data["hours"]).each |row|
+    {ticks:=line.ticks.findAll |tick| {tick.ts.hour==row["hour"]};same((EnerCubixValue)row["value"],line.total(ticks));same((EnerCubixValue)row["known"],line.knownTotal(ticks))}
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+    state.close;output.close;verify(data.isEmpty);verifyEq(budget.temporary.val,held)
+    peer.close;verifyEq(budget.temporary.val,0)
+  }
+
   Void testFinishedDailyOutputReleasesItsBinStateBeforeTheParentReportCloses()
   {
     at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("m|c","m","M","c","kWh")

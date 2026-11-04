@@ -663,9 +663,13 @@ internal class EnerCubixContext
           // and the slot index are admitted before copying the borrowed map.
           // The first details list remains live while the counter's maps()
           // creates its own filtered+mapped lists (at most three lists total).
-          knownWorkspace(header+3+3*detailBound);knownHeader(key,header)
           share:=frameOwner!=null && sharedModel!=null && byId===sharedModel.byId && r.isImmutable && details.size<=remaining
           evidence:=share ? his.knownEvidence(r,from,to,knownEnd) : null
+          // A source-cache hit already has a complete map admitted under the
+          // enclosing source owner. Retain this consumer's slot/key links only;
+          // misses and trimmed replacements still admit their whole map. The
+          // slot's high-water charge upgrades before any replacement is copied.
+          knownWorkspace(header+3+3*detailBound);knownHeader(key,evidence==null ? header : 2)
           if(evidence==null)
           {
             evidence=data.dup; evidence.remove("value")
