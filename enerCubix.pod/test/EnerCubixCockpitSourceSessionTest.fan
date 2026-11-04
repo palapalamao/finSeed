@@ -1,9 +1,128 @@
 using haystack
 using util
+using [java] java.util::IdentityHashMap
 
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testFinishedReportFreezeDoesNotRequireASecondResidentPublicGraph()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","finished-report-transfer");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;checked:=false
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope)
+        // This boundary targets the owned report, not a second copy of shared
+        // optional diagnostics. Shared nonempty borrows are checked separately.
+        registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+        pool:=EnerCubixCockpitRegistry#.field("pool").get(registry)
+        EnerCubixCockpitCapture#.method("limitSamples").callOn(pool,[,])
+        return session.load
+      },"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+      {
+        if(!checked && key=="profile-energy")
+        {
+          registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+          source:=registry.read(key,q);expected:=source.toImmutable
+          graph:=mutableGraphEntries(source,IdentityHashMap());headroom:=(graph*3/4).max(256)
+          verify(graph>1024,"The fixture must contain a real multi-period report graph")
+          verify(headroom<graph,"A complete second public graph must not fit")
+          peer.hold(budget.state.remaining-headroom)
+          try {frozen:=session.read(key,q);verify(frozen.isImmutable);verifyEq(frozen,expected);checked=true;return frozen}
+          finally {peer.close}
+        }
+        return session.read(key,q)
+      },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      verify(checked);verify(((Map)snapshot["reports"]).containsKey("profile-energy"))
+      verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<=200000)
+    }
+    finally {peer.close;session?.close;scope.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  private Int mutableGraphEntries(Obj? value,IdentityHashMap seen)
+  {
+    if(value==null || value.isImmutable || (value isnot Map && value isnot List) || seen.containsKey(value)) return 0
+    seen.put(value,true);n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(value is Map) ((Map)value).each |v| {n+=mutableGraphEntries(v,seen)}
+    else ((List)value).each |v| {n+=mutableGraphEntries(v,seen)}
+    return n
+  }
+  Void testRegistryClosesRealProducersAfterMidTransferCapacityFailure()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","failed-real-transfer");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;injected:=false;held:=0
+    try
+    {
+      try
+      {
+        EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope);return session.load},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+        {
+          if(!injected && key=="profile-energy")
+          {
+            registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+            source:=registry.read(key,q)
+            containers:=Obj[,];collectMutableContainers(source,IdentityHashMap(),containers);nonempty:=containers.findAll |v| {v is Map ? !((Map)v).isEmpty : !((List)v).isEmpty}
+            peer.hold(budget.state.remaining-512);held=peer.entries;injected=true
+            try {session.read(key,q);fail("Expected capacity failure during the owned report transfer")}
+            catch(EnerCubixHttpErr e)
+            {
+              verifyEq(e.code,"PREPARED_READ_LIMIT");verifyNull(scope.frozenReport(key));verify(!scope.responseStarted)
+              verify(nonempty.any |v| {v is Map ? ((Map)v).isEmpty : ((List)v).isEmpty},"Some owned descendants must already have been consumed")
+              throw e
+            }
+          }
+          return session.read(key,q)
+        },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+        fail("No partial snapshot may escape")
+      }
+      catch(EnerCubixHttpErr e) {verifyEq(e.code,"PREPARED_READ_LIMIT")}
+      verify(injected);session.close;scope.close;verifyEq(budget.state.temporary.val,held)
+    }
+    finally {session?.close;scope.close;peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  private Void collectMutableContainers(Obj? value,IdentityHashMap seen,Obj[] containers)
+  {
+    if(value==null || value.isImmutable || (value isnot Map && value isnot List) || seen.containsKey(value)) return
+    seen.put(value,true);containers.add(value)
+    if(value is Map) ((Map)value).each |v| {collectMutableContainers(v,seen,containers)}
+    else ((List)value).each |v| {collectMutableContainers(v,seen,containers)}
+  }
+  Void testGroupedFlowRetainsEveryHourWithoutRepeatedEmptySourceLookups()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+24hr;request:=input
+    request["modules"]=["balance"];request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    point:=Etc.makeDict(["id":Ref("pd"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    prepared:=Str:Obj?["points":["pd":point],"configs":Str:Dict[:],"configRefs":Str:[Str:Obj?][]["pd":[Str:Obj?][,]]].toImmutable
+    budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
+    try
+    {
+      result:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {});return session.load},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,null,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)})
+      verify((Int)EnerCubixCockpitSourceSession#.field("emptyGroups").get(session)>0)
+      report:=(Map)((Map)result["reports"])["energy-flow"]
+      row:=EnerCubixMath.maps(((Map)((Map)report["extra"])["energyFlowOverview"])["rows"]).find |r| {r["id"]=="d"}
+      verifyNull(row["value"]);verifyNull(row["completeValue"]);verifyEq(row["coveredSeconds"],0f)
+      verifyEq(row["periodRecordTotalCount"],24);verifyEq(((List)row["periods"]).size,24)
+      verifyEq(budget.state.unprepared.val,0)
+      verify(budget.state.lookups.val<=8,"One proven-empty source group must not reread every hourly boundary: "+budget.state.lookups.val)
+    }
+    finally {session?.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
   Void testGroupedEmptyFramesKeepHourlyBusinessAndFirstReadingBoundaries()
   {
     ["empty","future","bridge","na","partial","zero","dst","noTariff","timed"].each |mode|

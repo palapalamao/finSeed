@@ -3,6 +3,73 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testOwnedReportTransferPreservesAliasesAndEveryBorrowedDescendant()
+  {
+    scope:=EnerCubixCockpitRequestScope("transfer-aliases","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);other:=EnerCubixPreparedOwner(budget)
+    child:=Str:Obj?["values":[7f,null,0f]];sample:=Str:Obj?["quality":"partial","detail":[child]]
+    catalog:=Str:Obj?["nested":[child]];beforeCatalog:=catalog.toImmutable;beforeSample:=sample.toImmutable
+    shared:=Str:Obj?["name":"中文 😀","values":[12.5f,null,0f]];equal:=shared.dup
+    source:=Str:Obj?[:];source.ordered=true
+    source["same"]=[shared,shared];source["equal"]=equal;source["directBorrow"]=child
+    source["sampleBorrow"]=sample["detail"];source["distinctEqualBorrow"]=child.dup
+    expected:=source.toImmutable;producer.hold(512);producer.watch |->Void| {source.clear}
+    second:=Str:Obj?["directBorrow":child,"sampleBorrow":sample]
+    secondExpected:=second.toImmutable;other.hold(128);other.watch |->Void| {second.clear}
+    try
+    {
+      scope.prepareReportBorrows([catalog],[sample])
+      result:=scope.freezeOwnedReport("first",source,producer)
+      verify(result.isImmutable);verify(result.ordered);verifyEq(result,expected)
+      same:=(List)result["same"];verify(same.first===same.last);verify(same.first!==result["equal"])
+      verify(((Map)same.first)["values"]===((Map)result["equal"])["values"])
+      verify(result["directBorrow"]!==result["distinctEqualBorrow"])
+      verify(source.isEmpty);verify(shared.isEmpty);verify(equal.isEmpty)
+      verifyEq(catalog,beforeCatalog);verifyEq(sample,beforeSample);verifyEq(child["values"],[7f,null,0f])
+      verify(scope.frozenReport("first")===result);producer.close
+      next:=scope.freezeOwnedReport("second",second,other);verifyEq(next,secondExpected)
+      verifyEq(catalog,beforeCatalog);verifyEq(sample,beforeSample);other.close
+      verifyEq(result,expected);verifyEq(next,secondExpected)
+    }
+    finally {producer.close;other.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedReportTransferFailurePublishesNothingAndPreservesPeerAndBorrowedInputs()
+  {
+    scope:=EnerCubixCockpitRequestScope("transfer-failure","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(31);held:=peer.entries
+    borrowed:=Str:Obj?["rows":[["value":0f]]];expected:=borrowed.toImmutable
+    source:=Str:Obj?[:];source.ordered=true;first:=Str:Obj?["data":[1,2,3]]
+    source["first"]=first;source["borrowed"]=borrowed;source["invalid"]=StrBuf().add("opaque")
+    producer.hold(128);producer.watch |->Void| {source.clear}
+    try
+    {
+      scope.prepareReportBorrows([borrowed],Obj[,])
+      verifyErr(NotImmutableErr#) {scope.freezeOwnedReport("failed",source,producer)}
+      verify(first.isEmpty,"The fixture fails after consuming one owned child")
+      verifyNull(scope.frozenReport("failed"));verify(!scope.responseStarted);verifyEq(borrowed,expected)
+      verifyEq(peer.entries,held);producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedReportTransferRejectsUnpreparedCrossRequestAndClosedProducers()
+  {
+    scope:=EnerCubixCockpitRequestScope("transfer-context","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);foreign:=EnerCubixPreparedOwner(EnerCubixStreamBudget().state)
+    source:=Str:Obj?["value":1];producer.hold(16)
+    try
+    {
+      verifyErr(ArgErr#) {scope.freezeOwnedReport("not-ready",source,producer)}
+      scope.prepareReportBorrows(Obj[,],Obj[,]);verifyErr(ArgErr#) {scope.prepareReportBorrows(Obj[,],Obj[,])}
+      verifyErr(ArgErr#) {scope.freezeOwnedReport("foreign",source,foreign)}
+      producer.close;verifyErr(ArgErr#) {scope.freezeOwnedReport("closed",source,producer)}
+      verifyEq(source,Str:Obj?["value":1]);verifyNull(scope.frozenReport("foreign"));verifyNull(scope.frozenReport("closed"))
+    }
+    finally {producer.close;foreign.close;scope.close}
+    verifyEq(budget.temporary.val,0);verifyEq(foreign.budget.temporary.val,0)
+  }
+
   Void testExactInputModelFactsShareOneFrozenCopyWithinTheOriginalBudget()
   {
     rs:=[Str:Obj?][,];500.times |i| {r:=Str:Obj?["id":"r$i","kind":"meter"];18.times |j| {r["field$j"]="value$j"};rs.add(r)}

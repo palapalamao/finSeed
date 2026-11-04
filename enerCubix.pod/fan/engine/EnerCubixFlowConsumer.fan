@@ -78,37 +78,54 @@ internal class EnerCubixFlowConsumer
   private Err? failure
 
   Void addFrame(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {addFrames(histories,frame,EnerCubixMath.floorHour(at)+1hr)}
+  ** The source scheduler proves an empty group before sharing this frame.
+  ** Keep every original hourly fold, coverage call and diagnostic period; only
+  ** the same device's null own-history result and context workspace are reused.
+  Void addFrames(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame,DateTime through,Bool constantEmpty := false)
   {
     check
-    if(done || stateClosed || at>=to || frame.budget!==state.budget) throw ArgErr("flowConsumerFrame")
+    if(done || stateClosed || at>=to || through<=at || frame.budget!==state.budget || (!constantEmpty && through>EnerCubixMath.floorHour(at)+1hr)) throw ArgErr("flowConsumerFrame")
     try
     {
-      end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
       devices.each |device|
       {
         frame.hold(2);own:=Str:EnerCubixHistoryData[:]
         h:=histories[device.point];if(h!=null) own[device.point]=h
-        device.strict.beginFrame(frame,own);device.known.beginFrame(frame,own)
-        device.strict.warningScope(0,0,at.ticks)
-        strict:=device.strict.node(device.id,device.category,at,end)
-        known:=device.known.node(device.id,device.category,at,end)
-        device.strictFold.add(strict);device.knownFold.add(known)
-        frame.hold(2+2*device.known.knownReads.size)
-        rows:=device.known.knownReads.vals
-        device.coverage.addFrame(rows,frame)
-        rows.each |row| {pool.put(usageKey,row);reads++}
-        emptyOmitted=emptyOmitted || device.known.emptyEvidenceOmitted
-        unpreparedOmitted=unpreparedOmitted || device.known.unpreparedEvidenceOmitted
-        key:=periodKeys[device.id]
-        if(pool.canPutSimple(key))
-        {
-          scratch:=state.fork
-          try {scratch.hold(6);pool.put(key,["from":at.toIso,"to":end.toIso,"value":known.value,"quality":known.quality,"pointId":device.point])}
-          finally {scratch.close}
-        }
-        else pool.skipSimple(key)
+        device.strict.beginFrame(frame,own,constantEmpty);device.known.beginFrame(frame,own,constantEmpty)
       }
-      periods++;at=end
+      while(at<to && at<through)
+      {
+        state.budget.deadline.check
+        end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
+        devices.each |device|
+        {
+          device.strict.warningScope(0,0,at.ticks)
+          strict:=device.strict.node(device.id,device.category,at,end)
+          known:=device.known.node(device.id,device.category,at,end)
+          device.strictFold.add(strict);device.knownFold.add(known)
+          charge:=2+2*device.known.knownReads.size;frame.hold(charge)
+          [Str:Obj?][]? rows
+          try
+          {
+            rows=device.known.knownReads.vals
+            device.coverage.addFrame(rows,frame)
+            rows.each |row| {pool.put(usageKey,row);reads++}
+          }
+          finally {rows?.clear;frame.release(charge)}
+          emptyOmitted=emptyOmitted || device.known.emptyEvidenceOmitted
+          unpreparedOmitted=unpreparedOmitted || device.known.unpreparedEvidenceOmitted
+          key:=periodKeys[device.id]
+          if(pool.canPutSimple(key))
+          {
+            scratch:=state.fork
+            try {scratch.hold(6);pool.put(key,["from":at.toIso,"to":end.toIso,"value":known.value,"quality":known.quality,"pointId":device.point])}
+            finally {scratch.close}
+          }
+          else pool.skipSimple(key)
+        }
+        periods++;at=end
+      }
     }
     catch(Err e) {failure=e;throw e}
   }

@@ -193,6 +193,7 @@ internal class EnerCubixCockpitSourceSession
         else addHeader(w,w.unavailable)
         w.cursor?.close;w.cursor=null
       }
+      if(requestScope!=null) registry.prepareReportBorrows(requestScope)
       owner.hold(48);observed:=budget.evidence;stats.setAll(observed);observed.clear
       owner.hold(12)
       meta:=Str:Obj?["schemaVersion":1,"diagnostics":registry.diagnostics,"preparedBudget":budget.state,"streaming":stats,"publishDiagnostics":|Str:Obj? reports->Str:Obj?| {ready;return registry.publishDiagnostics(reports)}]
@@ -262,7 +263,7 @@ internal class EnerCubixCockpitSourceSession
     if(requestScope==null || key.startsWith("cop:")) return registry.read(key,query)
     registry.validateReport(key,query)
     cached:=requestScope.frozenReport(key);if(cached!=null) return cached
-    result:=requestScope.freezeReport(key,registry.read(key,query));registry.releaseReport(key);return result
+    return registry.freezeReport(key,query,requestScope)
   }
   Str:Obj? copData(Str id,Str:Obj? query) {ready;return registry.copData(id,query)}
   Str:Obj? ruleData(Str id,Str:Obj? query) {ready;return registry.ruleData(id,query)}
@@ -271,6 +272,7 @@ internal class EnerCubixCockpitSourceSession
   Void close()
   {
     if(closed) return
+    requestScope?.releaseReportBorrows
     windows.each |w| {w.cursor?.close;w.cursor=null}
     owner.close;registry?.close;registry=null;closed=true
   }

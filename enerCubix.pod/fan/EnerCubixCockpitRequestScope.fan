@@ -1,3 +1,5 @@
+using [java] java.util::IdentityHashMap
+
 ** One admitted request. The gate and envelope outlive final serialization and
 ** sending; arithmetic and input/projection owners will share this stream state.
 internal class EnerCubixCockpitRequestScope
@@ -29,6 +31,8 @@ internal class EnerCubixCockpitRequestScope
   private EnerCubixPreparedOwner? snapshotOwner
   private [Str:Obj?]? snapshot
   private EnerCubixPreparedOwner? reportOwner
+  private EnerCubixPreparedOwner? reportBorrowOwner
+  private IdentityHashMap? reportBorrows
   private EnerCubixPreparedOwner? payloadOwner
   private EnerCubixPreparedOwner? configurationOwner
   private EnerCubixPreparedOwner? historyOwner
@@ -47,7 +51,7 @@ internal class EnerCubixCockpitRequestScope
   private Bool delivering := false
   Bool responseStarted := false {private set}
   Bool canSendError() {!responseStarted}
-  Int entries() {(owner?.entries ?: 0)+(preparationOwner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)+(sourcePlanOwner?.entries ?: 0)}
+  Int entries() {(owner?.entries ?: 0)+(preparationOwner?.entries ?: 0)+(inputOwner?.entries ?: 0)+(snapshotOwner?.entries ?: 0)+(reportOwner?.entries ?: 0)+(reportBorrowOwner?.entries ?: 0)+(payloadOwner?.entries ?: 0)+(planningModel?.entries ?: 0)+(planningState?.entries ?: 0)+(configurationOwner?.entries ?: 0)+(historyOwner?.entries ?: 0)+(historyMetadataWork?.entries ?: 0)+(sourcePlanOwner?.entries ?: 0)}
   Str:Obj? freezeSourcePlan(Str:Obj? request)
   {
     checkContext(project,user)
@@ -148,14 +152,53 @@ internal class EnerCubixCockpitRequestScope
     snapshot=(Str:Obj?)EnerCubixCockpitFreeze.value(source,snapshotOwner);return snapshot
   }
   [Str:Obj?]? frozenReport(Str key) {checkContext(project,user);return frozenReports?.get(key)}
-  Str:Obj? freezeReport(Str key,Str:Obj? source)
+  Str:Obj? freezeReport(Str key,Str:Obj? source,|Obj|? consume := null)
   {
     checkContext(project,user)
     cached:=frozenReports?.get(key);if(cached!=null) return cached
     if(reportOwner==null)
     {reportOwner=EnerCubixPreparedOwner(stream.state);reportOwner.hold(1);frozenReports=[:]}
-    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner)
+    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner,null,consume)
     reportOwner.hold(1);frozenReports[key]=value;return value
+  }
+  ** Only a completed registry work may consume its exclusive mutable result.
+  ** Protect every descendant of borrowed roots, including direct aliases into
+  ** another report's catalog or diagnostic graph.
+  Void prepareReportBorrows(Obj[] catalog,Obj[] samples)
+  {
+    checkContext(project,user)
+    if(reportBorrowOwner!=null) throw ArgErr("cockpitReportBorrowsAlreadyPrepared")
+    reportBorrowOwner=EnerCubixPreparedOwner(stream.state)
+    try
+    {
+      reportBorrowOwner.hold(8);reportBorrows=IdentityHashMap()
+      reportBorrowOwner.watch |->Void| {reportBorrows?.clear;reportBorrows=null}
+      catalog.each |root| {protectReportBorrow(root,reportBorrows,reportBorrowOwner)}
+      samples.each |root| {protectReportBorrow(root,reportBorrows,reportBorrowOwner)}
+    }
+    catch(Err e) {releaseReportBorrows;throw e}
+  }
+  Void releaseReportBorrows() {reportBorrowOwner?.close;reportBorrowOwner=null}
+  Str:Obj? freezeOwnedReport(Str key,Str:Obj? source,EnerCubixPreparedOwner producer)
+  {
+    checkContext(project,user)
+    if(producer.budget!==stream.state || producer.entries==0 || source.isImmutable || reportBorrows==null) throw ArgErr("cockpitReportTransferOwner")
+    return freezeReport(key,source,|Obj value|
+    {
+      if(reportBorrows.containsKey(value)) return
+      count:=value is Map ? ((Map)value).size : ((List)value).size
+      if(value is Map) ((Map)value).clear;else ((List)value).clear
+      // Memoization precedes consumption; aliases receive the full target.
+      // Keep the empty source header charged until its producer closes.
+      producer.release(count)
+    })
+  }
+  private Void protectReportBorrow(Obj? value,IdentityHashMap borrowedGraph,EnerCubixPreparedOwner scratch)
+  {
+    if(value==null || value.isImmutable || (value isnot Map && value isnot List) || borrowedGraph.containsKey(value)) return
+    deadline.check;scratch.hold(3);borrowedGraph.put(value,true)
+    if(value is Map) ((Map)value).each |v| {protectReportBorrow(v,borrowedGraph,scratch)}
+    else ((List)value).each |v| {protectReportBorrow(v,borrowedGraph,scratch)}
   }
   Void deliver(Str:Obj? data,|Buf| send)
   {
@@ -181,6 +224,7 @@ internal class EnerCubixCockpitRequestScope
     try {finishPlanning} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit planning cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
+    try {releaseReportBorrows} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit borrowed report index cleanup also failed",e)}
     try {finishMetadata;historyOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit history metadata cleanup also failed",e)}
     try {configurationOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit configuration cleanup also failed",e)}
     try {finishPreparation} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit preparation cleanup also failed",e)}

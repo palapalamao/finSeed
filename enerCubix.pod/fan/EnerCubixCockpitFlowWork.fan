@@ -26,6 +26,8 @@ internal class EnerCubixCockpitFlowWork
   private Bool projected := false
 
   Void addFrame(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
+  {addFrames(a,b,histories,frame)}
+  Void addFrames(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame,Bool constantEmpty := false)
   {
     if(done || next>=to || next>=b || next<a) return
     if(state==null)
@@ -33,8 +35,8 @@ internal class EnerCubixCockpitFlowWork
       state=EnerCubixPreparedOwner(budget.state,pool);numbers=EnerCubixPreparedOwner(budget.state,pool);graph=EnerCubixPreparedOwner(budget.state,pool)
       consumer=EnerCubixFlowConsumer(q,catalog,state,numbers,pool,"energy-flow",periodKeys,selectedPlan)
     }
-    consumer.addFrame(histories,frame)
-    next=EnerCubixMath.floorHour(next)+1hr;if(next>to) next=to
+    consumer.addFrames(histories,frame,b,constantEmpty)
+    next=b<to ? b : to
   }
   Void finish()
   {

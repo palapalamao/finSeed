@@ -251,11 +251,11 @@ internal class EnerCubixCockpitRegistry
     {
       works.each |work| {work.finishReady};flowWork?.finishReady
       works.each |work| {withConsumerFrame |local| {work.addFrames(a,b,histories,local,true)}}
+      if(flowWork!=null) withConsumerFrame |local| {flowWork.addFrames(a,b,histories,local,true)}
       at:=a
       while(at<b)
       {
         budget.check;end:=at+1hr
-        if(flowWork!=null) withConsumerFrame |local| {flowWork.addFrame(at,end,histories,local)}
         copWorks.each |work| {withConsumerFrame |local| {work.addFrame(at,end,histories,local)}}
         ruleWorks.each |work| {withConsumerFrame |local| {work.addFrame(at,end,histories,local)}}
         at=end
@@ -333,6 +333,19 @@ internal class EnerCubixCockpitRegistry
     if(key=="energy-flow") flowWork.close
     else works[key].close
   }
+  Str:Obj? freezeReport(Str key,Str:Obj? query,EnerCubixCockpitRequestScope scope)
+  {
+    source:=read(key,query)
+    if(key.startsWith("cop:")) throw ArgErr("cockpitRegistryReportNotPrepared")
+    result:=key=="energy-flow" ? scope.freezeReport(key,source) : works[key].freezeReport(scope)
+    releaseReport(key);return result
+  }
+  Void prepareReportBorrows(EnerCubixCockpitRequestScope scope)
+  {
+    check
+    if(!done || attachedCleaning.size!=cleaningKeys.size) throw ArgErr("cockpitRegistryReportNotPrepared")
+    scope.prepareReportBorrows(catalog.protectedRoots,pool.protectedRoots)
+  }
   private Void expectQuery(Str:Obj? query,Str:Obj? registered,Str error)
   {
     scratch:=EnerCubixPreparedOwner(budget.state)
@@ -401,6 +414,7 @@ internal class EnerCubixCockpitReportWork
   private EnerCubixHeatmapConsumer[] heatmaps := [,]
   internal Str:Obj? result := [:] {private set}
   private Bool done := false
+  private Bool transferReady := false
 
   private Void open(Bool metadataOnly := false)
   {
@@ -487,7 +501,13 @@ internal class EnerCubixCockpitReportWork
       // without running clearFrames, whose containers alias the public result.
       publicResult:=result;catalogRoots:=catalog.protectedRoots;sampleRoots:=pool.protectedRoots
       output.retainPublic(retained) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
+      transferReady=true
     }
+  }
+  Str:Obj? freezeReport(EnerCubixCockpitRequestScope scope)
+  {
+    if(!done || state.entries!=0 || result.isEmpty) throw ArgErr("cockpitReportTransferNotFinished")
+    return transferReady ? scope.freezeOwnedReport(key,result,output) : scope.freezeReport(key,result)
   }
   Int stateEntries() {(state?.entries ?: 0)+(consumer?.childStateEntries ?: 0)}
   Void finishReady() {if(!done && next==to) finish}
