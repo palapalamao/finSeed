@@ -231,6 +231,86 @@ class EnerCubixContextOwnerTest : Test
     verifyEq(budget.state.temporary.val,0)
   }
 
+  Void testCanonicalStrictNumbersSurviveConsumerCloseWithoutSkippingKnownEvidence()
+  {
+    rs:=records;rs[1]["subcategoryId"]="sub";rs[1]["tariffId"]="t";rs.add(["id":"sub","kind":"subcategory","co2Factor":0.5f]);rs.add(["id":"t","kind":"tariff","mode":"flat","rate":2f,"currency":"CNY"])
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    first:=EnerCubixPreparedOwner(budget.state);second:=EnerCubixPreparedOwner(budget.state)
+    a:=EnerCubixContext.shared(catalog,"space",false,first);b:=EnerCubixContext.shared(catalog,"metering",false,second)
+    cursor:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(10)),HisItem(at+2hr,Number(30))]);EnerCubixValue? original;EnerCubixHistoryData? expired
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,sourceOwner|
+      {
+        expired=histories["p"];fa:=EnerCubixPreparedOwner(budget.state);fb:=EnerCubixPreparedOwner(budget.state)
+        try
+        {
+          a.beginFrame(fa,histories);original=a.node("m","c",at,at+1hr);carbon:=a.node("m","c",at,at+1hr,"co2")
+          verifyEq(original.value,10f);verifyEq(carbon.value,5f)
+          verifyEq(a.node("m","c",at,at+1hr,"cost").value,20f);verify(a.usedTariffs.containsKey("m"))
+          fa.close;first.close
+          b.beginFrame(fb,histories);before:=budget.state.lookups.val
+          shared:=b.node("m","c",at,at+1hr);verify(shared===original,"canonical views borrow the same admitted strict result after its first consumer closes")
+          verifyEq(budget.state.lookups.val,before,"the same physical strict result is not fetched again")
+          verify(b.node("m","c",at,at+1hr,"co2")===carbon)
+          bound:=EnerCubixContext.bound(b,"m",b.byId["m"].dup.set("maximum",5f));verifyEq(bound.node("m","c",at,at+1hr).quality,"maximum")
+          verifyEq(b.node("m","c",at,at+1hr).value,10f)
+          known:=EnerCubixContext.known(b,at+4hr);verifyEq(known.node("m","c",at,at+1hr).value,10f)
+          verifyEq(known.knownReads.size,1);verify(!known.emptyEvidenceOmitted);verify(!known.unpreparedEvidenceOmitted)
+          verifyEq(b.node("m","c",at,at+1hr,"cost").value,20f);verify(b.usedTariffs.containsKey("m"))
+        }
+        finally {fa.close;fb.close}
+      }
+      verifyErr(ArgErr#) {expired.ownStrict(catalog.byId["m"],"c",at,at+1hr,"energy")}
+      cursor.close
+      next:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(99))])
+      try
+      {
+        next.advance(at+1hr)
+        EnerCubixCockpitStream.withFrames([next],budget.state) |histories,sourceOwner|
+        {
+          local:=EnerCubixPreparedOwner(budget.state)
+          try {b.beginFrame(local,histories);value:=b.node("m","c",at,at+1hr);verifyEq(value.value,99f);verify(value!==original)}
+          finally {local.close}
+        }
+      }
+      finally {next.close}
+    }
+    finally {cursor.close;first.close;second.close;model.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
+  Void testStrictSourceReuseKeepsZeroAndExactKeysAndRejectsBeforeAllocation()
+  {
+    budget:=EnerCubixStreamBudget();cursor:=source(budget,[HisItem(at,Number(7)),HisItem(at+1hr,Number(7))]);peer:=EnerCubixPreparedOwner(budget.state)
+    record:=records[1]
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,owner|
+      {
+        h:=histories["p"];zero:=h.read(at,at+1hr);verifyEq(zero.value,0f)
+        h.rememberOwnStrict(record,"c",at,at+1hr,"energy",zero)
+        verify(h.ownStrict(record,"c",at,at+1hr,"energy").value===zero)
+        verifyEq(h.ownStrict(record.dup,"c",at,at+1hr,"energy"),null)
+        verifyEq(h.ownStrict(record,"other",at,at+1hr,"energy"),null)
+        verifyEq(h.ownStrict(record,"c",at+1min,at+1hr,"energy"),null)
+        verifyEq(h.ownStrict(record,"c",at,at+1hr,"co2"),null)
+        h.rememberOwnStrict(record,"c",at,at+1hr,"cost",zero)
+        verifyEq(h.ownStrict(record,"c",at,at+1hr,"cost"),null)
+        peer.hold(budget.state.remaining-13);held:=owner.entries;peerHeld:=peer.entries;total:=budget.state.temporary.val
+        verifyErr(EnerCubixHttpErr#) {h.rememberOwnStrict(record,"c",at,at+1hr,"co2",zero)}
+        verifyEq(owner.entries,held);verifyEq(peer.entries,peerHeld);verifyEq(budget.state.temporary.val,total)
+        verifyEq(h.ownStrict(record,"c",at,at+1hr,"co2"),null)
+        verifyEq(zero.value,0f);verifyEq(zero.sources,["p"])
+      }
+      verifyEq(budget.state.temporary.val-peer.entries>0,true)
+    }
+    finally {cursor.close;peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testCanonicalContextsShareOnlyProvenEmptyOwnResultsWithinSourceFrame()
   {
     rs:=records;rs[1]["subcategoryId"]="s";rs.add(["id":"s","kind":"subcategory"])

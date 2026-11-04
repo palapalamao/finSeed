@@ -407,6 +407,12 @@ internal class EnerCubixContext
     EnerCubixHistoryData? ownSource
     if(own && sharedModel!=null && byId===sharedModel.byId && r["nativeSourceMissing"]!=true)
       ownSource=byPoint[r["pointId"] as Str ?: ""]
+    sharedStrict:=strictContext==null ? ownSource?.ownStrict(r,category,from,to,metric) : null
+    if(sharedStrict!=null)
+    {
+      saveOwnFrameValue(id,category,from,to,metric,sharedStrict.value,false)
+      return sharedStrict.value
+    }
     queryEnd:=strictContext==null ? null : knownEnd
     stable:=emptyKey(r,category,from,to,metric)
     if(stable!=null && frameOwner!=null && metric=="cost") stable+="|${from.ticks}|${to.ticks}"
@@ -515,6 +521,7 @@ internal class EnerCubixContext
       }
     }
     if (result.value == null) warnValue(r,id,result.quality)
+    if(strictContext==null) ownSource?.rememberOwnStrict(r,category,from,to,metric,result)
     if (path.isEmpty && preparedBudget == null) cache[key]=result
     sharedEmpty=stable==null ? null : ownSource?.rememberOwnEmpty(r,category,from,to,metric,queryEnd,result)
     if(sharedEmpty!=null)

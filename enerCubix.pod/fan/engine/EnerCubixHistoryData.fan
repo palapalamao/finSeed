@@ -93,6 +93,7 @@ internal class EnerCubixHistoryData
   private EnerCubixPreparedFrame? sourceFrame
   private EnerCubixPreparedOwner? ownEmptyOwner
   private EnerCubixOwnEmptyValue[]? ownEmptyValues
+  private EnerCubixOwnEmptyValue[]? ownStrictValues
 
   internal Bool ownedFrame(EnerCubixPreparedBudget budget)
   {sourceFrame != null && !frameExpired && preparedBudget === budget}
@@ -105,7 +106,7 @@ internal class EnerCubixHistoryData
     frameCheck
     if(ownEmptyOwner!=null || !ownedFrame(owner.budget)) throw ArgErr("ownEmptyFrameOwner")
     if(to-from!=1hr) return
-    owner.hold(3);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner
+    owner.hold(4);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner
   }
   internal EnerCubixOwnEmptyValue? ownEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd)
   {
@@ -123,7 +124,28 @@ internal class EnerCubixHistoryData
     ownEmptyOwner.hold(14)
     entry:=EnerCubixOwnEmptyValue(record,category,from,to,metric,queryEnd,value);ownEmptyValues.add(entry);return entry
   }
-  private Void clearOwnEmpty() {ownEmptyValues?.clear;ownEmptyValues=null;ownEmptyOwner=null}
+  ** Numeric strict reads have no known-usage diagnostic side effects. Only
+  ** canonical physical records may borrow them, for the exact source hour.
+  ** The source owner keeps their values alive after each consumer closes.
+  internal EnerCubixOwnEmptyValue? ownStrict(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric)
+  {
+    frameCheck
+    return ownStrictValues?.find |entry| {entry.record===record && entry.category==category && entry.from==from && entry.to==to && entry.metric==metric}
+  }
+  internal Void rememberOwnStrict(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,EnerCubixValue value)
+  {
+    frameCheck
+    if(ownEmptyOwner==null || prepared==null || metric=="cost" || value.value==null || value.sources!==sources) return
+    if(ownStrict(record,category,from,to,metric)!=null) return
+    if(ownStrictValues==null) {ownEmptyOwner.hold(1);ownStrictValues=EnerCubixOwnEmptyValue[,]}
+    ownEmptyOwner.hold(14)
+    ownStrictValues.add(EnerCubixOwnEmptyValue(record,category,from,to,metric,null,value))
+  }
+  private Void clearOwnEmpty()
+  {
+    ownEmptyValues?.clear;ownEmptyValues=null
+    ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null
+  }
 
   internal Void expireFrame()
   {
