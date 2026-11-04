@@ -11,7 +11,14 @@ internal class EnerCubixReportConsumer
     diagnostics?.expect(diagnosticKey,"sourceUsage")
     this.diagnostics=diagnostics;this.diagnosticKey=diagnosticKey
     this.ctx=ctx;this.report=report;this.cursors=cursors.dup;this.to=to;this.at=from;this.output=output
-    state.watch |->Void| {closeState};state.hold(22+5*cursors.size)
+    // Retain the closed child handle (four owner fields plus its reference)
+    // until the parent expires, as with the daily bin owner's lifecycle.
+    state.watch |->Void| {closeState};state.hold(27+5*cursors.size)
+    // Reduction state expires once every detached result has been captured.
+    // Context, report plans and cursors remain owned by the parent finalizer.
+    reductions=state.fork
+    try {state.watch |->Void| {reductions.close}}
+    catch(Err e) {reductions.close;throw e}
     definitions:=EnerCubixLine[,]
     output.watch |->Void|
     {
@@ -22,7 +29,7 @@ internal class EnerCubixReportConsumer
     diagnostics?.bind(output)
     if(ctx.sharedCatalog!=null) {ctx.sharedCatalog.bind(output);borrowed=ctx.sharedCatalog.protectedRoots;sharedBorrowed=true}
     shape:=report.freezeFrameMetadata(cursors.map |c->EnerCubixLine| {c.line},output)
-    meterCount=initializeMeters(report,cursors,state,shape)
+    meterCount=initializeMeters(report,cursors,reductions,shape)
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
     n:=report.dailyFrames ? 24 : (report.workingFrames ? 2 : 0);bucket:=EnerCubixMath.bucket(from,gran)
@@ -51,11 +58,11 @@ internal class EnerCubixReportConsumer
     cursors.each |cursor| {output.hold(ownedMetadata(cursor.line.normalizationArea));cursor.line.outputOwnsArea=true}
     cursors.each |cursor|
     {
-      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,state,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames,report.frameSharesBase(line)))
-      if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,state,output))
-      if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,state,output))
+      line:=cursor.line;periods.add(EnerCubixPeriodConsumer(line,from,to,gran,reductions,output,!report.summaryFrames && !report.dailyFrames && !report.workingFrames,report.frameSharesBase(line)))
+      if(report.dailyFrames) daily.add(EnerCubixDailyConsumer(line,reductions,output))
+      if(report.workingFrames) working.add(EnerCubixWorkingConsumer(line,reductions,output))
       points:=report.frameScope(line).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
-      covers.add(EnerCubixCoverageFold(points,from,to,state))
+      covers.add(EnerCubixCoverageFold(points,from,to,reductions))
     }
   }
   private EnerCubixContext? ctx
@@ -73,6 +80,7 @@ internal class EnerCubixReportConsumer
   private DateTime at
   private DateTime to
   private EnerCubixPreparedOwner output
+  private EnerCubixPreparedOwner reductions
   private Str:Obj? result := [:]
   private Obj[] borrowed := [,]
   private Bool sharedBorrowed := false
@@ -197,6 +205,10 @@ internal class EnerCubixReportConsumer
         if(!working.isEmpty) workingData[line.id]=working[i].finish
       }
       meters.each |fold,key| {output.hold(6+fold.sourceCount);value:=fold.finish;totals[key]=value;frozenMeters.add(value)}
+      // No reducer is read by finishFrames. Its period/coverage/meter values
+      // and source arrays have independent output admission and ownership.
+      firstMeters.clear;lastMeters.clear;meters.clear;covers.clear;daily.clear;working.clear
+      reductions.close
       captured:=diagnostics==null ? evidence.vals : diagnostics.rows(diagnosticKey)
       omitted:=readCount>captured.size || emptyOmitted || unpreparedOmitted
       output.hold(14+(diagnostics==null ? evidence.size : 0))
@@ -227,7 +239,7 @@ internal class EnerCubixReportConsumer
     }
     catch(Err e) {failure=e;throw e}
   }
-  internal Int childStateEntries() {daily.reduce(0) |Int n,d->Int| {n+d.stateEntries}}
+  internal Int childStateEntries() {n:=reductions.entries;daily.each |d| {n+=d.stateEntries};return n}
 
   ** Count only the public graph at the registry's explicit done boundary.
   ** No sample reclamation occurs merely to attempt this optional compaction.

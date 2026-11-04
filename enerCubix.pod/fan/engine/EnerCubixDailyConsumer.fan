@@ -36,10 +36,15 @@ internal class EnerCubixDailyConsumer
   Str:Obj? finish()
   {
     if(closed || done) throw ArgErr("dailyConsumerClosed")
-    output.hold(6+24+bands.size+classified.size)
+    // Out map(4), hour vector(25), band map(1+B), classified(1+C),
+    // and the 24 hour fields. Each snapshot admits its own detached values.
+    output.hold(55+bands.size+classified.size)
     hourRows:=[Str:Obj?][,];bandRows:=Str:[Str:Obj?][:]
-    (0..23).each |hour| {hourRows.add(snapshot(hours[hour]).set("hour",hour))}
-    bands.each |bin,key| {bandRows[key]=snapshot(bin)}
+    Str[]? previous
+    (0..23).each |hour|
+    {row:=snapshot(hours[hour],previous).set("hour",hour);previous=((EnerCubixValue)row["value"]).sources;hourRows.add(row)}
+    bands.each |bin,key|
+    {row:=snapshot(bin,previous);previous=((EnerCubixValue)row["value"]).sources;bandRows[key]=row}
     out:=Str:Obj?["hours":hourRows,"bands":bandRows,"classified":classified.dup]
     output.watch |->Void|
     {
@@ -50,15 +55,28 @@ internal class EnerCubixDailyConsumer
   }
   internal Int stateEntries() {state.entries}
 
-  private Str:Obj? snapshot(EnerCubixDailyBin? bin)
+  private Str:Obj? snapshot(EnerCubixDailyBin? bin,Str[]? previous)
   {
     // Field links, copied values/sources, band list, plus temporary finish values.
     sources:=(bin?.sourceEntries ?: 0)
     scratch:=EnerCubixPreparedOwner(state.budget)
     try
     {
-      scratch.hold(16+3*sources);output.hold(18+sources)
-      return ["value":bin?.value ?: EnerCubixValue(),"known":bin?.known ?: EnerCubixValue(),"samples":bin?.samples ?: 0,"knownSamples":bin?.knownSamples ?: 0,"band":bin?.band ?: "unknown"]
+      // Map with five fields(6), two values(6), two source headers(2).
+      // sourceEntries includes the eight value/header entries already, and
+      // ratio operands may overbound the distinct sources of their quotient.
+      retained:=bin==null ? 14 : 6+sources
+      scratch.hold(16+3*sources);output.hold(retained)
+      value:=bin?.value ?: EnerCubixValue();known:=bin?.known ?: EnerCubixValue()
+      output.release(retained-(14+value.sources.size+known.sources.size))
+      // Only borrow ordered-equal vectors already owned by this output. Input
+      // folds always return fresh arrays. Clear/sever the discarded array
+      // before releasing its actual header and entries; never release a peer.
+      if(previous!=null && value.sources!==previous && value.sources==previous)
+      {old:=value.sources;n:=1+old.size;value.sources=previous;old.clear;output.release(n)}
+      if(known.sources!==value.sources && known.sources==value.sources)
+      {old:=known.sources;n:=1+old.size;known.sources=value.sources;old.clear;output.release(n)}
+      return ["value":value,"known":known,"samples":bin?.samples ?: 0,"knownSamples":bin?.knownSamples ?: 0,"band":bin?.band ?: "unknown"]
     }
     finally {scratch.close}
   }

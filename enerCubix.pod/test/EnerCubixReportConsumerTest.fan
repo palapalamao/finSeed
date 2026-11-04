@@ -3,6 +3,27 @@ using haystack
 ** Full report DTOs from original leaf math; controlled sources, not FIN acceptance.
 class EnerCubixReportConsumerTest : Test
 {
+  Void testConstructorFailureBetweenReducerForkAndCleanupRegistrationReleasesChild()
+  {
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","categoryId":"c","pointId":"p"]].toImmutable
+    start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+1hr
+    budget:=EnerCubixStreamBudget().state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    dim:=EnerCubixDimension("metering",rs);ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state)
+    q:=Str:Obj?["from":start.toIso,"to":end.toIso,"asOf":end.toIso,"metric":"energy"]
+    report:=EnerCubixReport(ctx,q,start,end,"daily","day","energy",state);cursors:=[report.openLine("m","c")]
+    try
+    {
+      // Parent hook(1), consumer/closed-handle fields(27+5 per line), child owner(4):
+      // the next parent hook must reject without stranding the child owner.
+      peer.hold(budget.remaining-(1+27+5*cursors.size+4));held:=peer.entries
+      verifyErr(EnerCubixHttpErr#) {unexpected:=EnerCubixReportConsumer(ctx,report,cursors,start,end,"day",state,output)}
+      verifyEq(budget.temporary.val,state.entries+output.entries+peer.entries)
+      state.close;output.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {state.close;output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testOwnedReportsBuildAreaMetadataOnlyForNormalization()
   {
     source:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","categoryId":"c","pointId":"p","area":120f]].toImmutable
@@ -109,6 +130,8 @@ class EnerCubixReportConsumerTest : Test
 
   Void testOwnDailyObjectsDoNotCopyUnrelatedCatalogIntoEachOutput()
   {exerciseOutputGraph("own")}
+  Void testFinishedReportsRetireReducersBeforeBuildingPublicDtos()
+  {exerciseOutputGraph("retired")}
   Void testEveryOverlappingScopeDetailPairRemainsAdmitted()
   {exerciseOutputGraph("space")}
   Void testOrganizationAreasRetainAndExpireGeneratedOverlapGraphs()
@@ -240,6 +263,12 @@ class EnerCubixReportConsumerTest : Test
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
+      if(mode=="retired")
+      {
+        ["firstMeters","lastMeters","meters","covers","daily","working"].each |field|
+        {value:=EnerCubixReportConsumer#.field(field).get(consumer);verify(value is Map ? ((Map)value).isEmpty : ((List)value).isEmpty,"finished reduction roots must be severed: $field")}
+        verifyEq(consumer.childStateEntries,0,"retired child owners must leave the work census")
+      }
       if(capture!=null) capture.freeze
       if(summaryOnly)
       {

@@ -1,6 +1,42 @@
+using [java] java.util::IdentityHashMap
+
 ** Fixed bins preserve independent hour and interval reductions, including DST.
 class EnerCubixDailyConsumerTest : Test
 {
+  Void testSnapshotsChargeActualDetachedGraphAndShareOnlyEqualOrderedOutputSources()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("m|c","m","M","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixDailyConsumer(line,state,output);ids:=["p","q"];reverse:=["q","p"]
+    (0..<24).each |i|
+    {value:=EnerCubixValue(i.toFloat,"ok",i==1 ? reverse : ids);tick:=EnerCubixTick(at+1hr*i,at+1hr*(i+1),value);tick.known=value;consumer.add(tick,"flat")}
+    data:=consumer.finish;hours:=EnerCubixMath.maps(data["hours"])
+    try
+    {
+      verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()),"retained charge equals the physical snapshot graph, not a generic line-fold allowance")
+      a:=(EnerCubixValue)hours[0]["value"];b:=(EnerCubixValue)hours[0]["known"];c:=(EnerCubixValue)hours[1]["value"];d:=(EnerCubixValue)hours[2]["value"];e:=(EnerCubixValue)hours[3]["value"]
+      verify(a.sources===b.sources);verify(a.sources!==c.sources);verify(d.sources===e.sources)
+      verifyEq(c.sources,["q","p"]);verifyEq(e.sources,["p","q"])
+      ids.clear;reverse.clear;verifyEq(a.sources,["p","q"],"output sources must not alias frame inputs")
+      state.close;verifyEq(a.value,0f)
+      peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+      output.close;verify(data.isEmpty);verify(a.sources.isEmpty);verifyEq(budget.temporary.val,held);peer.close
+    }
+    finally {state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  private Int graphEntries(Obj? value,IdentityHashMap seen)
+  {
+    if(value==null || (value isnot Map && value isnot List && value isnot EnerCubixValue) || seen.containsKey(value)) return 0
+    seen.put(value,true)
+    if(value is EnerCubixValue) return 3+graphEntries(((EnerCubixValue)value).sources,seen)
+    n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(value is Map) ((Map)value).each |v| {n+=graphEntries(v,seen)}
+    else ((List)value).each |v| {n+=graphEntries(v,seen)}
+    return n
+  }
+
   Void testPhysicalEnergyHoursRetainOnlyScalarReductionState()
   {
     at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("m|c","m","M","c","kWh")
@@ -57,6 +93,7 @@ class EnerCubixDailyConsumerTest : Test
         consumer.add(t,band);line.ticks.add(t);bands.add(band)
       }
       data:=consumer.finish;hours:=EnerCubixMath.maps(data["hours"])
+      verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()),"energy, gauge and COP charge their actual detached snapshots")
       (0..23).each |hour|
       {
         ticks:=line.ticks.findAll |t| {t.ts.hour==hour};row:=hours[hour]

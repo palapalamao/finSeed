@@ -217,3 +217,13 @@
 - 最终基础累加器再减少真实图：ValueFold现12个字段，空/单来源不再生成Map，已有lastSource存sole ID；第二distinct先hold3，再生成orderedMap/header+两entries，旧sole→新ID后发布，>=2回到原13+N实际账。数值/质量逐次加法不动，finish仍独立来源数组，close清自己根。两个旧码RED覆盖solo预留与remaining2拒绝promotion，4类49方法22036检查通过。最新完整122类963方法295461检查（candidate-01422-fantom-final.log，130.856秒）和239物理源hash通过，取代旧962结果对应的候选身份。
 - 最终437单测/type/Vite、33个不同受控页面场景通过：同一最终UI资源上R2原29通过，新增2曾误点AntD隐藏辅助option而失败，改可见列表定位后R3新2通过；M4两场景初次negative selector命中两个profile，按configuration.name限定后M4R2两项通过。完整业务/请求数/hidden/单→all→单/四width双语/默认折叠/真实0和unknown/负例不生线索断言保留，未放宽超时/业务条件。原失败日志和trace均保留，不称单次31全绿。root目视320英文质量摘要及390中文完整规则字段可读。
 - 同最终后端，全年和Q1完整业务及productiondecode与冻结021深等价；全年24.097秒/峰194578，Q1 12.636秒/峰191363。仅受控22captured+60synthetic的82源/103窗口，不冒充现场完整历史；temporary/raw关闭0、末prepared824描述费保留。三处审计缺口实现/受控证据闭合，原生年度及最终运行观察、人工打印仍按实际待验。
+
+
+### 2026-11-05 0.14.23 finalization lifetime candidate
+
+- 0.14.22 原生查询仍8/9：zeda site annual已经完成103窗口、713309条实际扫描，face-daily最终DTO准入剩12804/申请20768，28.875秒返回PREPARED_READ_LIMIT，峰207932。保留实际失败响应、census和堆栈；不是读取阶段或源游标失败，未覆盖、未重试。
+- 023将period/meter/coverage/daily/working的私有累加状态放入独立child owner；输出全部按原序捕获后，断私有索引再关闭child，ctx/report/cursors/output仍供原finalizer使用。child真实entries纳入work census；parent另外预留closed handle四字段+引用及cleanup hook。fork成功/watch拒绝窗口先RED预算守恒失败，try/catch close后GREEN4断言，防构造失败漏费。
+- Daily snapshot新增实际图准入：Map五字段、两Value及两source header=14+Ns；通用图55+B+C包含24小时字段。ratio的源集合上界在实际finish后释放差额。仅同一次finish内完整有序相同sources共享；保留各Value/Map，先重定向、清实际fresh旧数组，再退1+N；identity guard避免重清。输入、peer、质量、缺测、顺序和真实0保持。IdentityHashMap精确计整个图、changed-order/input-clear/满预算清理均验证。原40*nC envelope、30秒、200000、8MiB全未调整。
+- 最终239物理后端源与套件前hash一致，122类966方法295495检查、138.557秒全绿（candidate-01423-final-fantom.log）；之前965套件是watch兜底前interim，保留且不混称最终。旧两方法RED与constructor独立RED均保留。
+- Q1/全年完整报告、各模块、warning/quality/coverage/evidence以及生产decoder对冻结022等价，仅既定runtime计数/opaque ID规范化；全年26.296秒峰192896，Q1 12.702秒峰191451。模型仅22captured+60synthetic、82源/103窗口，不冒充FIN性能。关闭temporary/raw为0，prepared824描述费仍保留。
+- 前端全部284个src/tests物理hash与冻结022相同，明确复用其437单测及33个不同受控页面场景（原失败轨迹保留）；023版本资源全新type/Vite构建通过，不虚称新原生页面验收。四版本统一0.14.23；候选冻结后待原生9/9及最终同PID观察。现场业务配置/点位/历史无写入；人工native print未答，真实只读用户明确暂缓。
