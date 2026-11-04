@@ -5,6 +5,84 @@ using concurrent
 ** Not whole annual reports, Context/output ownership or native FIN I/O proof.
 class EnerCubixCockpitCursorTest : Test
 {
+  Void testEmptyYearCursorReadsTheWholeDomainWithBoundedAdaptiveSpans()
+  {
+    end:=at+365day;q:=query(end);budget:=EnerCubixStreamBudget();spans:=Span[,]
+    cursor:=EnerCubixCockpitStream.openCursor(point(config),config,at,end,q,records,budget,|Dict p,Span span,|HisItem| sink| {spans.add(span)})
+    try
+    {
+      cursor.advance(at+1hr);verify(cursor.scanComplete)
+      verifyEq(spans.first.start,at-1day);verifyEq(spans.last.end,end+1day)
+      spans.each |span,i| {verify(span.end>span.start);verify(span.end-span.start<=64day);if(i>0) verifyEq(span.start,spans[i-1].end)}
+      verify(budget.nativeReads<=12,"An actually empty year must not require fixed four-day calls: "+budget.nativeReads)
+      history:=EnerCubixHistoryData(cursor.view);verifyEq(history.read(at,at+1hr).quality,"missing")
+      known:=history.knownUsage(at,at+1hr,end);verifyNull(known["knownValue"]);verifyEq(known["coveredSeconds"],0f)
+    }
+    finally {cursor.close}
+    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testUntaggedIntervalCadenceKeepsOriginalFourDayInferenceAndFailure()
+  {
+    dense:=at+130day;end:=dense+8day;raw:=HisItem[,]
+    (0..2).each |i| {raw.add(HisItem(dense+1hr*i,Number(1)))}
+    (0..<100).each |i| {raw.add(HisItem(dense+4day+10min*i,Number(1)))}
+    p:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisMode":"consumption","unit":"kWh","tz":"UTC"]);q:=query(end)
+    original:=EnerCubixCockpitStream.prepare(q,records,["p":p],Str:Dict[:],reader(raw),EnerCubixStreamBudget()).first
+    verifyEq(original["quality"],"streamingUnsupportedConfiguration");verifyEq(original["limitation"],"streamingCadenceChanged")
+    budget:=EnerCubixStreamBudget();spans:=Span[,]
+    cursor:=EnerCubixCockpitStream.openCursor(p,null,at,end,q,records,budget,|Dict point,Span span,|HisItem| sink| {spans.add(span);raw.each |row| {if(row.ts>=span.start && row.ts<span.end) sink(row)}})
+    try
+    {
+      verifyErr(ArgErr#) {cursor.advance(end)}
+      verify(spans.all |span| {span.end-span.start<=4day},"Cadence inference must retain the original sample window")
+      verify(!cursor.scanComplete)
+    }
+    finally {cursor.close}
+    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testFailureAfterEmptyGrowthNeverCertifiesUnreadHistoryOrReleasesPeer()
+  {
+    end:=at+365day;budget:=EnerCubixStreamBudget();peer:=EnerCubixPreparedOwner(budget.state);peer.hold(88);held:=peer.entries;calls:=0
+    cursor:=EnerCubixCockpitStream.openCursor(point(config),config,at,end,query(end),records,budget,|Dict p,Span span,|HisItem| sink| {if(++calls==3) throw IOErr("failure after empty prefix")})
+    try
+    {
+      verifyErr(IOErr#) {cursor.advance(at+1hr)}
+      verifyEq(calls,3);verify(!cursor.scanComplete);verifyErr(IOErr#) {cursor.view};verifyEq(peer.entries,held)
+      cursor.close;verifyEq(budget.state.temporary.val,held);verifyEq(budget.residentRaw,0)
+    }
+    finally {cursor.close;peer.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testDenseDirtyTailAfterEmptyPrefixKeepsTheOriginalWholeReader()
+  {
+    dense:=at+130day;end:=dense+4hr;raw:=HisItem[,]
+    (0..240).each |i| {value:=i==30 ? NA.val : (i==31 ? null : Number(i<60 ? i : i-60));raw.add(HisItem(dense+1min*i,value))}
+    [TimeZone.utc,TimeZone("New_York")].each |tz|
+    {
+      q:=query(end).set("tz",tz.name);cfg:=config
+      p:=Etc.makeDict(Etc.dictToMap(point(cfg)).setAll(["tz":tz.name,"hisStart":end+100day]))
+      whole:=EnerCubixHistoryData(EnerCubixCockpitStream.prepare(q,records,["p":p],["p":cfg],reader(raw),EnerCubixStreamBudget(31)).first)
+      budget:=EnerCubixStreamBudget(31);cursor:=EnerCubixCockpitStream.openCursor(p,cfg,at,end,q,records,budget,reader(raw))
+      try
+      {
+        (0..<4).each |i|
+        {
+          a:=dense+1hr*i;b:=a+1hr;cursor.advance(b)
+          actual:=EnerCubixHistoryData(cursor.view);x:=actual.read(a,b);y:=whole.read(a,b)
+          verifyEq(x.value,y.value);verifyEq(x.quality,y.quality);verifyEq(x.sources,y.sources)
+          av:=actual.knownUsage(a,b,end);ev:=whole.knownUsage(a,b,end)
+          ["knownValue","knownValueType","knownQuality","coveredSeconds","intervalCount","intervalStart","intervalEnd"].each |k| {verifyEq(av[k],ev[k],k)}
+        }
+        verifyEq(cursor.watermark,end);verify(budget.peakBlock<=31);verify(budget.peakHeld<=200000);verify(budget.state.peak.val<=200000)
+      }
+      finally {cursor.close}
+      verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+    }
+  }
+
   Void testLongGapClosesCurrentHourWithoutPreparingFutureYear()
   {
     end:=DateTime.fromIso("2026-11-02T00:00:00Z");september:=DateTime.fromIso("2026-09-01T00:00:00Z")

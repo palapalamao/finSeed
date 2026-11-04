@@ -74,7 +74,7 @@ internal class EnerCubixCockpitStream
     tz:=TimeZone.fromStr(q["tz"] as Str ?: a.tz.name)
     // Without a shared owned catalog, admit a conservative bound for the
     // per-cursor byId/children indices before constructing their copies.
-    charge:=planning == null ? 1+3*records.size : 0
+    charge:=1+(planning == null ? 1+3*records.size : 0)
     budget.state.holdOwned(charge)
     EnerCubixCockpitStream? stream
     try
@@ -266,23 +266,36 @@ internal class EnerCubixCockpitStream
     {
       budget.check
       Span? span
-      if(!cursorSpans.isEmpty) span=cursorSpans.removeAt(0)
+      queued:=!cursorSpans.isEmpty
+      if(queued) span=cursorSpans.removeAt(0)
       else
       {
         if(cursorReadAt >= cursorReadEnd) return false
-        end:=cursorReadAt+4day;if(end > cursorReadEnd) end=cursorReadEnd
+        end:=cursorReadAt+cursorReadStep;if(end > cursorReadEnd) end=cursorReadEnd
         span=Span.makeAbs(cursorReadAt,end);cursorReadAt=end
       }
       items:=HisItem[,]
       try {items=readBlock(span.start,span.end,cursorReader)}
       catch(EnerCubixStreamBlockErr e)
       {
+        cursorReadStep=4day
         ticks:=(span.end-span.start).ticks
         if(ticks <= 1ms.ticks) throw EnerCubixHttpErr(422,"HISTORY_DENSITY_LIMIT","cockpitHistoryDensityLimit")
         mid:=span.start+Duration(ticks/2)
         cursorSpans.insert(0,Span.makeAbs(mid,span.end));cursorSpans.insert(0,Span.makeAbs(span.start,mid));continue
       }
-      if(items.isEmpty) continue
+      if(items.isEmpty)
+      {
+        // Only an actual successful empty main span permits a wider next read.
+        // Every instant is still read; queued density splits cannot grant this.
+        // Untagged interval cadence is inferred from its first nonempty
+        // four-day block. Preserve that exact legacy inference window.
+        fixedCadence:=cleaned || mode!="interval" || (!inferredInterval && (point.has("hisCollectInterval") || point.has("hisInterval")))
+        if(!queued && fixedCadence && cursorReadStep<64day) cursorReadStep*=2
+        continue
+      }
+      // Any item, including NA/null, returns to the original block cadence.
+      cursorReadStep=4day
       charge:=cleaned ? 2*items.size : 0
       if(charge > 0) budget.state.holdOwned(charge)
       EnerCubixCleanResult? result
@@ -443,6 +456,7 @@ internal class EnerCubixCockpitStream
   private |Dict,Span,|HisItem|->Void|? cursorReader
   private DateTime? cursorReadAt
   private DateTime? cursorReadEnd
+  private Duration cursorReadStep := 4day
   private DateTime? cursorClosable
   private Span[] cursorSpans := [,]
   private HisItem?[] cursorItems := [,]
