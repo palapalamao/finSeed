@@ -29,3 +29,6 @@
 @media(max-width:390px){.cockpit-kpi .cockpit-number,.cockpit-kpi .cockpit-card-number{font-size:clamp(14px,5vw,20px)}.cockpit-kpi .cockpit-value,.cockpit-kpi small{display:block}}
 
 .cockpit-focus-panel{padding-top:3px;margin-top:3px}.cockpit-focus-panel>summary{cursor:pointer}.cockpit-focus-panel>summary .cockpit-focus-title{display:inline;margin:0}
+
+/* Keep multiple source/coverage notes within the compact desktop panorama. */
+@media(min-width:1200px){.cockpit-visual .cockpit-space-note{margin:4px 0}}
