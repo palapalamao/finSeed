@@ -143,10 +143,28 @@ internal class EnerCubixCockpitStream
         if(hour >= through) break
         if(cursorIndex < cursorItems.size)
         {
-          i:=cursorIndex++;item:=cursorItems[i];detail:=cursorDetails.isEmpty ? null : cursorDetails[i]
-          append(item,detail,through,cursorItems.size-i)
-          cursorItems[i]=null
-          if(!cursorDetails.isEmpty) {cursorDetails[i]=null;detail=null;budget.state.releaseTemporary(1);cursorDetailCharge--}
+          i:=cursorIndex++;item:=cursorItems[i]
+          scratch:=cleaned ? EnerCubixPreparedOwner(budget.state) : null
+          Map? detail
+          try
+          {
+            if(cleaned)
+            {
+              if(cursorValidatedConfig==null)
+              {
+                // The immutable normalized configuration belongs to this cursor;
+                // admit its fields/copy workspace before validation/allocation.
+                n:=16;config.each |v,k| {n+=5};budget.state.holdOwned(n);cursorCatalogCharge+=n
+                cursorValidatedConfig=EnerCubixCleaning.cursorConfig(point,config)
+              }
+              scratch.hold(32)
+              detail=EnerCubixCleaning.cursorDetail(point["unit"]?.toStr ?: "",cursorValidatedConfig,item,previous)
+              if(detail["reason"]!="removedNA") previous=item
+            }
+            append(item,detail,through,cursorItems.size-i)
+            cursorItems[i]=null
+          }
+          finally {detail?.clear;detail=null;scratch?.close}
           continue
         }
         clearCursorChunk
@@ -225,7 +243,7 @@ internal class EnerCubixCockpitStream
   {
     if(!cursorMode || cursorClosed) return
     if(cursorFrameActive) throw ArgErr("cursorFrameActive")
-    clearCursorChunk;raw.clear;intervals.clear;cursorReader=null;previous=null
+    clearCursorChunk;raw.clear;intervals.clear;cursorReader=null;previous=null;cursorValidatedConfig=null
     if(cursorIntervalCharge > 0) {budget.state.releaseTemporary(cursorIntervalCharge);cursorIntervalCharge=0}
     if(!cursorEscaped) clearPrepared
     ctx=null
@@ -296,31 +314,18 @@ internal class EnerCubixCockpitStream
       }
       // Any item, including NA/null, returns to the original block cadence.
       cursorReadStep=4day
-      charge:=cleaned ? 2*items.size : 0
-      if(charge > 0) budget.state.holdOwned(charge)
-      EnerCubixCleanResult? result
+      // Future rows are charged only as raw samples. Cleaning derives exactly
+      // the next consumed row in advance(), never a second future detail graph.
       try
       {
-        result=cleaned ? EnerCubixCleaning.clean(point,items,config,previous,false,true) : null
-        cursorItems=items.map |item->HisItem?| {item}
-        if(result != null)
-        {
-          previous=result.previous;result.previous=null
-          cursorDetails=result.details.map |d->[Str:Obj?]?| {d}
-          result.details.clear;result.items.clear
-          cursorDetailCharge=cursorDetails.size
-        }
-        items.clear
-        if(charge > cursorDetailCharge) budget.state.releaseTemporary(charge-cursorDetailCharge)
+        cursorItems=items.map |item->HisItem?| {item};items.clear
         budget.holdCursor(cursorId,cursorItems.size+raw.size+(previous == null ? 0 : 1))
         return true
       }
       catch(Err e)
       {
-        items.clear;cursorItems.clear;cursorDetails.clear
-        result?.details?.clear;result?.items?.clear;result=null
-        if(charge > 0) budget.state.releaseTemporary(charge)
-        cursorDetailCharge=0;throw e
+        items.clear;cursorItems.clear;cursorDetails.clear;cursorDetailCharge=0
+        budget.holdCursor(cursorId,raw.size+(previous == null ? 0 : 1));throw e
       }
     }
     return false
@@ -463,6 +468,7 @@ internal class EnerCubixCockpitStream
   private [Str:Obj?]?[] cursorDetails := [,]
   private Int cursorIndex := 0
   private Int cursorDetailCharge := 0
+  private Dict? cursorValidatedConfig
   private Int cursorIntervalCharge := 0
   private Bool captured := false
 
@@ -491,13 +497,7 @@ internal class EnerCubixCockpitStream
       if(rawRoom == 0) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")
       cap=cap.min(rawRoom).min(budget.heldLimit/(budget.activeCursors*3))
       if(cap == 0) throw EnerCubixHttpErr(422,"HISTORY_MEMORY_LIMIT","cockpitHistoryMemoryLimit")
-      if(cleaned)
-      {
-        prepRoom:=budget.state.remaining/2
-        if(prepRoom == 0) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")
-        cap=cap.min(prepRoom).min(200000/(budget.activeCursors*2))
-        if(cap == 0) throw EnerCubixHttpErr(422,"PREPARED_READ_LIMIT","cockpitPreparedReadLimit")
-      }
+
     }
     try
     {

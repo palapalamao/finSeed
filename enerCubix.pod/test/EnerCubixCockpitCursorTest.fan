@@ -5,6 +5,39 @@ using concurrent
 ** Not whole annual reports, Context/output ownership or native FIN I/O proof.
 class EnerCubixCockpitCursorTest : Test
 {
+  Void testLazyCleaningDoesNotValidateAnUnreadEmptyConfiguration()
+  {
+    cfg:=Etc.makeDict(["defNull":Marker.val,"defVal":Number(2)]);budget:=EnerCubixStreamBudget()
+    cursor:=EnerCubixCockpitStream.openCursor(point(cfg),cfg,at,at+2hr,query(at+2hr),records,budget,reader(HisItem[,]))
+    try
+    {
+      cursor.advance(at+1hr);verify(cursor.scanComplete)
+      verifyNull(EnerCubixCockpitStream#.field("cursorValidatedConfig").get(cursor))
+      verifyEq(EnerCubixHistoryData(cursor.view).read(at,at+1hr).quality,"missing")
+    }
+    finally {cursor.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  Void testLazyConfigurationAdmissionAndValidationFailuresPreservePeer()
+  {
+    [false,true].each |invalid|
+    {
+      cfg:=invalid ? Etc.makeDict(["defNull":Marker.val,"defVal":Number(2)]) : config
+      budget:=EnerCubixStreamBudget();peer:=EnerCubixPreparedOwner(budget.state)
+      cursor:=EnerCubixCockpitStream.openCursor(point(cfg),cfg,at,at+2hr,query(at+2hr),records,budget,reader([HisItem(at,Number(0)),HisItem(at+1hr,Number(6))]))
+      if(invalid) peer.hold(89);else peer.hold(budget.state.remaining-16)
+      held:=peer.entries
+      try
+      {
+        if(invalid) verifyErr(ArgErr#) {cursor.advance(at+1hr)}
+        else failure(cursor,"PREPARED_READ_LIMIT")
+        verifyEq(peer.entries,held);cursor.close;verifyEq(budget.state.temporary.val,held);verifyEq(budget.residentRaw,0)
+      }
+      finally {cursor.close;peer.close}
+      verifyEq(budget.state.temporary.val,0)
+    }
+  }
+
   Void testEmptyYearCursorReadsTheWholeDomainWithBoundedAdaptiveSpans()
   {
     end:=at+365day;q:=query(end);budget:=EnerCubixStreamBudget();spans:=Span[,]

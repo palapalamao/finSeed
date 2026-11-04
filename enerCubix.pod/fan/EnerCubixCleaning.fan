@@ -73,62 +73,14 @@ internal class EnerCubixCleaning
     removed:=0; substituted:=0; rejected:=0; rollovers:=0
     sorted.each |item|
     {
-      detail:=[Str:Obj?]["ts":item.ts.toIso,"rawValue":jsonValue(item.val),"previousValue":jsonValue(previous?.val),
-        "value":null,"valueType":"null","reason":"noPrevious","substituted":false,"intervalSeconds":null,"emitted":false]
+      transition:=step(unit,cfg,item,previous);detail:=transition.detail
       result.details.add(detail)
-      if (item.val === NA.val && cfg.has("removeNA"))
-      {
-        detail["reason"]="removedNA"; removed++; return
-      }
-      if (previous == null) { previous=item; return }
-      elapsed:=(item.ts-previous.ts).ticks.toFloat/1sec.ticks.toFloat
-      detail["intervalSeconds"]=elapsed
-      detail["emitted"]=true
-      Obj? value:=null; reason:="ok"
-      a:=reading(previous.val,unit); b:=reading(item.val,unit)
-      if (item.val === NA.val) { value=NA.val; reason="inputNA" }
-      else if (previous.val === NA.val) { value=NA.val; reason="previousNA" }
-      else if (item.val == null) reason="inputNull"
-      else if (previous.val == null) reason="previousNull"
-      else if (a == null || b == null) reason="invalidValue"
-      else if (elapsed <= 0f) reason="nonPositiveInterval"
-      else
-      {
-        delta:=b-a
-        maxTime:=cfg["timeMax"] as Number
-        if (maxTime != null && elapsed > maxTime.toDuration.ticks.toFloat/1sec.ticks.toFloat) reason="timeMax"
-        else
-        {
-          rollover:=cfg["hisTotalizedRollover"] as Number
-          corrected:=false
-          if (rollover != null && delta < 0f)
-          {
-            period:=rollover.toFloat
-            if (a < 0f || a >= period || b < 0f || b >= period) reason="rolloverOutOfRange"
-            else { delta=period-a+b; corrected=true }
-          }
-          if (reason == "ok") reason=bounds(delta,elapsed,unit,cfg)
-          if (reason == "ok")
-          {
-            value=Number(delta,unit.isEmpty ? null : Unit(unit))
-            if (corrected) { reason="rollover"; rollovers++ }
-          }
-        }
-      }
-      if (reason != "ok" && reason != "rollover")
-      {
-        rejected++
-        // Missing source values retain their semantics; replacement applies to
-        // rejected numeric intervals only, never to true source NA or null.
-        if (cfg.has("defVal") && a != null && b != null)
-        {
-          value=cfg["defVal"]; detail["substituted"]=true; substituted++
-        }
-      }
-      detail["reason"]=reason; detail["value"]=jsonValue(value)
-      detail["valueType"]=value === NA.val ? "na" : (value is Number ? "number" : "null")
-      result.items.add(HisItem(item.ts,value))
-      previous=item
+      if(detail["reason"]=="removedNA") {removed++;return}
+      if(previous==null) {previous=item;return}
+      if(detail["reason"]=="rollover") rollovers++
+      else if(detail["reason"]!="ok") rejected++
+      if(detail["substituted"]==true) substituted++
+      result.items.add(HisItem(item.ts,transition.value));previous=item
     }
     result.previous=previous
     result.summary=["inputCount":raw.size,"outputCount":result.items.size,
@@ -137,6 +89,71 @@ internal class EnerCubixCleaning
       "naCount":result.items.findAll |i| { i.val === NA.val }.size,
       "substitutedCount":substituted,"removedNACount":removed,"rejectedCount":rejected,"rolloverCount":rollovers]
     return result
+  }
+
+  ** Validate once for a cursor; raw lookahead remains raw until consumed.
+  internal static Dict cursorConfig(Dict point,Dict source)
+  {config(nativeParams(source),point["unit"]?.toStr ?: "")}
+
+  ** Bulk and cursor readers use exactly the same ordered row transition.
+  internal static Str:Obj? cursorDetail(Str unit,Dict cfg,HisItem item,HisItem? previous)
+  {step(unit,cfg,item,previous).detail}
+
+  private static EnerCubixCleanStep step(Str unit,Dict cfg,HisItem item,HisItem? previous)
+  {
+    detail:=[Str:Obj?]["ts":item.ts.toIso,"rawValue":jsonValue(item.val),"previousValue":jsonValue(previous?.val),
+      "value":null,"valueType":"null","reason":"noPrevious","substituted":false,"intervalSeconds":null,"emitted":false]
+    if (item.val === NA.val && cfg.has("removeNA"))
+    {
+      detail["reason"]="removedNA"; return EnerCubixCleanStep(detail,null)
+    }
+    if (previous == null) return EnerCubixCleanStep(detail,null)
+    elapsed:=(item.ts-previous.ts).ticks.toFloat/1sec.ticks.toFloat
+    detail["intervalSeconds"]=elapsed
+    detail["emitted"]=true
+    Obj? value:=null; reason:="ok"
+    a:=reading(previous.val,unit); b:=reading(item.val,unit)
+    if (item.val === NA.val) { value=NA.val; reason="inputNA" }
+    else if (previous.val === NA.val) { value=NA.val; reason="previousNA" }
+    else if (item.val == null) reason="inputNull"
+    else if (previous.val == null) reason="previousNull"
+    else if (a == null || b == null) reason="invalidValue"
+    else if (elapsed <= 0f) reason="nonPositiveInterval"
+    else
+    {
+      delta:=b-a
+      maxTime:=cfg["timeMax"] as Number
+      if (maxTime != null && elapsed > maxTime.toDuration.ticks.toFloat/1sec.ticks.toFloat) reason="timeMax"
+      else
+      {
+        rollover:=cfg["hisTotalizedRollover"] as Number
+        corrected:=false
+        if (rollover != null && delta < 0f)
+        {
+          period:=rollover.toFloat
+          if (a < 0f || a >= period || b < 0f || b >= period) reason="rolloverOutOfRange"
+          else { delta=period-a+b; corrected=true }
+        }
+        if (reason == "ok") reason=bounds(delta,elapsed,unit,cfg)
+        if (reason == "ok")
+        {
+          value=Number(delta,unit.isEmpty ? null : Unit(unit))
+          if (corrected) { reason="rollover" }
+        }
+      }
+    }
+    if (reason != "ok" && reason != "rollover")
+    {
+      // Missing source values retain their semantics; replacement applies to
+      // rejected numeric intervals only, never to true source NA or null.
+      if (cfg.has("defVal") && a != null && b != null)
+      {
+        value=cfg["defVal"]; detail["substituted"]=true
+      }
+    }
+    detail["reason"]=reason; detail["value"]=jsonValue(value)
+    detail["valueType"]=value === NA.val ? "na" : (value is Number ? "number" : "null")
+    return EnerCubixCleanStep(detail,value)
   }
 
   private static Str bounds(Float delta, Float elapsed, Str unit, Dict cfg)
@@ -246,4 +263,12 @@ internal class EnerCubixCleanResult
   // Leaf interventions only. Aggregate intervals remain separate arithmetic data.
   [Str:Obj?][] sourceDetails := [Str:Obj?][,]
   Str:Obj? summary
+}
+
+** Single-row scratch; never retained by a stream across another source record.
+internal class EnerCubixCleanStep
+{
+  new make(Str:Obj? detail,Obj? value) {this.detail=detail;this.value=value}
+  Str:Obj? detail
+  Obj? value
 }

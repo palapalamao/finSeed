@@ -6,6 +6,46 @@ class EnerCubixCockpitStreamTest : Test
   Void testExecutableStreamingPathExists()
   { verify(Type.find("enerCubix::EnerCubixCockpitStream",false) != null) }
 
+  Void testCursorRetainsRawLookaheadWithoutFutureDerivedCleaningDetails()
+  {
+    cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"deltaMax":Number(20)])
+    p:=point(true,cfg);q:=query(at,at+8day);q["asOf"]=(at+8day).toIso
+    rows:=HisItem[,];(0..1152).each |i| {rows.add(HisItem(at-1hr+10min*i,Number(i)))}
+    budget:=EnerCubixStreamBudget();stream:=EnerCubixCockpitStream.openCursor(p,cfg,at,at+8day,q,[["kind":"meter","id":"m","pointId":"p"]],budget,|Dict pt,Span span,|HisItem| sink| {rows.each |item| {if(item.ts>=span.start && item.ts<span.end) sink(item)}})
+    try
+    {
+      stream.advance(at+1hr)
+      verifyEq(EnerCubixCockpitStream#.field("cursorDetailCharge").get(stream),0,"unconsumed raw readings must not have derived detail maps")
+      verify(((List)EnerCubixCockpitStream#.field("cursorItems").get(stream)).size>100,"the actual future raw window remains available")
+      EnerCubixCockpitStream.withFrames([stream],budget.state) |histories,owner| {verifyEq(histories["p"].read(at,at+1hr).value,6f);verifyEq(((EnerCubixValue)histories["p"].knownUsage(at,at+1hr,at+8day)["value"]).value,6f)}
+    }
+    finally {stream.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
+  Void testManyCleanedCursorsLeaveCapacityForTheirRequiredCurrentFrames()
+  {
+    cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"deltaMax":Number(20)])
+    q:=query(at,at+8day);q["asOf"]=(at+8day).toIso
+    rows:=HisItem[,];(0..1152).each |i| {rows.add(HisItem(at-1hr+10min*i,Number(i)))}
+    budget:=EnerCubixStreamBudget();streams:=EnerCubixCockpitStream[,];peer:=EnerCubixPreparedOwner(budget.state)
+    try
+    {
+      82.times |i|
+      {
+        p:=Etc.makeDict(Etc.dictToMap(point(true,cfg)).set("id",Ref("p$i")))
+        streams.add(EnerCubixCockpitStream.openCursor(p,cfg,at,at+8day,q,[["kind":"meter","id":"m$i","pointId":"p$i"]],budget,|Dict pt,Span span,|HisItem| sink| {rows.each |item| {if(item.ts>=span.start && item.ts<span.end) sink(item)}}))
+      }
+      peer.hold(budget.state.remaining-25000);held:=peer.entries
+      streams.each |stream| {stream.advance(at+1hr)}
+      EnerCubixCockpitStream.withFrames(streams,budget.state) |histories,owner| {verifyEq(histories.size,82);histories.each |history| {verifyEq(history.read(at,at+1hr).value,6f)}}
+      verifyEq(peer.entries,held);verify(budget.state.peak.val<=200000)
+      streams.each |stream| {stream.close};verifyEq(budget.state.temporary.val,held)
+    }
+    finally {streams.each |stream| {stream.close};peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testCrossBlockCleaningMatchesWholeRange()
   {
     configs:=[
