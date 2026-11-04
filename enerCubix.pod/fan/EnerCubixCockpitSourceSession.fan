@@ -162,9 +162,9 @@ internal class EnerCubixCockpitSourceSession
               }
               if(through>next) {emptyGroups++;next=through;active.each |w| {w.cursor?.advance(next)}}
             }
-            EnerCubixCockpitStream.withFrames(streams,budget.state) |h,frame|
+            missing:=0;active.each |w| {if(w.unavailable!=null) missing++}
+            consume:=|Str:EnerCubixHistoryData h,EnerCubixPreparedOwner frame|
             {
-              missing:=0;active.each |w| {if(w.unavailable!=null) missing++}
               frame.hold(8+64*missing);unavailableFrame:=EnerCubixPreparedFrame()
               try
               {
@@ -174,6 +174,8 @@ internal class EnerCubixCockpitSourceSession
               }
               finally {unavailableFrame.expire}
             }
+            if(missing==0) EnerCubixCockpitStream.withFrames(streams,budget.state,consume)
+            else EnerCubixCockpitStream.withMutableFrames(streams,budget.state,consume)
           }
           finally {streams.clear;active.clear}
         }

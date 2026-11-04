@@ -99,12 +99,20 @@ internal class EnerCubixCockpitStream
   ** All readers stay borrowed while report leaves consume the same watermark.
   ** Context roots drop before unwinding any producer's prepared-frame release.
   internal static Void withFrames(EnerCubixCockpitStream[] streams,EnerCubixPreparedBudget budget,|Str:EnerCubixHistoryData,EnerCubixPreparedOwner| consume)
+  {withFrameIndex(streams,budget,true,consume)}
+
+  ** A producer that still needs to append unavailable readers retains the
+  ** mutable legacy seam. It cannot publish an attested shared index yet.
+  internal static Void withMutableFrames(EnerCubixCockpitStream[] streams,EnerCubixPreparedBudget budget,|Str:EnerCubixHistoryData,EnerCubixPreparedOwner| consume)
+  {withFrameIndex(streams,budget,false,consume)}
+
+  private static Void withFrameIndex(EnerCubixCockpitStream[] streams,EnerCubixPreparedBudget budget,Bool shareIndex,|Str:EnerCubixHistoryData,EnerCubixPreparedOwner| consume)
   {
-    owner:=EnerCubixPreparedOwner(budget);histories:=Str:EnerCubixHistoryData[:];ids:=Str:Bool[:]
+    owner:=EnerCubixPreparedOwner(budget);[Str:EnerCubixHistoryData]? histories:=[:];ids:=Str:Bool[:]
     |Int->Void|? visit
     try
     {
-      owner.watch |->Void| {histories.clear;ids.clear}
+      owner.watch |->Void| {histories?.clear;histories=null;ids.clear}
       // Both indices, five legacy reader-wrapper cells, frame and registration.
       owner.hold(5+10*streams.size)
       DateTime? start;DateTime? end
@@ -122,7 +130,20 @@ internal class EnerCubixCockpitStream
       {
         if(i == streams.size)
         {
-          try {consume(histories,owner)} finally {owner.close}
+          if(!shareIndex)
+          {
+            try {consume(histories,owner)} finally {owner.close}
+            return
+          }
+          // One shallow read-only index header shares the producer-owned
+          // entries. All consumers finish before this source owner expires.
+          owner.hold(1)
+          [Str:EnerCubixHistoryData]? index:=histories.ro
+          // Dropping the mutable alias avoids Map.ro's implicit N-entry clone
+          // on clear(). This must precede every possibly failing registration.
+          histories=null
+          try {index.each |h| {h.bindSourceIndex(index,owner)};consume(index,owner)}
+          finally {index=null;owner.close}
           return
         }
         streams[i].withFrame |h| {h.bindOwnEmptyFrame(owner,(DateTime)start,(DateTime)end,bounds);histories[h.id]=h;visit(i+1)}

@@ -120,14 +120,22 @@ internal class EnerCubixContext
   internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories,Bool constantEmpty := false,Bool singlePassOwn := false)
   {
     if(persistentOwner == null || frameOwner != null || owner === persistentOwner || owner.budget !== preparedBudget) throw ArgErr("preparedContextOwner")
-    histories.each |h,id| {if(h.id != id || !h.ownedFrame(owner.budget)) throw ArgErr("preparedContextSourceFrame")}
+    indexReadOnly:=histories.isRO;borrowedIndex:=false
+    histories.each |h,id|
+    {
+      if(h.id != id || !h.ownedFrame(owner.budget)) throw ArgErr("preparedContextSourceFrame")
+      if(indexReadOnly && !borrowedIndex && h.ownsSourceIndex(histories,owner.budget)) borrowedIndex=true
+    }
     if(strictContext != null)
     {
-      if(strictContext.frameOwner !== owner || histories.size != strictContext.byPoint.size || histories.any |h,id| {h !== strictContext.byPoint[id]}) throw ArgErr("preparedContextStrictFrame")
+      if(strictContext.frameOwner !== owner || histories.size != strictContext.byPoint.size || (histories!==strictContext.byPoint && histories.any |h,id| {h !== strictContext.byPoint[id]})) throw ArgErr("preparedContextStrictFrame")
     }
     if(singlePassOwn) owner.hold(1)
     owner.watch |->Void| {dropFrame}
-    if(strictContext == null) {owner.hold(1+histories.size);byPoint=histories.dup}
+    // Every entry above still passes the original identity and lease checks.
+    // An attested producer index cannot change its keys/values, so only its
+    // borrowed reference is ours. Unattested/legacy maps keep an owned copy.
+    if(strictContext == null) {owner.hold(borrowedIndex ? 1 : 1+histories.size);byPoint=borrowedIndex ? histories : histories.dup}
     else byPoint=strictContext.byPoint
     frameOwner=owner;frameConstantEmpty=constantEmpty;ownMemoDisabled=singlePassOwn
   }
@@ -624,7 +632,7 @@ internal class EnerCubixContext
     frameCheck
     if (r["kind"] == "nativePoint") return EnerCubixValue(null,"notEnergyPoint")
     if (dimension?.nativeSpace == true && r["nativeSourceMissing"] == true) return EnerCubixValue(null,"nativeSourceMissing")
-    EnerCubixValue raw := EnerCubixValue()
+    EnerCubixValue? raw
     durationFactor:=r["kind"] == "sensor" ? 1f : (to-from).ticks.toFloat/1hr.ticks.toFloat
     point := r["pointId"]?.toStr ?: ""
       his := byPoint[point]
@@ -634,6 +642,26 @@ internal class EnerCubixContext
       if (strictContext == null) raw=his.read(from,to)
       else
       {
+        // Another canonical consumer may already have admitted this exact
+        // source/hour/cutoff header. Read its scalar facts before constructing
+        // another known-usage map. Trimmed, bound and other-cutoff reads retain
+        // the original path below. The source owner outlives this consumer.
+        shared:=frameOwner!=null && sharedModel!=null && byId===sharedModel.byId && r.isImmutable ? his.knownEvidence(r,from,to,knownEnd) : null
+        sharedDetails:=shared?.get("intervals") as [Str:Obj?][]
+        if(sharedDetails!=null && sharedDetails.size<=1000-knownDetailCount)
+        {
+          // Preserve every prepared lookup and its deadline cadence. Values
+          // remain fresh; only the already-owned evidence header is borrowed.
+          preparedBudget.lookup
+          knownWorkspace(6)
+          recordId:=r["id"].toStr;key:="$recordId|$point|${from.ticks}|${to.ticks}"
+          knownHeader(key,2)
+          raw=EnerCubixValue(EnerCubixMath.num(shared["knownValue"]),shared["knownQuality"].toStr,his.sources)
+          durationFactor=(EnerCubixMath.num(shared["coveredSeconds"]) ?: 0f)/3600f
+          knownDetailCount+=sharedDetails.size;knownReads[key]=shared
+        }
+        else
+        {
         data:=frameOwner==null ? his.knownUsage(from,to,knownEnd) : his.borrowedKnownUsage(from,to,knownEnd); raw=(EnerCubixValue)data["value"]
         durationFactor=(EnerCubixMath.num(data["coveredSeconds"]) ?: 0f)/3600f
         // This is the source's already-proven empty domain. Reading it adds no
@@ -688,13 +716,13 @@ internal class EnerCubixContext
           knownReads[key]=evidence
         }
         }
+        }
       }
     max := EnerCubixMath.num(r["maximum"])
     if (raw.value != null && max != null && raw.value > max*durationFactor) return EnerCubixValue(null,"maximum",raw.sources)
     if (r["kind"] != "sensor")
     {
-      sourceHistory:=byPoint[r["pointId"]?.toStr ?: ""]
-      sourceUnit:=sourceHistory?.unit ?: ""
+      sourceUnit:=his.unit
       if (sourceUnit.isEmpty) sourceUnit=r["unit"]?.toStr ?: ""
       targetUnit:=categoryUnit(r["categoryId"]?.toStr ?: "")
       factor:=EnerCubixMath.unitFactor(sourceUnit,targetUnit)

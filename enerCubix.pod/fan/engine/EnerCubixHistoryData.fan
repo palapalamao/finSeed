@@ -96,9 +96,22 @@ internal class EnerCubixHistoryData
   private EnerCubixSourceBounds? sourceBounds
   private Map? sourceHourRow
   private EnerCubixOwnEvidence[]? ownEvidence
+  private Map? sourceIndex
 
   internal Bool ownedFrame(EnerCubixPreparedBudget budget)
   {sourceFrame != null && !frameExpired && preparedBudget === budget}
+
+  ** Only the producer can attest that its exact read-only index and entries
+  ** were admitted. Read-only caller maps alone carry no ownership proof.
+  internal Void bindSourceIndex(Map index,EnerCubixPreparedOwner owner)
+  {
+    frameCheck
+    if(ownEmptyOwner!==owner) return
+    if(sourceIndex!=null || !index.isRO || index[id]!==this) throw ArgErr("preparedSourceIndex")
+    owner.hold(1);sourceIndex=index
+  }
+  internal Bool ownsSourceIndex(Map index,EnerCubixPreparedBudget budget)
+  {frameCheck;return sourceIndex===index && ownEmptyOwner!=null && ownEmptyOwner.entries!=0 && ownEmptyOwner.budget===budget}
 
   ** The common source owner outlives all consumer frames. Share only null
   ** results whose exact pair was already proven empty, within one real hour.
@@ -151,7 +164,7 @@ internal class EnerCubixHistoryData
   {
     ownEmptyValues?.clear;ownEmptyValues=null
     ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null;sourceBounds=null;sourceHourRow=null
-    ownEvidence?.clear;ownEvidence=null
+    ownEvidence?.clear;ownEvidence=null;sourceIndex=null
   }
   internal [Str:Obj?]? knownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd)
   {

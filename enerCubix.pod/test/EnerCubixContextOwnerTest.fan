@@ -1,8 +1,39 @@
 using haystack
+using [java] java.lang::Class as JavaClass
 
 ** Actual private producer frames; no FIN data or project mutation.
 class EnerCubixContextOwnerTest : Test
 {
+  Void testProducerCleanupDoesNotClonePublishedReadonlyIndexAtFullBudget()
+  {[false,true].each |reject| {checkPublishedIndex(reject)}}
+
+  private Void checkPublishedIndex(Bool reject)
+  {
+    budget:=EnerCubixStreamBudget();cursor:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(10))]);cursor.advance(at+1hr)
+    // The exact FIN runtime Map.ro implementation clones storage on mutation
+    // of its mutable alias. Observe real storage identity, not budget counters.
+    storage:=JavaClass.forName("fan.sys.Map").getDeclaredField("map");storage.setAccessible(true)
+    Map? published;Obj? before;EnerCubixPreparedOwner? peer;held:=0
+    try
+    {
+      run:=|->Void|
+      {
+        EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,owner|
+        {
+          published=histories;verify(histories.isRO);before=storage.get(histories)
+          peer=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining);held=peer.entries
+          if(reject) throw IOErr("controlledConsumerRejection")
+        }
+      }
+      if(reject) verifyErr(IOErr#) {run()};else run()
+      verify(storage.get(published)===before,"cleanup must drop roots without triggering Map.ro copy-on-write")
+      verifyErr(ArgErr#) {((EnerCubixHistoryData)published["p"]).read(at,at+1hr)}
+      cursor.close;verifyEq(budget.state.temporary.val,held)
+    }
+    finally {published=null;before=null;cursor.close;peer?.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testCompleteKnownHeadersShareOnlyInsideOwnedCanonicalSourceHour()
   {
     budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model,[:],false,false,true)
@@ -21,15 +52,23 @@ class EnerCubixContextOwnerTest : Test
         try
         {
           a.beginFrame(fa,histories);ka.beginFrame(fa,histories);verifyEq(ka.node("m","c",at,at+1hr).value,10f)
+          verify(histories.isRO,"producer source maps are read-only for every consumer")
+          verifyErr(ReadonlyErr#) {histories.remove("p")}
+          verify(a.byPoint===histories,"owned contexts borrow the already-owned source index instead of copying its entries")
           first:=ka.knownReads.vals.first;before:=first.dup;verifyEq(EnerCubixMath.maps(first["intervals"]).size,1)
           copy:=first.dup;copy.clear;fa.close;aOwner.close
-          b.beginFrame(fb,histories);kb.beginFrame(fb,histories);verifyEq(kb.node("m","c",at,at+1hr).value,10f)
+          b.beginFrame(fb,histories);kb.beginFrame(fb,histories);lookups:=budget.state.lookups.val
+          verifyEq(kb.node("m","c",at,at+1hr).value,10f)
+          verifyEq(budget.state.lookups.val,lookups+1,"the shared header path keeps the original prepared lookup/deadline cadence")
+          verifyEq(EnerCubixContext#.field("knownScratch").get(kb),6,"an already owned complete header needs only two scalar value workspaces, not another copied map or detail vectors")
           verify(kb.knownReads.vals.first===first,"consumer evidence links borrow the same admitted complete header")
           verify(!kb.emptyEvidenceOmitted);verifyEq(kb.knownReads.size,1)
           sharedCharges:=(Str:Int)EnerCubixContext#.field("knownCharges").get(kb)
           verifyEq(sharedCharges.vals.first,2,"the source owns the complete shared header; this consumer retains only its slot/key links")
           verify(sourceOwner.entries>=8+first.size)
           verify(histories["p"].knownEvidence(b.byId["m"],at,at+1hr,at+4hr)===first)
+          fresh:=kb.ownRaw(b.byId["m"],at,at+1hr,Str[,]);fresh.value=-999f
+          verifyEq(kb.ownRaw(b.byId["m"],at,at+1hr,Str[,]).value,10f,"only the header is shared; raw numeric values stay independent")
           EnerCubixContext#.field("knownDetailCount").set(kb,1000)
           verifyEq(kb.ownRaw(b.byId["m"],at,at+1hr,Str[,]).value,10f)
           replaced:=kb.knownReads.vals.first
@@ -196,6 +235,29 @@ class EnerCubixContextOwnerTest : Test
     raw:=EnerCubixHistoryData(["pointId":"p","mode":"interval","unit":"kWh","samples":[["ts":at.toIso,"value":10f]]])
     verifyErr(ArgErr#) {ctx.beginFrame(frame,["p":raw])}
     frame.close;persistent.close;verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testReadonlyCallerIndexWithoutProducerAdmissionStillNeedsOwnedCopy()
+  {
+    budget:=EnerCubixStreamBudget();persistent:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(persistent)
+    cursor:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(10))]);cursor.advance(at+1hr)
+    try
+    {
+      cursor.withFrame |h|
+      {
+        frame:=EnerCubixPreparedOwner(budget.state);index:=Str:EnerCubixHistoryData["p":h].ro
+        try
+        {
+          ctx.beginFrame(frame,index)
+          verify(ctx.byPoint!==index,"read-only alone is not proof that another owner admitted the source index")
+          verifyEq(ctx.node("m","c",at,at+1hr).value,10f)
+        }
+        finally {frame.close}
+      }
+    }
+    finally {cursor.close;persistent.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
   }
 
   Void testFailedMetadataAdmissionStillDropsRegisteredRoots()

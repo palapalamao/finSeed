@@ -227,3 +227,15 @@
 - 最终239物理后端源与套件前hash一致，122类966方法295495检查、138.557秒全绿（candidate-01423-final-fantom.log）；之前965套件是watch兜底前interim，保留且不混称最终。旧两方法RED与constructor独立RED均保留。
 - Q1/全年完整报告、各模块、warning/quality/coverage/evidence以及生产decoder对冻结022等价，仅既定runtime计数/opaque ID规范化；全年26.296秒峰192896，Q1 12.702秒峰191451。模型仅22captured+60synthetic、82源/103窗口，不冒充FIN性能。关闭temporary/raw为0，prepared824描述费仍保留。
 - 前端全部284个src/tests物理hash与冻结022相同，明确复用其437单测及33个不同受控页面场景（原失败轨迹保留）；023版本资源全新type/Vite构建通过，不虚称新原生页面验收。四版本统一0.14.23；候选冻结后待原生9/9及最终同PID观察。现场业务配置/点位/历史无写入；人工native print未答，真实只读用户明确暂缓。
+
+
+### 2026-11-05 0.14.24 source-frame index and known-header CPU candidate
+
+- 023实际部署315BCB…FB8F，24资源字节对冻结包一致，9查询仍8/9：zeda全站年度冷查询30.031秒504，Oct5 watermark/3337 reads/548797 scanned/peak189723；没有到报告finalize，不能说023内存修复已经原生年度验收。一次有目的40秒/64MiB JFR同载荷warm诊断仍50430.047秒，1357个cockpit样本；Map调用分散、GC仅短暂停，不据此修改Java/JVM或提高限额。两失败及census/profile均保留。023自身23088同PID1803.137秒181样本观察通过，含整个FIN背景，不混成024证明。
+- 024在canonical source-owner完整knownEvidence命中时前置复用其已准入header：record identity/实际from/to/queryEnd/剩余detail额度严格相符，仍逐访prepared lookup与deadline、knownDetailCount和knownReads更新。fresh rawValue/scale工作空间6；trim/bound/不同cutoff/不完整来源仍走原路，不新增跨帧cache或借可变数值。删无用raw占位分配并复用已查his.unit。旧knownScratch>6 RED、顺序/lookup/独立raw修改/trim升级/源owner及peer守恒GREEN。
+- 生产withFrames只读index共享实际source owner的条目，额外RO header1及reader精确registered Map引用各1均准入。Context每entry原id/budget/lease验证全部保留；只有producer精确Map身份+活owner证明才借索引，外部只读Map仍复制（独立旧码RED）。strict/known同Map身份下无需重复遍历证明恒真identity；legacy原copy分支保留。
+- 运行时Map.ro在mutable alias clear时会COW。新测试反射实际FIN sys.jar Map底层HashMap身份，peer占满remaining；旧代码真实clone RED，新代码normal/consumer-throw两条13检查GREEN。创建RO后立即histories=null，bind/consume全在try内，finally先index=null再close；清理不再mutate旧alias，reader仍expire。源Map逃逸可非空但不可读，不虚称强制清空。无N-entry cleanup copy。
+- 全量r0曾发现2个真实失败：SourceSession补unavailable reader不能写RO。保留失败日志，新增withMutableFrames legacy seam，missing>0分支保留原质量/引用/64*missing准入与finally expire，missing0才RO，不过滤/补零。两原测试65/27检查重新通过。shadow构建语法错误也保留，未安装失败包。
+- 最终239源与pre-suite hash一致；candidate-01424-final-fantom-r2.log完整122类968方法295518检查、140.138秒通过。r0两失败不混称最终。最终模型r3同一编译SDK对冻结023：Q1 12.432秒/191370，全年25.418秒/192896，全report/module/warning/quality/coverage/evidence/生产decode等价，仅原声明runtime/opaque身份规范化。22captured+60synthetic，82源103窗口，仍不冒充FIN性能；temporary/raw关闭0，prepared824描述费保留。
+- UI284物理src/tests与022完全一致，明确复用437unit及33个不同受控场景，024 fresh type/Vite20.16秒；四版本024。冻结后待新包原生9查询、实际导出/资源、最终同PID观察。30s/200000/8MiB及FIN主点历史规则不变，无现场业务配置/采集/历史写入。
+- 49项源级复核已区分功能/受控/原生门禁；Linear6个功能45/47/48/49/50/58已Done，7个44/46/51/52/55/56/57实现完成InReview，53/54/59仍InProgress。真实readonly用户暂缓、原生打印人工未答单列，不把现场造预算/素材/报警当待开发任务。
