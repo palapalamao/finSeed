@@ -259,9 +259,11 @@ internal class EnerCubixReportConsumer
       // detached periods. Inspect actual totals/periods before using this bound.
       // New non-period graph: series9C, totals20C, coverage linksC, members24C,
       // selection16G+2C, shares22U+2C <=96C (G,U<=C). Reserve100C plus common
-      // heads/warnings independently; retain original member/detail allowance,
-      // class preparation and all scratch. Short ranges may exceed the old cap.
-      return original-40*count+27*count+100*cursors.size+report.dailyOutputCommonEntries
+      // heads/warnings independently. The original32 per frozen member already
+      // funds this same non-period graph: credit at most one such allowance per
+      // line, never nonexistent members or private metadata/class/scratch.
+      credit:=32*report.frameMemberCount.min(cursors.size)
+      return original-40*count+27*count+100*cursors.size+report.dailyOutputCommonEntries-credit
     }
     if(!report.canSizeDailyOutput || cursors.any |c| {c.line.reference || c.line.gauge || c.line.ratio || c.line.leak || !c.line.ticks.isEmpty}) return original
     if(cursors.any |c| {data:=dailyData[c.line.id];return data==null || (data["hours"] as List)?.size!=24 || data["classified"] isnot List}) return original

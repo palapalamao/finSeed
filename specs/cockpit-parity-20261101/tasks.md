@@ -268,3 +268,13 @@
 - final-r2的32*n版本仅interim，不用于冻结。最终r3实际122类977方法298550检查、134.952秒通过，239物理源与pre-suite-r3逐SHA一致。最终Q1/全年完整business+production decode与冻结026等价，实际耗时见下方；82向量103窗口含60synthetic，只是受控等价，非FIN性能。关闭temporary/raw为0，prepared824描述费不冒称全0。
 - UI284源/测试仍逐SHA同022，明确复用437unit/33不同受控场景，当前27 fresh type/Vite21.13秒通过；版本与99运行源主点guard通过。准备冻结后实际9项与最终同PID观察，不写现场配置/采集/历史；打印人工待答与readonly用户暂缓继续分层。
 - 最终模型r3 Q1 12904ms，全年 27996ms；峰 191371/192896。
+
+
+### 2026-11-05 0.14.28 reuse the existing member envelope once
+
+- 027真实仍8/9：annual42226.766秒，raw3951/671878/103全部完成；face-endUse233 scratch原位拒绝，output52198/rem6440，peak201564。27新图分支确实生效，但实际utility C60/11period的节省小于此前C81估计。保全response/census，未再warm重试，也不把26/27观察拼成新版本观察。
+- 028仍采用27已经证明的27P+100C+common完整新图，只抵扣constructor原来已预留的32*min(C,K)成员额度一次；K直接读取同一冻结metadataPlanShape.members，发生次数与原式一致，K0抵扣0，K>C保留多出的32*(K-C)。冻结metadata此前独立hold，私有/准备同时图由保留class/member额度充分覆盖（66C+K <=128C+32*(K-min(C,K))）；没有少计真实容器，没有改scratch/完成顺序/来源和任何资源限额。
+- 独立149200无关owner旧27在同233真实RED，新28 GREEN峰199644，18series/432detail/每数值/来源/独立hard图35779<=42312；真实K0单period图4297<=11244，短period与宽legacy守卫继续通过。全部Consumer37方法2230检查通过。199644是受控fixture峰，非FIN成功证明。
+- 最终239物理源与final-r3-pre-suite清单逐SHA一致；全量122类979方法298589检查、136.989秒通过。Q1/全年完整business与production decode对冻结027等价，实际耗时如下；82向量103窗口含60synthetic，不冒充FIN性能。关闭temporary/raw0，prepared824描述费保留。
+- UI284物理源/tests仍与022完全一致，明确复用437单测和33不同受控场景；28 fresh type/Vite21.06秒、四版本和99runtime主点guard通过。冻结后仍执行新包真实9项、导出/资源和最终同PID30分钟；不写现场业务/采集/历史。原生打印人工未答、真实readonly用户暂缓，继续单列。
+- 最终模型r3 Q1 12355ms，全年 25486ms；峰 191371/192896。

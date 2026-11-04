@@ -116,6 +116,7 @@ internal class EnerCubixReport
     return shape
   }
   internal Int frameFinalDepth() {finalMetadataFrozen ? finalDepth : ctx.byId.size}
+  internal Int frameMemberCount() {metadataPlanShape?.get("members") ?: 0}
   internal [Str:Obj?][] frameScope(EnerCubixLine line)
   {finalMetadataFrozen ? finalScopes[line.id] : ctx.scopeMeters(line.nodeId,line.category,Str[,],line.utility)}
   private Int metadataCells(Obj? value)
