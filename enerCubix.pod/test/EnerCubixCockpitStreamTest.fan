@@ -6,6 +6,39 @@ class EnerCubixCockpitStreamTest : Test
   Void testExecutableStreamingPathExists()
   { verify(Type.find("enerCubix::EnerCubixCockpitStream",false) != null) }
 
+  Void testCursorReusesParsedBoundsWithoutChangingOriginalConstraintOrder()
+  {
+    q:=query(at,at+4hr);ranges:=[Str:Obj?][,];20.times {ranges.add(["from":at.toIso,"to":(at+4hr).toIso])};ranges.add(["from":(at+15min).toIso,"to":(at+45min).toIso]);q["_cockpitReadRanges"]=ranges
+    rs:=[Str:Obj?][["id":"m","kind":"meter","pointId":"p","tariffId":"t"],["id":"alias","kind":"binding","pointId":"p","tariffId":"t"],["id":"t","kind":"tariff","mode":"flat","rate":1f]]
+    budget:=EnerCubixStreamBudget();cursor:=EnerCubixCockpitStream.openCursor(point(false),null,at,at+4hr,q,rs,budget,|Dict p,Span span,|HisItem| sink| {(0..4).each |i| {ts:=at+1hr*i;if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(i*6)))}})
+    try
+    {
+      before:=(Int)EnerCubixCockpitStream#.field("cursorCatalogCharge").get(cursor)
+      cursor.advance(at+1hr)
+      queries:=(List)EnerCubixCockpitStream#.field("queries").get(cursor);bounds:=(DateTime[][])EnerCubixCockpitStream#.field("parsedQueries").get(cursor)
+      verifyEq(queries.size,21);verifyEq(bounds.size,21)
+      graph:=1+bounds.size;bounds.each |pair| {graph+=1+pair.size}
+      verifyEq((Int)EnerCubixCockpitStream#.field("cursorCatalogCharge").get(cursor)-before,graph,"outer links and every inner list entry are real retained containers")
+      bounds.each |pair,i| {verifyEq(pair[0].toIso,((Map)queries[i])["from"]);verifyEq(pair[1].toIso,((Map)queries[i])["to"])}
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,owner| {verifyEq(histories["p"].read(at,at+1hr).value,6f)}
+      cursor.advance(at+2hr);verify(bounds===EnerCubixCockpitStream#.field("parsedQueries").get(cursor))
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,owner| {verifyEq(histories["p"].read(at+1hr,at+2hr).value,6f)}
+    }
+    finally {cursor.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  Void testParsedPairPlanPreservesLegacyTierPrefixAndFirstSeenSequence()
+  {
+    full:=Str:Obj?["from":at.toIso,"to":(at+1hr).toIso];part:=Str:Obj?["from":(at+15min).toIso,"to":(at+45min).toIso]
+    queries:=[full,part,part.dup,full.dup]
+    tariff:=Str:Obj?["id":"t","kind":"tariff","mode":"monthlyBlock","rules":[["from":(at+20min).toIso,"to":(at+35min).toIso]]]
+    ctx:=EnerCubixContext([tariff],[Str:Obj?][,],TimeZone.utc)
+    expected:=EnerCubixCockpitStream.pairs(at,queries,[tariff,tariff],ctx)
+    parsed:=queries.map |q->DateTime[]| {[DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr)]}
+    actual:=EnerCubixCockpitStream#.method("pairs").callList([at,queries,[tariff,tariff],ctx,parsed])
+    verifyEq(actual,expected,"preserve all original duplicate/prefix/exception order too")
+  }
+
   Void testCursorRetainsRawLookaheadWithoutFutureDerivedCleaningDetails()
   {
     cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMin":Number(0),"deltaMax":Number(20)])

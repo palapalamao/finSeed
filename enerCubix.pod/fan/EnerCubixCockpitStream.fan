@@ -244,6 +244,7 @@ internal class EnerCubixCockpitStream
     if(!cursorMode || cursorClosed) return
     if(cursorFrameActive) throw ArgErr("cursorFrameActive")
     clearCursorChunk;raw.clear;intervals.clear;cursorReader=null;previous=null;cursorValidatedConfig=null
+    parsedQueries?.each |pair| {pair.clear};parsedQueries?.clear;parsedQueries=null
     if(cursorIntervalCharge > 0) {budget.state.releaseTemporary(cursorIntervalCharge);cursorIntervalCharge=0}
     if(!cursorEscaped) clearPrepared
     ctx=null
@@ -425,6 +426,7 @@ internal class EnerCubixCockpitStream
   private DateTime? ruleEnd
   private DateTime cutoff
   private DateTime[] queryEnds
+  private DateTime[][]? parsedQueries
   private [Str:Obj?][] queries
   private EnerCubixContext? ctx
   private [Str:Obj?]?[] tariffs
@@ -622,7 +624,14 @@ internal class EnerCubixCockpitStream
       if (inferredInterval) normalized["quality"]="estimated"
       history=EnerCubixHistoryData(EnerCubixKnownUsage.clip([normalized],cutoff).first)
     }
-    pairs:=pairs(hour,queries,tariffs,(EnerCubixContext)ctx)
+    if(cursorMode && parsedQueries==null)
+    {
+      // Preserve original constraints and visit order. Only immutable parsing
+      // is shared by this cursor; none of the hourly pairs are cached/changed.
+      n:=1+4*queries.size;budget.state.holdOwned(n);cursorCatalogCharge+=n
+      parsedQueries=queries.map |q->DateTime[]| {[DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr)]}
+    }
+    pairs:=pairs(hour,queries,tariffs,(EnerCubixContext)ctx,parsedQueries)
     values:=Str:Obj?[:]
     pairs.each |pair|
     {
@@ -632,7 +641,9 @@ internal class EnerCubixCockpitStream
       known:=Str:Obj?[:]
       queryEnds.each |qEnd|
       {
-        row:=history.knownUsage(a,b,qEnd,ruleEnd == qEnd).dup;row.remove("value")
+        // This fresh window has no prepared/borrowed map. knownUsage returns
+        // its own mutable envelope; a second shallow copy repeats that work.
+        row:=history.knownUsage(a,b,qEnd,ruleEnd == qEnd);row.remove("value")
         events:=EnerCubixMath.maps(row["intervals"])
         keep:=events.size.min((1000-budget.detailCount).max(0))
         row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
@@ -661,13 +672,13 @@ internal class EnerCubixCockpitStream
     {released:=oldIntervals-intervals.size;budget.state.releaseTemporary(released);cursorIntervalCharge-=released}
   }
 
-  internal static [Str:Obj?][] pairs(DateTime hour, [Str:Obj?][] queries, [Str:Obj?]?[] tariffs, EnerCubixContext ctx)
+  internal static [Str:Obj?][] pairs(DateTime hour, [Str:Obj?][] queries, [Str:Obj?]?[] tariffs, EnerCubixContext ctx,DateTime[][]? parsed := null)
   {
     end:=hour+1hr
     pairs:=[Str:Obj?][["from":hour,"to":end]]
-    queries.each |q|
+    addQuery:=|DateTime left,DateTime right|
     {
-      a:=DateTime.fromIso(q["from"].toStr); b:=DateTime.fromIso(q["to"].toStr)
+      a:=left;b:=right
       if (a < hour) a=hour;if (b > end) b=end
       if (b > a)
       {
@@ -678,6 +689,8 @@ internal class EnerCubixCockpitStream
           pairs.add(["from":hour,"to":a])
       }
     }
+    if(parsed==null) queries.each |q| {addQuery(DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr))}
+    else parsed.each |q| {addQuery(q[0],q[1])}
     pairs.dup.each |pair|
     {
       a:=(DateTime)pair["from"]; b:=(DateTime)pair["to"]
