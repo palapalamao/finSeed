@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {installTransport} from './fixtures';
 import type {CockpitRequest,CockpitSnapshot} from '../../src/cockpitTypes';
 
-const manifest=JSON.parse(readFileSync(new URL('../../../res/web/enerCubix/.vite/manifest.json',import.meta.url),'utf8')) as Record<string,{name?:string;file:string;isDynamicEntry?:boolean}>;
+const manifest=JSON.parse(readFileSync(new URL('../../../res/web/enerCubix/.vite/manifest.json',import.meta.url),'utf8')) as Record<string,{name?:string;file:string;isDynamicEntry?:boolean;css?:string[]}>;
 const chunk=(name:string)=>Object.values(manifest).find(entry=>entry.name===name);
 const raw=JSON.parse(readFileSync(new URL('../fixtures/cockpit-space-response.json',import.meta.url),'utf8')) as CockpitSnapshot;
 const version=JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;
@@ -11,6 +11,18 @@ const routes=['Management','MessageCenter','ReportWorkspace','CockpitPage'];
 
 test('production build separates page code from the application shell',()=>{
  for(const name of routes)expect(chunk(name)?.isDynamicEntry,name+' must be loaded on demand').toBe(true);
+});
+
+test('prefetch and rendering share a stylesheet failure, without querying an unstyled page',async({page})=>{
+ const state=await installTransport(page,{userLocale:'en-US'});
+ let releaseCatalog!:()=>void;const gate=new Promise<void>(resolve=>releaseCatalog=resolve);
+ const css=chunk('CockpitPage')!.css![0];let queries=0;
+ await page.route('**/api/testproject/ext/enerCubix/v1/catalog',async route=>{await gate;await route.fulfill({json:{ok:true,data:{version,project:'testproject',user:{name:state.username,canWrite:false},records:state.records}}});});
+ await page.route('**/'+css,async route=>{await route.abort('failed');releaseCatalog();});
+ await page.route('**/api/testproject/ext/enerCubix/v1/cockpit',route=>{queries++;const request=route.request().postDataJSON() as CockpitRequest;return route.fulfill({json:{ok:true,data:{...raw,requestId:request.requestId}}});});
+ await page.goto('/#/cockpit?project=testproject');
+ await expect(page.getByText('The page could not be loaded. Reload to try again.',{exact:true})).toBeVisible();
+ expect(queries).toBe(0);
 });
 
 for(const language of ['zh-CN','en-US'])test('homepage starts querying while page code loads, with no unrelated pages '+language,async({page},info)=>{

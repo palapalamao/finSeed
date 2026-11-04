@@ -27,3 +27,5 @@
 本次优化源码尚待集成与统一发布。后端约 4.8 秒的业务查询仍是主要等待，应继续基于同范围请求定位；不宣称前端拆包已修复后端查询。原始证据位于本工作区 `out/homepage-performance/`，含 before／after 依赖闭包 JSON 与 live-before 请求及截图。
 
 2026-11-04 补充交接：前端实现 `bd20dae1` 已由主开发集成至 developer `1d0b6603`，尚未发布。浏览器原生 Resource Timing 另存 `live-before-browser-timing.json`：catalog 在导航后约 1,350ms 发起，cockpit 在 1,669ms 发起、6,470ms 收完；静态脚本本次命中缓存。新增测试补存中英下载失败恢复截图，5/5 重验通过（19.6 秒），JSON 结果 `startup-result.json` 为 5 expected／0 unexpected／0 flaky；320px 中文首页及英文恢复页已打开图像核对。截图仅为受控 UI，不标为 FIN 新版实机证据。
+
+发布前补测复现了一个 CSS 依赖失败问题：Vite 预加载把 CSS 标记为已访问，正式渲染再次调用相同 loader 时绕过先前 CSS 的等待／失败。旧实现的生产回归未显示失败恢复提示而显示已有 30kWh 快照。四个页面 loader 现共享整个 Promise，CSS 与模块的等待及错误一致。该用例先 RED，修正后含原五项共 6/6 GREEN（22 秒），且样式失败时业务查询次数为零；TypeScript／生产构建通过。最终本地闭包为 catalog 前 1,110,123B、完整首页 2,141,295B（本地 gzip 359,585／701,810B），相对原版的减少比例仍约 61.1%／24.9%。独立 Playwright 配置改用单对象展开覆盖原配置、端口 4190，避免合并原 4178 服务器。产品修改在本次补丁后冻结，统一候选由主开发重新打包验证。

@@ -18,10 +18,12 @@ import type {CockpitSnapshot} from './cockpitTypes';
 import {buildReportDisplay} from './reportDisplay';
 
 const startupLocale=locale;
-const loadCockpit=()=>import('./CockpitPage').then(module=>({default:module.CockpitPage}));
-const loadManagement=()=>import('./Management').then(module=>({default:module.Management}));
-const loadMessages=()=>import('./MessageCenter').then(module=>({default:module.MessageCenter}));
-const loadWorkspace=()=>import('./ReportWorkspace').then(module=>({default:module.ReportWorkspace}));
+// Share Vite's CSS dependency wait and errors as well as the module itself.
+function loadPageOnce<T>(load:()=>Promise<T>){let pending:Promise<T>|undefined;return()=>pending??=load();}
+const loadCockpit=loadPageOnce(()=>import('./CockpitPage').then(module=>({default:module.CockpitPage})));
+const loadManagement=loadPageOnce(()=>import('./Management').then(module=>({default:module.Management})));
+const loadMessages=loadPageOnce(()=>import('./MessageCenter').then(module=>({default:module.MessageCenter})));
+const loadWorkspace=loadPageOnce(()=>import('./ReportWorkspace').then(module=>({default:module.ReportWorkspace})));
 const CockpitPage=lazy(loadCockpit),Management=lazy(loadManagement),MessageCenter=lazy(loadMessages),ReportWorkspace=lazy(loadWorkspace);
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
 type View=ReportKind|ManageView|'messages'|'cockpit';
