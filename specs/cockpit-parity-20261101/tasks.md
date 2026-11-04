@@ -152,3 +152,13 @@
 - bf764ed3 + cc2e387c：cursor首次closeHour按真实容器1+4*N准入不可变DateTime预解析bounds，仍保留原字符串queries及完整重复/顺序；关闭先清内部/外部数组再退catalogcharge。只去新window返回knownUsage外层冗余dup；并把来源union、pair展开变等序for，保留原containsKey→hold→put、数值加法、base snapshot和最终unique。非空rules/exception及null tariff走原tariffBounds；明确无规则的非null费率直接生成同一新from/to Map，原a>hour短路保留。
 - 未实施推定的Map内容去重：TDD显示旧pairs真实重复序列并非预想，去重可能改变诊断预算，因此保留原行为。UTC及纽约春秋DST×flat/月阶梯绝对日期/年阶梯半小时时段9组，以冻结015原legacyPairs完整数组对照cached/uncached，均一致。预解析cache实际图计费64vs85的RED保留，修正1+4*N后GREEN；不是漏算容器规避容量。
 - 最终6类55方法2439检查、完整122类949方法294620检查（158.978秒）和旧010完整Q1报告/警告/质量/诊断/覆盖/生产解码对账通过。Q1约13.429秒，不能当作现场年度性能成功。后端冻结cc2e387c；统一下一版016，TS src/tests与已验14/15物理相同，431/29按明确同源复用，未重复全量UI。下一步实际年度+最终同实例30分钟；未改现场业务/采集/原始历史，原生打印未验、只读用户暂缓。
+
+
+## 0.14.16 实际结果与 EOF 尾段分组（2026-11-05 00:09）
+
+- 161b704b / 0.14.16 / 589DD851728D9CF9B20BE5F3B9912C589301FF3D39ED9A3B5BB7C35DEA135920（4816466B）已于11月4日23:39实际安装，旧20640/12760/12204正常退出并备份BE318；唯一-noAuth 9776/launcher20368，FIN5停止，24HTTP资源一致。仍8/9：zeda-site30.046秒504，census推进09-14 15:00、峰189859；其余8查询、固定数值/生产解码与双语Excel通过。不把微调当年度已完成。
+- b97ff578仅放宽已经完整读到EOF的旧尾部缺测证明：intervals为空、raw为空或最后时刻不晚于当前hour，并且当前尚未消费的(cursorConsumed?:from)→hour被一个strictQuality=missing的末域完整覆盖，才返回to复用已有24h empty-group。最后valid/zero/NA、不完整区间、未来raw/interval和未读EOF不符合guard，不从hisEnd标签推断，不改每小时计算或质量。
+- 原一行raw尾放宽草稿有最后有效小时重复使用风险，架构审阅指出后增加pending-prefix guard。新Cursor48h用例明确先读真实10且不允许group，消费后才允许缺测后缀；跨2hr清洗区间的两小时incomplete都拒绝group，之后missing可group。原view/frame混用及49h fixture未到EOF的测试缺陷已修，失败日志保留。SourceSession past/pastNA/pastZero/pastBoundary完整报告grouped/ungrouped对照通过，pastBoundary另以独立energy=10验证最后用量仅一次。
+- 最终相关2类45方法2642检查；完整122类951方法294967检查（166.996秒）及旧010完整Q1报告/模块/警告/质量/覆盖/生产解码深等价通过。当前仅3文件改动，架构静态复核无阻断；Context typed-domain缓存没有实施。
+- 另建立明确反事实fixture：仅本地JSON将22条已捕获年度源向量截到1月31日，60条既有11月合成向量不变，903目录/82主点；不改FIN历史。独立D盘SDK封存旧016/589D，对同fixture重跑旧/新完整报告、模块和生产解码一致，10.891→8.208秒、峰均188670、关闭归零。证据eof-tail-shape-equivalence.json；这约24.6%改善不是现场性能保证，不把反事实数据当真实现场。
+- 下一版统一017，前端源码仍同014，431/29按明确源码身份复用并重建版本资源。最终原生年度和同实例观察仍需通过；原生打印未验、只读用户暂缓，未写现场配置/采集/原始历史。016verification的frontend.execution残留“final015”是文字标签错误，实际candidate-01416-ui-build.log已验证016；不为此改封存文件，新017说明使用正确标签。
