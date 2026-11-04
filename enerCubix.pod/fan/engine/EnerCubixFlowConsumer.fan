@@ -137,7 +137,8 @@ internal class EnerCubixFlowConsumer
   {
     frame.hold(2);own:=Str:EnerCubixHistoryData[:]
     h:=histories[device.point];if(h!=null) own[device.point]=h
-    device.strict.beginFrame(frame,own,constantEmpty);device.known.beginFrame(frame,own,constantEmpty)
+    singlePass:=!constantEmpty && (device.record["kind"]=="meter" || device.record["kind"]=="totalMeter")
+    device.strict.beginFrame(frame,own,constantEmpty,singlePass);device.known.beginFrame(frame,own,constantEmpty,singlePass)
   }
   Void finish()
   {

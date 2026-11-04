@@ -14,12 +14,13 @@ internal class EnerCubixValueFold
   private Str quality := "ok"
   private Str? invalidReason
   private Str:Bool sources := [:]
+  private Str? lastSource
   private EnerCubixPreparedOwner? owner
   private Bool closed := false
   private Void useOwner(EnerCubixPreparedOwner? owner)
-  {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(12)}
+  {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(13)}
   private Void close()
-  {sources.clear;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
+  {sources.clear;lastSource=null;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
   internal Int sourceCount() {if(closed) throw ArgErr("valueFoldClosed");return sources.size}
 
   Void add(EnerCubixValue value)
@@ -28,7 +29,12 @@ internal class EnerCubixValueFold
     seen=true
     ids:=value.sources
     for(i:=0;i<ids.size;i++)
-    {id:=ids[i];if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}}
+    {
+      id:=ids[i]
+      if(id==lastSource) continue
+      if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}
+      lastSource=id
+    }
     if(!knownMode)
     {
       if(value.value == null && value.quality != "filtered") missing=true

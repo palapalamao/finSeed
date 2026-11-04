@@ -3,6 +3,86 @@ using haystack
 ** Actual private producer frames; no FIN data or project mutation.
 class EnerCubixContextOwnerTest : Test
 {
+  Void testCompleteKnownHeadersShareOnlyInsideOwnedCanonicalSourceHour()
+  {
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model,[:],false,false,true)
+    aOwner:=EnerCubixPreparedOwner(budget.state);bOwner:=EnerCubixPreparedOwner(budget.state)
+    a:=EnerCubixContext.shared(catalog,"space",false,aOwner);b:=EnerCubixContext.shared(catalog,"metering",false,bOwner)
+    ka:=EnerCubixContext.known(a,at+4hr);kb:=EnerCubixContext.known(b,at+4hr)
+    cfg:=Etc.makeDict(["defNull":Marker.val]);p:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])
+    q:=Str:Obj?["from":at.toIso,"to":(at+4hr).toIso,"asOf":(at+4hr).toIso,"tz":"UTC","_cockpitReadRanges":[["from":at.toIso,"to":(at+4hr).toIso],["from":at.toIso,"to":(at+2hr).toIso]]]
+    cursor:=EnerCubixCockpitStream.openCursor(p,cfg,at,at+4hr,q,records,budget,|Dict point,Span span,|HisItem| sink| {[HisItem(at,Number(0)),HisItem(at+1hr,Number(10)),HisItem(at+2hr,Number(30))].each |row| {if(row.ts>=span.start && row.ts<span.end) sink(row)}})
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,sourceOwner|
+      {
+        fa:=EnerCubixPreparedOwner(budget.state);fb:=EnerCubixPreparedOwner(budget.state)
+        try
+        {
+          a.beginFrame(fa,histories);ka.beginFrame(fa,histories);verifyEq(ka.node("m","c",at,at+1hr).value,10f)
+          first:=ka.knownReads.vals.first;before:=first.dup;verifyEq(EnerCubixMath.maps(first["intervals"]).size,1)
+          copy:=first.dup;copy.clear;fa.close;aOwner.close
+          b.beginFrame(fb,histories);kb.beginFrame(fb,histories);verifyEq(kb.node("m","c",at,at+1hr).value,10f)
+          verify(kb.knownReads.vals.first===first,"consumer evidence links borrow the same admitted complete header")
+          verify(!kb.emptyEvidenceOmitted);verifyEq(kb.knownReads.size,1)
+          otherEnd:=EnerCubixContext.known(b,at+2hr);verifyEq(otherEnd.node("m","c",at,at+1hr).value,10f)
+          verify(otherEnd.knownReads.vals.first!==first,"second prepared queryEnd is an independent key")
+          bound:=EnerCubixContext.bound(b,"m",b.byId["m"].dup.set("maximum",5f));limited:=EnerCubixContext.known(bound,at+4hr)
+          verifyEq(limited.node("m","c",at,at+1hr).quality,"maximum");verify(limited.knownReads.vals.first!==first)
+          trimmed:=EnerCubixContext.known(b,at+4hr);EnerCubixContext#.field("knownDetailCount").set(trimmed,1000)
+          verifyEq(trimmed.node("m","c",at,at+1hr).value,10f);row:=trimmed.knownReads.vals.first
+          verify(row!==first);verifyEq(EnerCubixMath.maps(row["intervals"]).size,0);verifyEq(row["detailsTruncated"],true);verify(row["intervalsCaptureId"] is Str)
+          verifyEq(first,before);verifyEq(EnerCubixMath.maps(first["intervals"]).size,1)
+          peer:=EnerCubixPreparedOwner(budget.state)
+          try
+          {
+            peer.hold(budget.state.remaining-1);held:=sourceOwner.entries;peerHeld:=peer.entries;total:=budget.state.temporary.val;otherRecord:=b.byId["m"].dup.toImmutable
+            verifyErr(EnerCubixHttpErr#) {histories["p"].rememberKnownEvidence(otherRecord,at,at+1hr,at+4hr,first)}
+            verifyEq(sourceOwner.entries,held);verifyEq(peer.entries,peerHeld);verifyEq(budget.state.temporary.val,total)
+            verifyEq(histories["p"].knownEvidence(otherRecord,at,at+1hr,at+4hr),null)
+          }
+          finally {peer.close}
+        }
+        finally {fa.close;fb.close}
+      }
+    }
+    finally {cursor.close;aOwner.close;bOwner.close;model.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
+  Void testSinglePassPhysicalContextsKeepNumbersAndEvidenceWithoutUnusedMemo()
+  {
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model)
+    normalOwner:=EnerCubixPreparedOwner(budget.state);fastOwner:=EnerCubixPreparedOwner(budget.state)
+    normal:=EnerCubixContext.shared(catalog,"metering",false,normalOwner);fast:=EnerCubixContext.shared(catalog,"metering",false,fastOwner)
+    nk:=EnerCubixContext.known(normal,at+4hr);fk:=EnerCubixContext.known(fast,at+4hr)
+    cursor:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(10)),HisItem(at+2hr,Number(30))])
+    try
+    {
+      for(i:=0;i<2;i++)
+      {
+        from:=at+1hr*i;to:=from+1hr;cursor.advance(to)
+        EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,sourceOwner|
+        {
+          a:=EnerCubixPreparedOwner(budget.state);b:=EnerCubixPreparedOwner(budget.state)
+          try
+          {
+            normal.beginFrame(a,histories);nk.beginFrame(a,histories);fast.beginFrame(b,histories,false,true);fk.beginFrame(b,histories,false,true)
+            nv:=normal.node("m","c",from,to);kv:=nk.node("m","c",from,to);fv:=fast.node("m","c",from,to);fkv:=fk.node("m","c",from,to)
+            verifyEq(fv.value,10f*(i+1).toFloat);verifyEq(fv.value,nv.value);verifyEq(fv.quality,nv.quality);verifyEq(fv.sources,nv.sources)
+            verifyEq(fkv.value,kv.value);verifyEq(fkv.quality,kv.quality);verifyEq(fkv.sources,kv.sources)
+            verifyEq(fk.knownReads,nk.knownReads);verifyEq(fk.knownReads.size,1)
+            verify(a.entries-b.entries>=20,"a single visit must not retain the unused strict/known memo maps and wrappers")
+          }
+          finally {a.close;b.close}
+        }
+      }
+    }
+    finally {cursor.close;normalOwner.close;fastOwner.close;model.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testFrameAdmissionIncludesCopiedKnownHeaderFields()
   {
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];ids:=Str[,]
@@ -315,7 +395,7 @@ class EnerCubixContextOwnerTest : Test
   {
     rs:=records;rs[1]["subcategoryId"]="s";rs.add(["id":"s","kind":"subcategory"])
     budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state)
-    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model,[:],false,false,true)
     first:=EnerCubixPreparedOwner(budget.state);second:=EnerCubixPreparedOwner(budget.state)
     a:=EnerCubixContext.shared(catalog,"space",false,first);a.orderWarnings
     b:=EnerCubixContext.shared(catalog,"metering",false,second);b.orderWarnings
@@ -330,6 +410,9 @@ class EnerCubixContextOwnerTest : Test
         a.warningScope(3,0,at.ticks);av:=a.node("m","c",at,at+1hr,"coal")
         a.warningScope(0,0,at.ticks);a.warn("first logical phase");a.node("m","c",at,at+1hr,"coal")
         b.warningScope(0,0,at.ticks);bv:=b.node("m","c",at,at+1hr,"coal")
+        aKey:=((Map)EnerCubixContext#.field("cache").get(a)).keys.first
+        bKey:=((Map)EnerCubixContext#.field("cache").get(b)).keys.first
+        verify(aKey===bKey,"same source pair reuses its original admitted empty-domain key")
         verifyEq(av.value,null);verifyEq(av.quality,"missingCoefficient");verifyEq(av.sources,["p"])
         verify(av===bv,"canonical views should reuse the admitted empty result")
         verifyEq(a.orderedWarnings,["first logical phase","m : missingCoefficient"])

@@ -22,31 +22,38 @@ internal class EnerCubixCoverageFold
     check
     if(frame.budget !== budget) throw ArgErr("coverageFrameOwner")
     // Filtering and sorting vectors expire here, before another hourly fold.
-    charge:=5+2*reads.size;frame.hold(charge)
+    charge:=5+2*reads.size
+    // At most six ISO fields per row: current bounds, previous bounds, and
+    // coverage bounds. This optional scratch never takes required frame room.
+    memo:=reads.size>1 && frame.budget.remaining>=charge+2+6*reads.size
+    if(memo) charge+=2+6*reads.size
+    frame.hold(charge)
     [Str:Obj?][]? filtered;[Str:Obj?][]? ordered
+    [Str:DateTime]? parsed
     try
     {
+      if(memo) parsed=Str:DateTime[:]
       filtered=reads.findAll |r|
-      {totals.containsKey(r["pointId"] as Str ?: "") && DateTime.fromIso(r["from"].toStr)>=from && DateTime.fromIso(r["to"].toStr)<=to}
-      ordered=EnerCubixKnownUsage.coverageOrder(filtered)
+      {totals.containsKey(r["pointId"] as Str ?: "") && EnerCubixKnownUsage.coverageTime(r["from"],parsed)>=from && EnerCubixKnownUsage.coverageTime(r["to"],parsed)<=to}
+      ordered=EnerCubixKnownUsage.coverageOrder(filtered,parsed)
       // Validate the whole frame before changing any earlier contribution.
       ordered.each |r|
       {
         previous:=last[r["pointId"].toStr]
-        if(previous != null && EnerCubixKnownUsage.coverageCompare(previous,r)>0) throw ArgErr("coverageFrameOrder")
+        if(previous != null && EnerCubixKnownUsage.coverageCompare(previous,r,parsed)>0) throw ArgErr("coverageFrameOrder")
       }
       ordered.each |r|
       {
         point:=r["pointId"].toStr
         totals[point]=totals[point]+(EnerCubixMath.num(r["coveredSeconds"]) ?: 0f)
         last[point]=["from":r["from"],"to":r["to"],"nodeId":r["nodeId"],"pointId":point]
-        start:=r["intervalStart"] == null ? null : DateTime.fromIso(r["intervalStart"].toStr)
-        end:=r["intervalEnd"] == null ? null : DateTime.fromIso(r["intervalEnd"].toStr)
+        start:=r["intervalStart"] == null ? null : EnerCubixKnownUsage.coverageTime(r["intervalStart"],parsed)
+        end:=r["intervalEnd"] == null ? null : EnerCubixKnownUsage.coverageTime(r["intervalEnd"],parsed)
         if(start != null && (firstAt == null || start<firstAt)) firstAt=start
         if(end != null && (lastAt == null || end>lastAt)) lastAt=end
       }
     }
-    finally {filtered?.clear;ordered?.clear;frame.release(charge)}
+    finally {filtered?.clear;ordered?.clear;parsed?.clear;frame.release(charge)}
   }
   Str:Obj? finish()
   {

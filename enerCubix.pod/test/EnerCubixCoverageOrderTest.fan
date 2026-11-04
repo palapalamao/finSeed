@@ -49,6 +49,9 @@ class EnerCubixCoverageOrderTest : Test
     first:=EnerCubixKnownUsage.coverageOrder([b,a,alias,shorter])
     verifyEq(first,[shorter,alias,a,b])
     verifyEq(EnerCubixKnownUsage.coverageOrder(first.dup.reverse),first)
+    times:=Str:DateTime[:]
+    cached:=EnerCubixKnownUsage#.method("coverageOrder").callList([first.dup.reverse,times])
+    verifyEq(cached,first);verify(!times.isEmpty)
   }
 
   private [Str:Obj?][] records() {[["id":"c","kind":"category","unit":"kWh"],["id":"m","name":"M","kind":"meter","categoryId":"c","pointId":"p"]]}

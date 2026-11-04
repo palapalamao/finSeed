@@ -117,7 +117,7 @@ internal class EnerCubixCockpitStream
         start=at;end=stream.watermark;ids[stream.point.id.id]=true
       }
       EnerCubixSourceBounds? bounds
-      if(start!=null) {owner.hold(5);bounds=EnerCubixSourceBounds(start,end)}
+      if(start!=null) {owner.hold(6);bounds=EnerCubixSourceBounds(start,end)}
       visit=|Int i|
       {
         if(i == streams.size)
@@ -647,11 +647,12 @@ internal class EnerCubixCockpitStream
       parsedQueries=queries.map |q->DateTime[]| {[DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr)]}
     }
     pairs:=pairs(hour,queries,tariffs,(EnerCubixContext)ctx,parsedQueries)
+    fullKey:=key(hour,end)
     values:=Str:Obj?[:]
     pairs.each |pair|
     {
       a:=(DateTime)pair["from"]; b:=(DateTime)pair["to"]
-      name:=key(a,b);if (reads.containsKey(name)) return
+      name:=a==hour && b==end ? fullKey : key(a,b);if (reads.containsKey(name)) return
       strict:=history.read(a,b)
       known:=Str:Obj?[:]
       queryEnds.each |qEnd|

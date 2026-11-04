@@ -37,18 +37,27 @@ internal class EnerCubixKnownUsage
 
   ** Same contribution set, original hourly time order, stable alias/subpair ties.
   ** Compare instants rather than ISO text across a repeated local DST hour.
-  internal static [Str:Obj?][] coverageOrder([Str:Obj?][] reads)
+  internal static [Str:Obj?][] coverageOrder([Str:Obj?][] reads,[Str:DateTime]? parsed := null)
   {
-    return reads.sort |a,b->Int| {coverageCompare(a,b)}
+    return reads.sort |a,b->Int| {coverageCompare(a,b,parsed)}
   }
-  internal static Int coverageCompare(Str:Obj? a,Str:Obj? b)
+  internal static Int coverageCompare(Str:Obj? a,Str:Obj? b,[Str:DateTime]? parsed := null)
   {
-    c:=DateTime.fromIso(a["from"].toStr) <=> DateTime.fromIso(b["from"].toStr)
+    c:=coverageTime(a["from"],parsed) <=> coverageTime(b["from"],parsed)
     if(c != 0) return c
-    c=DateTime.fromIso(a["to"].toStr) <=> DateTime.fromIso(b["to"].toStr)
+    c=coverageTime(a["to"],parsed) <=> coverageTime(b["to"],parsed)
     if(c != 0) return c
     c=(a["nodeId"] as Str ?: "") <=> (b["nodeId"] as Str ?: "")
     return c != 0 ? c : ((a["pointId"] as Str ?: "") <=> (b["pointId"] as Str ?: ""))
+  }
+  ** Optional caller-owned scratch, expired after one coverage frame.
+  internal static DateTime coverageTime(Obj? raw,[Str:DateTime]? parsed)
+  {
+    text:=raw.toStr
+    if(parsed==null) return DateTime.fromIso(text)
+    value:=parsed[text]
+    if(value==null) {value=DateTime.fromIso(text);parsed[text]=value}
+    return value
   }
 
   static [Str:Obj?][] evidence([Str:Obj?][] reads)

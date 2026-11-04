@@ -71,6 +71,7 @@ internal class EnerCubixContext
   private Str? ownFrameCategory
   private Str? ownFrameMetric
   private Int ownFrameSlots := 0
+  private Bool ownMemoDisabled := false
   private Str:EnerCubixValue tariffBaseline := [:]
   private Str:Obj? defaultTariffs := [:]
   private Str:EnerCubixTariffCursor tariffCursors := [:]
@@ -116,7 +117,7 @@ internal class EnerCubixContext
     owner.watch |->Void| {dropPersistent};owner.hold(index+3)
     persistentOwner=owner;preparedBudget=owner.budget;deadline=owner.budget.deadline;tariffBaseline.ordered=true
   }
-  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories,Bool constantEmpty := false)
+  internal Void beginFrame(EnerCubixPreparedOwner owner,Str:EnerCubixHistoryData histories,Bool constantEmpty := false,Bool singlePassOwn := false)
   {
     if(persistentOwner == null || frameOwner != null || owner === persistentOwner || owner.budget !== preparedBudget) throw ArgErr("preparedContextOwner")
     histories.each |h,id| {if(h.id != id || !h.ownedFrame(owner.budget)) throw ArgErr("preparedContextSourceFrame")}
@@ -124,10 +125,11 @@ internal class EnerCubixContext
     {
       if(strictContext.frameOwner !== owner || histories.size != strictContext.byPoint.size || histories.any |h,id| {h !== strictContext.byPoint[id]}) throw ArgErr("preparedContextStrictFrame")
     }
+    if(singlePassOwn) owner.hold(1)
     owner.watch |->Void| {dropFrame}
     if(strictContext == null) {owner.hold(1+histories.size);byPoint=histories.dup}
     else byPoint=strictContext.byPoint
-    frameOwner=owner;frameConstantEmpty=constantEmpty
+    frameOwner=owner;frameConstantEmpty=constantEmpty;ownMemoDisabled=singlePassOwn
   }
   private Void inheritOwners(EnerCubixContext source,Bool temporary)
   {
@@ -149,7 +151,7 @@ internal class EnerCubixContext
   {
     cache.clear;knownReads.clear;knownCharges.clear;knownScratch=0;byPoint=Str:EnerCubixHistoryData[:]
     ownFrameValues?.clear;ownFrameValues=null;ownFrameFrom=null;ownFrameTo=null
-    ownFrameCategory=null;ownFrameMetric=null;ownFrameSlots=0
+    ownFrameCategory=null;ownFrameMetric=null;ownFrameSlots=0;ownMemoDisabled=false
     knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null;frameConstantEmpty=false
     if(transientContext)
     {
@@ -161,7 +163,7 @@ internal class EnerCubixContext
   private Void dropPersistent()
   {
     if(frameOwner != null) throw ArgErr("preparedFrameActive")
-    dropFrame;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
+    dropFrame;ownMemoDisabled=false;tariffBaseline.clear;tariffCursors.clear;defaultTariffs.clear;dimensionPlans.clear;usedTariffs.clear;clearWarnings
     byId=Str:[Str:Obj?][:];children=Str:[Str:Obj?][][:];calendar=null;strictContext=null;persistentOwner=null
     if(sharedModel!=null) {dimension=null;sharedModel=null}
   }
@@ -414,7 +416,12 @@ internal class EnerCubixContext
       return sharedStrict.value
     }
     queryEnd:=strictContext==null ? null : knownEnd
-    stable:=emptyKey(r,category,from,to,metric)
+    // An admitted exact empty result already carries the original domain key.
+    // Frozen records can borrow that text; mutable/bound/other ranges retain
+    // their original domain calculation. Consumer cache still wins below.
+    borrowEmptyKey:=ownSource!=null && r.isImmutable && emptyCacheQualities.contains(ownSource.quality)
+    sharedEmpty:=borrowEmptyKey ? ownSource.ownEmpty(r,category,from,to,metric,queryEnd) : null
+    stable:=sharedEmpty?.stableKey ?: emptyKey(r,category,from,to,metric)
     if(stable!=null && frameOwner!=null && metric=="cost") stable+="|${from.ticks}|${to.ticks}"
     if(stable != null && cache.containsKey(stable))
     {
@@ -424,7 +431,8 @@ internal class EnerCubixContext
     }
     // Consumer domain reuse takes precedence over source exact-pair reuse:
     // another partial pair must not repeat or reorder an existing warning.
-    sharedEmpty:=stable==null ? null : ownSource?.ownEmpty(r,category,from,to,metric,queryEnd)
+    if(!borrowEmptyKey) sharedEmpty=stable==null ? null : ownSource?.ownEmpty(r,category,from,to,metric,queryEnd)
+    if(stable==null) sharedEmpty=null
     if(sharedEmpty!=null)
     {
       if(strictContext!=null) omittedEmptyEvidence=true
@@ -523,7 +531,7 @@ internal class EnerCubixContext
     if (result.value == null) warnValue(r,id,result.quality)
     if(strictContext==null) ownSource?.rememberOwnStrict(r,category,from,to,metric,result)
     if (path.isEmpty && preparedBudget == null) cache[key]=result
-    sharedEmpty=stable==null ? null : ownSource?.rememberOwnEmpty(r,category,from,to,metric,queryEnd,result)
+    sharedEmpty=stable==null ? null : ownSource?.rememberOwnEmpty(r,category,from,to,metric,queryEnd,result,stable)
     if(sharedEmpty!=null)
     {
       if(!cache.containsKey(stable)) retain(2);cache[stable]=result
@@ -547,6 +555,7 @@ internal class EnerCubixContext
   ** this frame expires. This is never a cross-frame or cross-request cache.
   private EnerCubixOwnFrameValue? ownFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric)
   {
+    if(ownMemoDisabled) return null
     if(ownFrameValues==null) {retain(7);ownFrameValues=Str:EnerCubixOwnFrameValue[:]}
     if(ownFrameFrom!=from || ownFrameTo!=to || ownFrameCategory!=category || ownFrameMetric!=metric)
     {ownFrameValues.clear;ownFrameFrom=from;ownFrameTo=to;ownFrameCategory=category;ownFrameMetric=metric}
@@ -554,6 +563,7 @@ internal class EnerCubixContext
   }
   private Void saveOwnFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric,EnerCubixValue value,Bool repeatWarning)
   {
+    if(ownMemoDisabled) return
     // A recursive evaluation may have used another range/category/metric.
     // Restore this result's exact group before publishing its reusable slot.
     previous:=ownFrameValue(id,category,from,to,metric)
@@ -654,16 +664,22 @@ internal class EnerCubixContext
           // The first details list remains live while the counter's maps()
           // creates its own filtered+mapped lists (at most three lists total).
           knownWorkspace(header+3+3*detailBound);knownHeader(key,header)
-          evidence:=data.dup; evidence.remove("value")
-          if (details.size > remaining)
+          share:=frameOwner!=null && sharedModel!=null && byId===sharedModel.byId && r.isImmutable && details.size<=remaining
+          evidence:=share ? his.knownEvidence(r,from,to,knownEnd) : null
+          if(evidence==null)
           {
-            evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
-            evidence["detailsTruncated"]=true
-            evidence["intervalsCaptureId"]=Uuid().toStr
+            evidence=data.dup; evidence.remove("value")
+            if (details.size > remaining)
+            {
+              evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
+              evidence["detailsTruncated"]=true
+              evidence["intervalsCaptureId"]=Uuid().toStr
+            }
+            bounds:=his.exactBounds(from,to)
+            evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":bounds?.fromIso ?: from.toIso,"to":bounds?.toIso ?: to.toIso])
+            if(share) his.rememberKnownEvidence(r,from,to,knownEnd,evidence)
           }
           knownDetailCount+=details.size.min(remaining)
-          bounds:=his.exactBounds(from,to)
-          evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":bounds?.fromIso ?: from.toIso,"to":bounds?.toIso ?: to.toIso])
           if(frameOwner == null && !knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }

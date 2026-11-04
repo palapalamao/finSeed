@@ -94,6 +94,8 @@ internal class EnerCubixHistoryData
   private EnerCubixOwnEmptyValue[]? ownEmptyValues
   private EnerCubixOwnEmptyValue[]? ownStrictValues
   private EnerCubixSourceBounds? sourceBounds
+  private Map? sourceHourRow
+  private EnerCubixOwnEvidence[]? ownEvidence
 
   internal Bool ownedFrame(EnerCubixPreparedBudget budget)
   {sourceFrame != null && !frameExpired && preparedBudget === budget}
@@ -107,7 +109,8 @@ internal class EnerCubixHistoryData
     if(ownEmptyOwner!=null || !ownedFrame(owner.budget)) throw ArgErr("ownEmptyFrameOwner")
     if(to-from!=1hr) return
     if(bounds.from!=from || bounds.to!=to) throw ArgErr("sourceBoundsFrame")
-    owner.hold(5);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner;sourceBounds=bounds
+    owner.hold(7);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner;sourceBounds=bounds
+    sourceHourRow=prepared?.get(bounds.key) as Map
   }
   internal EnerCubixSourceBounds? exactBounds(DateTime from,DateTime to)
   {frameCheck;return sourceBounds?.from==from && sourceBounds?.to==to ? sourceBounds : null}
@@ -116,7 +119,7 @@ internal class EnerCubixHistoryData
     frameCheck
     return ownEmptyValues?.find |entry| {entry.record===record && entry.category==category && entry.from==from && entry.to==to && entry.metric==metric && entry.queryEnd==queryEnd}
   }
-  internal EnerCubixOwnEmptyValue? rememberOwnEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value)
+  internal EnerCubixOwnEmptyValue? rememberOwnEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value,Str? stableKey := null)
   {
     frameCheck
     if(ownEmptyOwner==null || value.value!=null || emptyDomain(from,to,queryEnd)==null) return null
@@ -124,8 +127,8 @@ internal class EnerCubixHistoryData
     if(ownEmptyValues==null) {ownEmptyOwner.hold(1);ownEmptyValues=EnerCubixOwnEmptyValue[,]}
     // Entry fields/link and the value object now remain under this source
     // owner after the producing consumer closes; sources remain frame-owned.
-    ownEmptyOwner.hold(14)
-    entry:=EnerCubixOwnEmptyValue(record,category,from,to,metric,queryEnd,value);ownEmptyValues.add(entry);return entry
+    ownEmptyOwner.hold(15)
+    entry:=EnerCubixOwnEmptyValue(record,category,from,to,metric,queryEnd,value,stableKey);ownEmptyValues.add(entry);return entry
   }
   ** Numeric strict reads have no known-usage diagnostic side effects. Only
   ** canonical physical records may borrow them, for the exact source hour.
@@ -141,13 +144,28 @@ internal class EnerCubixHistoryData
     if(ownEmptyOwner==null || prepared==null || metric=="cost" || value.value==null || value.sources!==sources) return
     if(ownStrict(record,category,from,to,metric)!=null) return
     if(ownStrictValues==null) {ownEmptyOwner.hold(1);ownStrictValues=EnerCubixOwnEmptyValue[,]}
-    ownEmptyOwner.hold(14)
+    ownEmptyOwner.hold(15)
     ownStrictValues.add(EnerCubixOwnEmptyValue(record,category,from,to,metric,null,value))
   }
   private Void clearOwnEmpty()
   {
     ownEmptyValues?.clear;ownEmptyValues=null
-    ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null;sourceBounds=null
+    ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null;sourceBounds=null;sourceHourRow=null
+    ownEvidence?.clear;ownEvidence=null
+  }
+  internal [Str:Obj?]? knownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd)
+  {
+    frameCheck
+    return ownEvidence?.find |entry| {entry.record===record && entry.from==from && entry.to==to && entry.queryEnd==queryEnd}?.evidence
+  }
+  internal Void rememberKnownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence)
+  {
+    frameCheck
+    if(ownEmptyOwner==null || prepared==null || !record.isImmutable || (record["kind"]!="meter" && record["kind"]!="totalMeter") || evidence["sourceIds"]!==sources) return
+    if(knownEvidence(record,from,to,queryEnd)!=null) return
+    if(ownEvidence==null) {ownEmptyOwner.hold(1);ownEvidence=EnerCubixOwnEvidence[,]}
+    ownEmptyOwner.hold(8+evidence.size)
+    ownEvidence.add(EnerCubixOwnEvidence(record,from,to,queryEnd,evidence))
   }
 
   internal Void expireFrame()
@@ -190,7 +208,7 @@ internal class EnerCubixHistoryData
     if (prepared != null)
     {
       preparedBudget?.lookup
-      row:=prepared.isEmpty ? null : (Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      row:=preparedPair(start,end)
       data:=((Map?)row?.get("known"))?.get(queryEnd.ticks.toStr) as Map
       if (data == null)
       {
@@ -213,7 +231,7 @@ internal class EnerCubixHistoryData
     if (prepared != null)
     {
       preparedBudget?.lookup
-      row:=prepared.isEmpty ? null : (Map?)prepared[EnerCubixCockpitStream.key(start,end)]
+      row:=preparedPair(start,end)
       v:=row?.get(raw ? "raw" : "strict") as Map
       if(v == null && !raw && sparsePair(start,end))
       {
@@ -307,7 +325,7 @@ internal class EnerCubixHistoryData
   {
     frameCheck
     if(prepared == null) return false
-    row:=prepared.isEmpty ? null : prepared[EnerCubixCockpitStream.key(start,end)] as Map
+    row:=preparedPair(start,end)
     if(row != null && (queryEnd == null || (row["known"] as Map)?.containsKey(queryEnd.ticks.toStr) == true)) return false
     return emptyDomain(start,end,queryEnd) == null
   }
@@ -323,6 +341,14 @@ internal class EnerCubixHistoryData
     if(domain == null) return null
     until:=(DateTime)domain["to"];if(until > end) until=end
     return emptyDomain(start,until,queryEnd) == null ? null : until
+  }
+
+  ** The exact source watermark row is stable until its frame expires. Other
+  ** partial pairs retain the original key lookup and missing-domain rules.
+  private Map? preparedPair(DateTime start,DateTime end)
+  {
+    if(sourceBounds!=null && sourceBounds.from==start && sourceBounds.to==end) return sourceHourRow
+    return prepared.isEmpty ? null : prepared[EnerCubixCockpitStream.key(start,end)] as Map
   }
 
   ** Interval values are authoritative for their exact covered time span. Never
@@ -447,8 +473,8 @@ internal class EnerCubixHistoryData
 
 internal class EnerCubixOwnEmptyValue
 {
-  new make(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value)
-  {this.record=record;this.category=category;this.from=from;this.to=to;this.metric=metric;this.queryEnd=queryEnd;this.value=value}
+  new make(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value,Str? stableKey := null)
+  {this.record=record;this.category=category;this.from=from;this.to=to;this.metric=metric;this.queryEnd=queryEnd;this.value=value;this.stableKey=stableKey}
   Str:Obj? record
   Str category
   DateTime from
@@ -456,15 +482,28 @@ internal class EnerCubixOwnEmptyValue
   Str metric
   DateTime? queryEnd
   EnerCubixValue value
+  Str? stableKey
 }
 
 ** One source watermark's immutable text, shared by its owned reader group.
 internal const class EnerCubixSourceBounds
 {
-  new make(DateTime from,DateTime to) {this.from=from;this.to=to;fromIso=from.toIso;toIso=to.toIso}
+  new make(DateTime from,DateTime to) {this.from=from;this.to=to;fromIso=from.toIso;toIso=to.toIso;key=EnerCubixCockpitStream.key(from,to)}
   const DateTime from
   const DateTime to
   const Str fromIso
   const Str toIso
+  const Str key
+}
+
+internal class EnerCubixOwnEvidence
+{
+  new make(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence)
+  {this.record=record;this.from=from;this.to=to;this.queryEnd=queryEnd;this.evidence=evidence}
+  Str:Obj? record
+  DateTime from
+  DateTime to
+  DateTime queryEnd
+  Str:Obj? evidence
 }
 
