@@ -170,3 +170,12 @@
 - 数值由source owner在consumer正常结束后继续持有；新增字段、list和entry/Value在分配前hold，借已有source数组，不双计。关闭只清链接，不清共享Value.sources；Fold完成值独立。新增先红后绿测试覆盖跨consumer关闭、co2、cost、known证据、bound maximum、下一frame99、真实0、精确键、失效帧、拒绝前分配及peer保持。架构只读审查无阻断。
 - 完整122类953方法295004校验通过（shared-strict-fantom-full.log，158.108秒）；Q1整份报告、模块、警告顺序、质量、覆盖、生产解码与旧冻结基线深等价，12.373秒、峰188670、关闭temporary/raw为0。017同模型既有记录14.902秒；受控结果不能代替现场性能。新018统一递增四版本并重建资源；282份TS源码/测试与已验014一致，431单测/29UI明确同源复用，不称018重跑。
 - 下一步018原生九查询及同实例30分钟观察；A5/C5仍未关闭。原生打印未验、认证只读用户暂缓；未写现场业务配置、采集或原始历史，30秒/200000/8MiB上限不变。
+
+## 0.14.18 实机结果与有界明细／时间元数据优化（2026-11-05）
+
+- 22bb6205 / 0.14.18 / 5B84A4D8DFB0DBF50F3B4DD8B2E49B5BC7703BD4F984181D069D23E850A8DAB2（4818143B）实际安装；旧22252正常退出并备份B21，唯一-noAuth Java21632/launcher17944，FIN5停止，24个HTTP资源一致。仍8/9：zeda-site年度504/30.047秒，registry watermark09-13 00:00，cursor已到01:00、峰191753；其他8查询、固定数值/生产解码和双语Excel通过。017同22252/B21观察1802.973秒/181样本通过，不代替018或下一候选。
+- 018相同请求只读Thread.print三采样成功，30.031秒504；采到Context.rawNode的Math.maps、Stream.capture的toIso及Context.warn。PID/ticks/包/sole-noAuth守卫先执行；未改JVM参数、配置、历史。性能采样含自身开销，不作为独立基准。
+- c52ff13d：KnownUsage仅将明细行构造上限改为Stream本次原1000-detailCount余额，数值、质量、全区间count/覆盖和规则资格继续完整遍历。公开knownUsage仍默认1000；新增内部captureKnownUsage拒绝prepared/borrowed frame。原pairs/queryEnds每次重复访问、消费次数、最终截断布尔及Uuid生成顺序不变，不能借此让后一个对象多取诊断。
+- 同批将完整小时不需要的空tariff context按首次partial pair惰性建立，无域不建空HistoryData；Context对已有typed map[]仅借只读列表，否则走原过滤，knownDetailCount按原trim后数目累加。Stream缓存固定cutoff ISO及仅变化时的lastObserved ISO，先以cursor allowance1→5保守准入，close先断缓存再退费。每source group先hold5创建const from/to/ISO对象，每整小时h多hold1引用，证据复制只读字符串；partial仍原格式化，expire清源引用，不改已交付证据。
+- 新增两方法覆盖cap0/1/2/1000的独立15/13用量及3600/3000覆盖、NA/真实0/规则资格/peer结果，纽约春秋DST双源共用、offset不同、partial miss、expiry及独立energy1。完整122类955方法295142校验通过（hourly-metadata-fantom-full.log，140.420秒）。原高频年+参考模型6333120读数105267checks的elapsed6159ms，对比018同测试16074ms；它保留原模型1800s上限，不冒充现场30s。
+- shared-bounds-q1-equivalence.json整份报告、模块、警告顺序、质量、覆盖、生产解码与旧010深等价；10.161秒、峰188657、关闭temporary/raw0。与018同Q1既有12.373秒是受控记录，尚非现场年度通过。下一版统一019；前端282物理源码/测试仍同014，431/29明确复用，四版本递增并实际类型/Vite重建。现场年度、最终同实例观察、原生打印仍待，只读账号用户暂缓，A5/C5不关闭。

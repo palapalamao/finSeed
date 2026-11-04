@@ -1,7 +1,7 @@
 {
   "name": "enercubix-ui",
   "private": true,
-  "version": "0.14.18",
+  "version": "0.14.19",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
