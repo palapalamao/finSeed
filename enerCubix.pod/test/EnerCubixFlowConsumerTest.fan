@@ -3,6 +3,34 @@ using util
 
 class EnerCubixFlowConsumerTest : Test
 {
+  Void testEachPhysicalDeviceWorkspaceExpiresBeforeTheNextDevice()
+  {
+    a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+1hr
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];keys:=Str:Str[:]
+    spec:=Str:[Str:Obj?]["energy-flow":["kind":"sourceUsage","grain":"sourceRead","reportRefs":["energy-flow"]]]
+    (0..<64).each |i|
+    {
+      id:="m$i";rs.add(["id":id,"kind":"meter","name":id,"pointId":"p$i","categoryId":"c"])
+      key:="period-$id";keys[id]=key;spec[key]=["kind":"coveragePeriods","grain":"hour","reportRefs":["energy-flow"]]
+    }
+    q:=Str:Obj?["kind":"energyFlow","dimension":"metering","nodeIds":keys.keys,"categoryId":"c","categoryIds":["c"],"period":"day","metric":"energy","from":a.toIso,"to":b.toIso,"asOf":b.toIso,"tz":"UTC","_cockpitCategoryId":"c"]
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);state:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state);diagnostic:=EnerCubixPreparedOwner(budget.state);frame:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model);pool:=EnerCubixCockpitCapture(spec,diagnostic)
+    consumer:=EnerCubixFlowConsumer(q.toImmutable,catalog,state,output,pool,"energy-flow",keys,keys.keys.map |id->Str:Obj?| {catalog.byId[id]})
+    baseline:=frame.entries
+    try
+    {
+      consumer.addFrame(Str:EnerCubixHistoryData[:],frame)
+      verifyEq(frame.entries,baseline,"finished devices cannot retain their derived workspace in the shared source frame")
+      consumer.finish;pool.freeze
+      rows:=EnerCubixMath.maps(consumer.overview["rows"]);verifyEq(rows.size,64)
+      rows.each |row| {verifyEq(row["value"],null);verifyEq(row["coveredSeconds"],0f);verifyEq(row["complete"],false)}
+      verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<=200000)
+    }
+    finally {frame.close;state.close;output.close;diagnostic.close;model.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testFlowInitializationReclaimsOnlyOptionalSamplesBeforeBusinessAdmission()
   {
     a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+1hr
@@ -23,6 +51,29 @@ class EnerCubixFlowConsumerTest : Test
       verifyEq(diag["preparedEntryLimited"],true);verifyEq(EnerCubixMath.maps(diag["entries"]).find |e| {e["kind"]=="cleaningEvents"}["totalCount"],300)
     }
     finally {peer.close;frame.close;work.close;diagnosticOwner.close;model.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testRejectedDeviceWorkspaceClosesWithoutReleasingTheSourceOrPeer()
+  {
+    a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+1hr
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","name":"M","pointId":"p","categoryId":"c"]]
+    q:=Str:Obj?["kind":"energyFlow","dimension":"metering","nodeIds":["m"],"categoryId":"c","categoryIds":["c"],"period":"day","metric":"energy","from":a.toIso,"to":b.toIso,"asOf":b.toIso,"tz":"UTC","_cockpitCategoryId":"c"]
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);state:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state);diagnostic:=EnerCubixPreparedOwner(budget.state);frame:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    spec:=Str:[Str:Obj?]["energy-flow":["kind":"sourceUsage","grain":"sourceRead","reportRefs":["energy-flow"]],"period-m":["kind":"coveragePeriods","grain":"hour","reportRefs":["energy-flow"]]]
+    pool:=EnerCubixCockpitCapture(spec,diagnostic)
+    consumer:=EnerCubixFlowConsumer(q.toImmutable,catalog,state,output,pool,"energy-flow",["m":"period-m"],[catalog.byId["m"]])
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-12);held:=peer.entries;baseline:=frame.entries
+    try
+    {
+      verifyErr(EnerCubixHttpErr#) {consumer.addFrame(Str:EnerCubixHistoryData[:],frame)}
+      verifyEq(frame.entries,baseline);verifyEq(peer.entries,held)
+      verifyErr(EnerCubixHttpErr#) {consumer.finish}
+      verifyErr(EnerCubixHttpErr#) {consumer.overview}
+      verifyEq(budget.state.unprepared.val,0);verify(budget.state.temporary.val<=200000)
+    }
+    finally {peer.close;frame.close;state.close;output.close;diagnostic.close;model.close}
     verifyEq(budget.state.temporary.val,0)
   }
 

@@ -88,46 +88,56 @@ internal class EnerCubixFlowConsumer
     if(done || stateClosed || at>=to || through<=at || frame.budget!==state.budget || (!constantEmpty && through>EnerCubixMath.floorHour(at)+1hr)) throw ArgErr("flowConsumerFrame")
     try
     {
-      devices.each |device|
-      {
-        frame.hold(2);own:=Str:EnerCubixHistoryData[:]
-        h:=histories[device.point];if(h!=null) own[device.point]=h
-        device.strict.beginFrame(frame,own,constantEmpty);device.known.beginFrame(frame,own,constantEmpty)
-      }
+      if(constantEmpty) devices.each |device| {beginDevice(device,histories,frame,true)}
       while(at<to && at<through)
       {
         state.budget.deadline.check
         end:=EnerCubixMath.floorHour(at)+1hr;if(end>to) end=to
         devices.each |device|
         {
-          device.strict.warningScope(0,0,at.ticks)
-          strict:=device.strict.node(device.id,device.category,at,end)
-          known:=device.known.node(device.id,device.category,at,end)
-          device.strictFold.add(strict);device.knownFold.add(known)
-          charge:=2+2*device.known.knownReads.size;frame.hold(charge)
-          [Str:Obj?][]? rows
+          // A physical device's own-history workspace is independent. Once its
+          // scalars and diagnostic rows are copied, retire it before the next
+          // device. Proven-empty grouped frames retain their hourly reuse.
+          local:=constantEmpty ? frame : frame.fork
           try
           {
-            rows=device.known.knownReads.vals
-            device.coverage.addFrame(rows,frame)
-            rows.each |row| {pool.put(usageKey,row);reads++}
+            if(!constantEmpty) beginDevice(device,histories,local,false)
+            device.strict.warningScope(0,0,at.ticks)
+            strict:=device.strict.node(device.id,device.category,at,end)
+            known:=device.known.node(device.id,device.category,at,end)
+            device.strictFold.add(strict);device.knownFold.add(known)
+            charge:=2+2*device.known.knownReads.size;local.hold(charge)
+            [Str:Obj?][]? rows
+            try
+            {
+              rows=device.known.knownReads.vals
+              device.coverage.addFrame(rows,local)
+              rows.each |row| {pool.put(usageKey,row);reads++}
+            }
+            finally {rows?.clear;local.release(charge)}
+            emptyOmitted=emptyOmitted || device.known.emptyEvidenceOmitted
+            unpreparedOmitted=unpreparedOmitted || device.known.unpreparedEvidenceOmitted
+            key:=periodKeys[device.id]
+            if(pool.canPutSimple(key))
+            {
+              scratch:=state.fork
+              try {scratch.hold(6);pool.put(key,["from":at.toIso,"to":end.toIso,"value":known.value,"quality":known.quality,"pointId":device.point])}
+              finally {scratch.close}
+            }
+            else pool.skipSimple(key)
           }
-          finally {rows?.clear;frame.release(charge)}
-          emptyOmitted=emptyOmitted || device.known.emptyEvidenceOmitted
-          unpreparedOmitted=unpreparedOmitted || device.known.unpreparedEvidenceOmitted
-          key:=periodKeys[device.id]
-          if(pool.canPutSimple(key))
-          {
-            scratch:=state.fork
-            try {scratch.hold(6);pool.put(key,["from":at.toIso,"to":end.toIso,"value":known.value,"quality":known.quality,"pointId":device.point])}
-            finally {scratch.close}
-          }
-          else pool.skipSimple(key)
+          finally {if(!constantEmpty) local.close}
         }
         periods++;at=end
       }
     }
     catch(Err e) {failure=e;throw e}
+  }
+  private Void beginDevice(EnerCubixFlowDevice device,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame,Bool constantEmpty)
+  {
+    frame.hold(2);own:=Str:EnerCubixHistoryData[:]
+    h:=histories[device.point];if(h!=null) own[device.point]=h
+    device.strict.beginFrame(frame,own,constantEmpty);device.known.beginFrame(frame,own,constantEmpty)
   }
   Void finish()
   {
