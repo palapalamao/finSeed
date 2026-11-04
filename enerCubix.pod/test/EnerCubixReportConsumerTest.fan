@@ -150,6 +150,33 @@ class EnerCubixReportConsumerTest : Test
   {exerciseOutputGraph("own")}
   Void testDailyFinalizationFitsBesideAnUnrelatedOwnerWithoutDroppingRows()
   {exerciseOutputGraph("dailyHeadroom")}
+
+  Void testUtilityFinalizationFitsBesideAnUnrelatedOwnerWithoutDroppingRows()
+  {exerciseOutputGraph("utilityHeadroom")}
+
+  Void testOnePeriodUtilityStillOwnsItsWholeNonPeriodGraph()
+  {exerciseOutputGraph("utilityShort",1)}
+
+  Void testUtilityWithWideSourcesKeepsTheLegacyOutputAllowance()
+  {
+    start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+1hr
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","categoryId":"c","pointId":"p"]]
+    budget:=EnerCubixStreamBudget();state:=EnerCubixPreparedOwner(budget.state);output:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixReport? report
+    try
+    {
+      dim:=EnerCubixDimension("metering",rs);ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state)
+      q:=Str:Obj?["kind":"utility","nodeIds":["m"],"dimension":"metering","metric":"energy","from":start.toIso,"to":end.toIso,"asOf":end.toIso]
+      report=EnerCubixReport(ctx,q,start,end,"utility","hour","energy",state)
+      cursor:=report.openLine("m","c");consumer:=EnerCubixReportConsumer(ctx,report,[cursor],start,end,"hour",state,output)
+      verify(report.canSizeUtilityOutput)
+      cursor.line.consumedTotals=["value":EnerCubixValue(1f,"ok",["p","legacy-source"])]
+      original:=(Int)EnerCubixReportConsumer#.field("finalEntries").get(consumer)-(Int)EnerCubixReportConsumer#.field("classEntries").get(consumer)
+      verifyEq(EnerCubixReportConsumer#.method("finalDtoEntries").callOn(consumer,[Str:[Str:Obj?][:]]),original)
+    }
+    finally {report?.clearFrames;state.close;output.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
   Void testDailyBandOutputIncludesEmptyBandsAndEveryRetainedSource()
   {exerciseOutputGraph("dailyBands")}
   Void testFinishedReportsRetireReducersBeforeBuildingPublicDtos()
@@ -216,7 +243,7 @@ class EnerCubixReportConsumerTest : Test
       rs.findAll |r| {r["kind"]=="meter"}.each |r,i|
       {r["organizationId"]="child";r["areaSource"]="space";r["areaSpaceId"]=i%2==0 ? "building" : "floor";r["nativeArea"]=["value":10f,"unit":"m²"]}
     }
-    if(mode=="utility" || mode=="alias")
+    if(mode=="utility" || mode=="alias" || mode=="utilityHeadroom" || mode=="utilityShort")
     {
       kind="utility"
       rs.add(["id":"u","kind":"utility","categoryId":"c"]);rs.add(["id":"v","kind":"utility","categoryId":"c"])
@@ -232,7 +259,7 @@ class EnerCubixReportConsumerTest : Test
     sources:=EnerCubixCockpitStream[,]
     model:=mode=="summaryShared" ? EnerCubixPreparedOwner(budget) : null
     captureOwner:=mode.startsWith("pooled") ? EnerCubixPreparedOwner(budget) : null
-    boundaryPeer:=mode=="dailyHeadroom" ? EnerCubixPreparedOwner(budget) : null
+    boundaryPeer:=mode=="dailyHeadroom" || mode=="utilityHeadroom" ? EnerCubixPreparedOwner(budget) : null
     try
     {
       catalog:=model==null ? null : EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
@@ -244,7 +271,7 @@ class EnerCubixReportConsumerTest : Test
       EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
       capture:=captureOwner==null ? null : EnerCubixCockpitCapture(Str:[Str:Obj?]["scope":["kind":"sourceUsage","grain":"sourceRead","objectIds":ids,"sourceIds":rs.findAll |r| {r["kind"]=="meter"}.map |r->Str| {r["pointId"].toStr},"sourceIdsComplete":true,"requestRange":["from":start.toIso,"to":end.toIso,"asOf":end.toIso]]],captureOwner)
       consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,gran,state,output,capture,capture==null ? null : "scope")
-      boundaryPeer?.hold(144000)
+      boundaryPeer?.hold(mode=="utilityHeadroom" ? 146000 : 144000)
       if(mode=="pooledIdentity")
       {
         scratch:=EnerCubixPreparedOwner(budget);scratch.hold(64);seen:=Int:Obj[][:]
@@ -288,13 +315,13 @@ class EnerCubixReportConsumerTest : Test
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
-      if(mode=="dailyHeadroom" || mode=="dailyBands")
+      if(mode=="dailyHeadroom" || mode=="dailyBands" || mode=="utilityHeadroom" || mode=="utilityShort")
       {
         points:=EnerCubixMath.maps(actual["series"]);detail:=EnerCubixMath.maps(actual["rows"])
-        verifyEq(points.size,18);verifyEq(detail.size,432)
+        verifyEq(points.size,18);verifyEq(detail.size,18*hours)
         verify(detail.all |row| {row["value"]==1f && row["knownValue"]==1f})
-        points.each |line| {verifyEq(EnerCubixMath.maps(line["points"]).size,24)}
-        verify(EnerCubixMath.maps(((Map)actual["summary"])["totals"]).all |row| {row["value"]==24f})
+        points.each |line| {verifyEq(EnerCubixMath.maps(line["points"]).size,hours)}
+        verify(EnerCubixMath.maps(((Map)actual["summary"])["totals"]).all |row| {row["value"]==hours.toFloat})
         if(mode=="dailyBands") verifyEq(EnerCubixMath.maps(((Map)actual["extra"])["loadBands"]).size,108)
       }
       if(mode=="retired")

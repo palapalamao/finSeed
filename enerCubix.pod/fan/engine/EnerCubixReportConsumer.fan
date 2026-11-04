@@ -249,6 +249,20 @@ internal class EnerCubixReportConsumer
   private Int finalDtoEntries(Str:[Str:Obj?] dailyData)
   {
     original:=finalEntries-classEntries
+    if(report.canSizeUtilityOutput && cursors.all |c| {!c.line.reference && !c.line.gauge && !c.line.ratio && !c.line.leak && c.line.ticks.isEmpty} &&
+       cursors.all |c| {c.line.consumedTotals!=null && !c.line.consumedTotals.any |v| {v.sources.size>1}} &&
+       periods.all |p| {p.periods.all |row| {((EnerCubixValue)row["value"]).sources.size<=1 && ((EnerCubixValue)row["known"]).sources.size<=1}})
+    {
+      count:=0;periods.each |p| {count+=p.periods.size}
+      // Actual append DTO: point map+known/end fields10, detail map+known/end
+      // fields15, two links2. Its source arrays are independently owned by
+      // detached periods. Inspect actual totals/periods before using this bound.
+      // New non-period graph: series9C, totals20C, coverage linksC, members24C,
+      // selection16G+2C, shares22U+2C <=96C (G,U<=C). Reserve100C plus common
+      // heads/warnings independently; retain original member/detail allowance,
+      // class preparation and all scratch. Short ranges may exceed the old cap.
+      return original-40*count+27*count+100*cursors.size+report.dailyOutputCommonEntries
+    }
     if(!report.canSizeDailyOutput || cursors.any |c| {c.line.reference || c.line.gauge || c.line.ratio || c.line.leak || !c.line.ticks.isEmpty}) return original
     if(cursors.any |c| {data:=dailyData[c.line.id];return data==null || (data["hours"] as List)?.size!=24 || data["classified"] isnot List}) return original
     // Common fixed DTO heads/fields and warnings, plus coverage-vector links.

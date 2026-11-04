@@ -258,3 +258,13 @@
 - 同一144000 entries无关owner边界旧码RED在原生同一scratch.hold行，新码GREEN峰197655，18条series/432小时明细及每小时数值/完整输出图准入核对；额外六类峰谷108band及独立empty-category RED/GREEN覆盖。
 - 最终239物理源与pre-suite清单逐SHA一致。candidate-01426-final-fantom-r2.log实际122类974方法298487检查、133.018秒通过；empty单测2断言通过。全年/Q1模型r2与冻结025完整business和生产decode等价，11.721秒/27.620秒，峰191371/192896。82向量103窗口含60synthetic，明确非FIN性能证明。
 - UI284源/测试与022逐SHA一致，明确复用437单测与33不同受控场景；026 fresh type/Vite通过。四版本026。部署后仍需真实9/9和最终同PID30分钟；原生打印人工待答与readonly用户暂缓单列。
+
+
+### 2026-11-05 0.14.27 utility final output graph
+
+- 026实机仍8/9，年度26.688秒完成3951次原生读取/671878扫描/103窗口，日报与空间摘要完成；face-endUse原scratch.hold峰203875、remaining4129/need8000拒绝。实际响应及census保全；24资源、固定4816/2799.549228、CNEN40sheet保存回读及另外8项通过，不标全部验收。
+- 最终27不改constructor原40-per-period预留；在detached totals/periods后校验实际所有来源数组最多1，纯physical energy/nonarea utility才按实际27*periodRows+100*C+64+warnings+2单独预留，保留原32member/detail、整个class与scratch。非period图独立上界96C，100C留余量，不借class两次；短区间新预留可大于旧且不clamp，宽legacy回原路径。Map.any避免guard构valuesList；数值/来源/排序/所有限额不变。
+- 新146000无关owner回归旧同一scratch行RED（首次127000 exploratory pass保留非RED），最终GREEN峰197020；18series/432detail全数值来源/独立hard图核对。1-period utility图4315/admit11838及wide-source fallback覆盖，全部Consumer35方法2191检查通过。
+- final-r2的32*n版本仅interim，不用于冻结。最终r3实际122类977方法298550检查、134.952秒通过，239物理源与pre-suite-r3逐SHA一致。最终Q1/全年完整business+production decode与冻结026等价，实际耗时见下方；82向量103窗口含60synthetic，只是受控等价，非FIN性能。关闭temporary/raw为0，prepared824描述费不冒称全0。
+- UI284源/测试仍逐SHA同022，明确复用437unit/33不同受控场景，当前27 fresh type/Vite21.13秒通过；版本与99运行源主点guard通过。准备冻结后实际9项与最终同PID观察，不写现场配置/采集/历史；打印人工待答与readonly用户暂缓继续分层。
+- 最终模型r3 Q1 12904ms，全年 27996ms；峰 191371/192896。

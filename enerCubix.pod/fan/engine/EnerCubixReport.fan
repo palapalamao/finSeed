@@ -136,6 +136,8 @@ internal class EnerCubixReport
   { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
   internal Bool frameSharesBase(EnerCubixLine line) {request["perArea"]!=true && !line.gauge && !line.ratio && !line.leak && !line.reference}
   internal Bool dailyFrames() {kind == "daily"}
+  internal Bool canSizeUtilityOutput()
+  {kind=="utility" && metric=="energy" && request["perArea"]!=true && finalMetadataFrozen}
   internal Bool canSizeDailyOutput()
   {
     if(!dailyFrames || metric!="energy" || request["perArea"]==true || !finalMetadataFrozen) return false
