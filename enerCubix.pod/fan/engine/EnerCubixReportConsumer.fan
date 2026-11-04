@@ -223,6 +223,7 @@ internal class EnerCubixReportConsumer
       else if(omitted) known.setAll(["sourceUsageCaptureId":Uuid().toStr,"sourceUsageTruncated":true,"sourceUsageRowCount":emptyOmitted || unpreparedOmitted ? null : readCount,"truncationReason":"cockpitBoundedPreparedEvidence","omittedConfirmedEmpty":emptyOmitted,"omittedUnprepared":unpreparedOmitted])
       // Finished daily bins have expired. Admit the complete remaining DTO
       // envelope before constructing the original final report maps.
+      finalEntries=classEntries+finalDtoEntries(dailyData)
       output.hold(finalEntries-classEntries)
       scratch:=EnerCubixPreparedOwner(output.budget)
       try
@@ -240,6 +241,34 @@ internal class EnerCubixReportConsumer
     catch(Err e) {failure=e;throw e}
   }
   internal Int childStateEntries() {n:=reductions.entries;daily.each |d| {n+=d.stateEntries};return n}
+
+  ** Size this owned physical-energy daily DTO from its actual output shape.
+  ** The old 40-per-period allowance combines hours and all band rows, even
+  ** when only the single unclassified band will be emitted. Keep the shared
+  ** meter/detail allowances and the entire original temporary workspace.
+  private Int finalDtoEntries(Str:[Str:Obj?] dailyData)
+  {
+    original:=finalEntries-classEntries
+    if(!report.canSizeDailyOutput || cursors.any |c| {c.line.reference || c.line.gauge || c.line.ratio || c.line.leak || !c.line.ticks.isEmpty}) return original
+    if(cursors.any |c| {data:=dailyData[c.line.id];return data==null || (data["hours"] as List)?.size!=24 || data["classified"] isnot List}) return original
+    // Common fixed DTO heads/fields and warnings, plus coverage-vector links.
+    needed:=report.dailyOutputCommonEntries+cursors.size
+    cursors.each |cursor|
+    {
+      classified:=(List)dailyData[cursor.line.id]["classified"]
+      bands:=classified.size==1 && classified.first=="unknown" ? 1 : 6
+      // Per hour: point map(7)+known fields(4), detail map(14)+known
+      // fields(4), and two list links =31. Sources are already owned by
+      // the detached snapshots; scale/point/baseRow borrow those arrays.
+      // Per line: series map/link/point-list head=9; two totals rows/links=20;
+      // per band: base row(10)+band(1)+known(3)+link(1)+empty source head(1).
+      needed+=24*31+9+20+16*bands
+    }
+    // Original 128*meters and 32*(scope/detail memberships) still cover
+    // selection rows, source unions, member vectors and detail/area metadata.
+    // Never clamp this bound to the old envelope if the actual shape is larger.
+    return original-40*24*cursors.size+needed
+  }
 
   ** Count only the public graph at the registry's explicit done boundary.
   ** No sample reclamation occurs merely to attempt this optional compaction.

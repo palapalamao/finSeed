@@ -136,6 +136,16 @@ internal class EnerCubixReport
   { ["profile","primary","ranking","proportion","dashboard","daily","utility","workingHours","workingDays"].contains(kind) && request["otherFrom"] == null && EnerCubixMath.strings(request["referenceIds"]).isEmpty }
   internal Bool frameSharesBase(EnerCubixLine line) {request["perArea"]!=true && !line.gauge && !line.ratio && !line.leak && !line.reference}
   internal Bool dailyFrames() {kind == "daily"}
+  internal Bool canSizeDailyOutput()
+  {
+    if(!dailyFrames || metric!="energy" || request["perArea"]==true || !finalMetadataFrozen) return false
+    // Each category's selection row is covered by its existing meter ledger
+    // allowance. Empty categories keep the unchanged general envelope.
+    return finalSelections.all |group| {meters:=group["meters"] as List;return meters!=null && !meters.isEmpty}
+  }
+  // Fixed result/maps/list heads and field links, plus the final warnings copy
+  // and at most one new unclassified-band warning for physical energy lines.
+  internal Int dailyOutputCommonEntries() {64+ctx.warnings.size+2}
   internal Bool workingFrames() {["workingHours","workingDays"].contains(kind)}
   internal Bool frameWorking(EnerCubixTick tick) {ctx.working(tick.ts,kind == "workingHours",request["workHours"])}
   internal Str frameBand(EnerCubixLine line,EnerCubixTick tick)

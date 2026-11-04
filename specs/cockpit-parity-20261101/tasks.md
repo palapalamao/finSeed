@@ -249,3 +249,12 @@
 - 独立性能RED：31个空peer配额+一块30天10秒累计点，720小时逐一strict/known独立期望360。旧476读/746857扫描，GREEN266读/309217扫描，peakBlock1080/held6610不变；额外清洗开启，第2–4天小时采样再转10秒的跨块过渡253读/289901扫描，全部小时仍360，峰1083/6611。两场景2891断言及关闭peer/owner守恒通过（candidate-01425-span-final-tests.log）。这是受控真实读取算法，非32个现场数据源或FIN性能证明。
 - 最终239物理源hash与pre-suite一致；candidate-01425-final-fantom-r2.log完整122类971方法298424检查、129.349秒通过。此前969/295533及模型是I/O变更前interim，保留不混为最终。最终SDK来自candidate-01425-span-final-build.log，无中途重建；模型r2同一SDK对冻结024完整business及生产decode等价：Q1 12.135秒峰191371，全年25.487秒峰192896。103窗口/82源(22captured+60synthetic)，该模型不充分暴露现场密度，不据模型数宣称年度已解决；temporary/raw关闭0、prepared824描述费仍保留。
 - UI284物理src/tests仍完全等于022，明确复用437单测/33个不同受控场景，fresh025 type/Vite19.87秒。四版本025。接下来冻结后只做新包真实9项与同PID观察；保持主点only、无现场业务/采集/历史写入、30秒/200000 entries/8MiB/50000 block/200000 raw/20000000 scan全不变。人工native打印未答、真实readonly用户暂缓，单列不伪造通过。
+
+
+### 2026-11-05 0.14.26 bounded daily DTO finalization
+
+- 025实际8/9：年度所有原始历史完成26.468秒、3951次native/671878扫描；最终日报finishScratch准入峰202492超200000，保留完整census，不虚称超时修正即年度验收完成。
+- 026仅为已冻结metadata、非面积物理energy日报告按实际DTO形状预留：每小时31、每line29、每band16，公共64+warnings+2+coverage links；保留原meter/member/detail allowance及整个finishScratch。非24小时、reference/gauge/ratio/leak/ticks、空category-meter组均回原通用路径，无限额提高、无数据删减。
+- 同一144000 entries无关owner边界旧码RED在原生同一scratch.hold行，新码GREEN峰197655，18条series/432小时明细及每小时数值/完整输出图准入核对；额外六类峰谷108band及独立empty-category RED/GREEN覆盖。
+- 最终239物理源与pre-suite清单逐SHA一致。candidate-01426-final-fantom-r2.log实际122类974方法298487检查、133.018秒通过；empty单测2断言通过。全年/Q1模型r2与冻结025完整business和生产decode等价，11.721秒/27.620秒，峰191371/192896。82向量103窗口含60synthetic，明确非FIN性能证明。
+- UI284源/测试与022逐SHA一致，明确复用437单测与33不同受控场景；026 fresh type/Vite通过。四版本026。部署后仍需真实9/9和最终同PID30分钟；原生打印人工待答与readonly用户暂缓单列。

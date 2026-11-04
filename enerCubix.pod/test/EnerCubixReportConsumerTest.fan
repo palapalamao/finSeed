@@ -3,6 +3,24 @@ using haystack
 ** Full report DTOs from original leaf math; controlled sources, not FIN acceptance.
 class EnerCubixReportConsumerTest : Test
 {
+  Void testEmptyEnergyCategoryKeepsTheLegacyOutputAllowance()
+  {
+    rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space"]]
+    start:=DateTime.fromIso("2026-01-01T00:00:00Z");end:=start+1hr
+    budget:=EnerCubixStreamBudget().state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    dim:=EnerCubixDimension("space",rs);ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim);ctx.useOwner(state)
+    q:=Str:Obj?["from":start.toIso,"to":end.toIso,"asOf":end.toIso,"metric":"energy"]
+    EnerCubixReport? report
+    try
+    {
+      report=EnerCubixReport(ctx,q,start,end,"daily","hour","energy",state)
+      report.freezeFrameMetadata([report.openLine("s","c").line],output)
+      verify(!report.canSizeDailyOutput,"an empty category has no meter allowance for its selection row; keep the unchanged fallback")
+    }
+    finally {report?.clearFrames;state.close;output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testConstructorFailureBetweenReducerForkAndCleanupRegistrationReleasesChild()
   {
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"m","kind":"meter","categoryId":"c","pointId":"p"]].toImmutable
@@ -130,6 +148,10 @@ class EnerCubixReportConsumerTest : Test
 
   Void testOwnDailyObjectsDoNotCopyUnrelatedCatalogIntoEachOutput()
   {exerciseOutputGraph("own")}
+  Void testDailyFinalizationFitsBesideAnUnrelatedOwnerWithoutDroppingRows()
+  {exerciseOutputGraph("dailyHeadroom")}
+  Void testDailyBandOutputIncludesEmptyBandsAndEveryRetainedSource()
+  {exerciseOutputGraph("dailyBands")}
   Void testFinishedReportsRetireReducersBeforeBuildingPublicDtos()
   {exerciseOutputGraph("retired")}
   Void testEveryOverlappingScopeDetailPairRemainsAdmitted()
@@ -173,6 +195,7 @@ class EnerCubixReportConsumerTest : Test
     rs:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"]];ids:=Str[,]
     for(i:=0;i<18;i++) {ids.add("m$i");rs.add(["id":"m$i","kind":"meter","categoryId":"c","pointId":"p$i"])}
     dimension:="metering";kind:="daily";area:=false
+    if(mode=="dailyBands") rs.add(["id":"cal","kind":"calendar","workHours":[0,1],"peakHours":[0],"valleyHours":[1]])
     if(mode=="working") {kind="workingDays";rs.add(["id":"cal","kind":"calendar","workDays":[1,2,3,4,5]])}
     summaryOnly:=mode.startsWith("summary")
     if(mode.startsWith("pooled"))
@@ -209,6 +232,7 @@ class EnerCubixReportConsumerTest : Test
     sources:=EnerCubixCockpitStream[,]
     model:=mode=="summaryShared" ? EnerCubixPreparedOwner(budget) : null
     captureOwner:=mode.startsWith("pooled") ? EnerCubixPreparedOwner(budget) : null
+    boundaryPeer:=mode=="dailyHeadroom" ? EnerCubixPreparedOwner(budget) : null
     try
     {
       catalog:=model==null ? null : EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
@@ -220,6 +244,7 @@ class EnerCubixReportConsumerTest : Test
       EnerCubixLineCursor[] cursors:=kind=="utility" ? EnerCubixEndUse.resolve(ctx,ids).map |r->EnerCubixLineCursor| {report.openLine(r["id"].toStr,"c")} : ids.map |id->EnerCubixLineCursor| {report.openLine(id,"c")}
       capture:=captureOwner==null ? null : EnerCubixCockpitCapture(Str:[Str:Obj?]["scope":["kind":"sourceUsage","grain":"sourceRead","objectIds":ids,"sourceIds":rs.findAll |r| {r["kind"]=="meter"}.map |r->Str| {r["pointId"].toStr},"sourceIdsComplete":true,"requestRange":["from":start.toIso,"to":end.toIso,"asOf":end.toIso]]],captureOwner)
       consumer:=EnerCubixReportConsumer(ctx,report,cursors,start,end,gran,state,output,capture,capture==null ? null : "scope")
+      boundaryPeer?.hold(144000)
       if(mode=="pooledIdentity")
       {
         scratch:=EnerCubixPreparedOwner(budget);scratch.hold(64);seen:=Int:Obj[][:]
@@ -263,6 +288,15 @@ class EnerCubixReportConsumerTest : Test
         peer.close;verifyEq(budget.temporary.val,0);verifyEq(rs.toStr,original);return
       }
       actual:=consumer.finish
+      if(mode=="dailyHeadroom" || mode=="dailyBands")
+      {
+        points:=EnerCubixMath.maps(actual["series"]);detail:=EnerCubixMath.maps(actual["rows"])
+        verifyEq(points.size,18);verifyEq(detail.size,432)
+        verify(detail.all |row| {row["value"]==1f && row["knownValue"]==1f})
+        points.each |line| {verifyEq(EnerCubixMath.maps(line["points"]).size,24)}
+        verify(EnerCubixMath.maps(((Map)actual["summary"])["totals"]).all |row| {row["value"]==24f})
+        if(mode=="dailyBands") verifyEq(EnerCubixMath.maps(((Map)actual["extra"])["loadBands"]).size,108)
+      }
       if(mode=="retired")
       {
         ["firstMeters","lastMeters","meters","covers","daily","working"].each |field|
@@ -297,7 +331,7 @@ class EnerCubixReportConsumerTest : Test
       verify(output.entries>=owned,"output admission must cover every retained data entry")
       captured:=captureOwner?.entries ?: 0
       if(capture!=null) ((Str:EnerCubixCockpitCaptureGroup)EnerCubixCockpitCapture#.field("groups").get(capture)).each |group| {group.cells.each |cell| {captured+=cell.owner.entries}}
-      verify(budget.peak.val<=200000);verifyEq(budget.temporary.val,output.entries+(model?.entries ?: 0)+captured)
+      verify(budget.peak.val<=200000);verifyEq(budget.temporary.val,output.entries+(model?.entries ?: 0)+captured+(boundaryPeer?.entries ?: 0))
       echo("DAILY_OUTPUT_GRAPH mode="+mode+" hours="+hours+" retained="+owned+" admitted="+output.entries+" model="+(model?.entries ?: 0)+" peak="+budget.peak.val)
       if(capture!=null)
       {
@@ -313,7 +347,7 @@ class EnerCubixReportConsumerTest : Test
         finally {peer.close}
       }
     }
-    finally {sources.each |source| {source.close};state.close;output.close;captureOwner?.close;model?.close}
+    finally {sources.each |source| {source.close};state.close;output.close;captureOwner?.close;model?.close;boundaryPeer?.close}
     verifyEq(budget.temporary.val,0)
     verifyEq(rs.toStr,original)
   }
