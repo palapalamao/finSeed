@@ -187,7 +187,16 @@ internal class EnerCubixCockpitStream
   {
     cursorCheck
     if(cursorFrameActive || !intervals.isEmpty) return null
-    if(cursorEof && raw.isEmpty) return to
+    // The native read plan is exhausted. The same condition used by
+    // tailThrough proves the remaining suffix missing even with old boundary
+    // readings retained; no unread future row or interval is inferred away.
+    if(cursorEof && (raw.isEmpty || raw.last.ts<=hour))
+    {
+      pending:=cursorConsumed ?: from;domain:=emptyDomains.last
+      // The caller still has to consume [pending,hour). Prove that prefix too;
+      // a valid final reading closed at hour must never enter a constant group.
+      if(domain!=null && (DateTime)domain["from"]<=pending && (DateTime)domain["to"]>=hour && (domain["strictQuality"] ?: "missing")=="missing") return to
+    }
     if(raw.size==1 && raw.first.ts>hour)
     {
       end:=EnerCubixMath.floorHour(raw.first.ts)

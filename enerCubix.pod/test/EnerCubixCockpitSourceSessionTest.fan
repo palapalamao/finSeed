@@ -375,7 +375,7 @@ class EnerCubixCockpitSourceSessionTest : Test
   }
   Void testGroupedEmptyFramesKeepHourlyBusinessAndFirstReadingBoundaries()
   {
-    ["empty","future","bridge","na","partial","zero","dst","noTariff","timed"].each |mode|
+    ["empty","future","bridge","na","partial","zero","dst","noTariff","timed","past","pastNA","pastZero","pastBoundary"].each |mode|
     {
       expected:=emptySnapshot(mode,false);actual:=emptySnapshot(mode,true)
       verifyEq(normalize(actual["modules"],actual),normalize(expected["modules"],expected),mode)
@@ -400,6 +400,7 @@ class EnerCubixCockpitSourceSessionTest : Test
   {
     start:=DateTime.fromIso(mode=="dst" ? "2026-10-31T00:00:00-04:00" : "2026-10-01T00:00:00Z");end:=start+49hr;request:=input
     if(mode=="partial") {start+=20min;end-=10min}
+    if(mode=="pastBoundary") end=start+48hr
     tz:=mode=="dst" ? TimeZone("New_York") : TimeZone.utc
     request["time"]=["preset":"custom","period":"hour","from":start.toIso,"to":end.toIso];request["asOf"]=end.toIso
     rs:=records;points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
@@ -407,7 +408,8 @@ class EnerCubixCockpitSourceSessionTest : Test
     if(mode=="timed") rs.find |r| {r["kind"]=="tariff"}.setAll(["mode":"weekly","rules":[["startHour":0,"endHour":12,"rate":1f],["startHour":12,"endHour":24,"rate":2f]]])
     ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
     rows:=HisItem[,]
-    if(mode=="bridge") rows=[HisItem(start-1hr,Number(0)),HisItem(end+1hr,Number(100))]
+    if(["past","pastNA","pastZero","pastBoundary"].contains(mode)) rows=[HisItem(start-1hr,Number(0)),HisItem(start,mode=="pastNA" ? NA.val : Number(10)),HisItem(start+1hr,Number(mode=="pastZero" ? 10 : 20))]
+    else if(mode=="bridge") rows=[HisItem(start-1hr,Number(0)),HisItem(end+1hr,Number(100))]
     else if(!["empty","partial","dst"].contains(mode)) rows=[HisItem(start+47hr+30min,mode=="na" ? NA.val : Number(100)),HisItem(start+48hr+30min,Number(mode=="zero" ? 100 : 110))]
     prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
     budget:=EnerCubixStreamBudget();EnerCubixCockpitSourceSession? session
@@ -415,6 +417,11 @@ class EnerCubixCockpitSourceSessionTest : Test
     {
       result:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
       {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {rows.each |row| {if(row.ts>=span.start && row.ts<span.end) sink(row)}});return session.load(grouped)},"test",tz,end,true,|->DateTime| {end},null,null,null,configuration,|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)})
+      if(mode=="pastBoundary")
+      {
+        energy:=EnerCubixMath.maps(((Map)((Map)((Map)result["modules"])["kpis"])["data"])["values"]).find |r| {r["id"]=="energy"}
+        verifyEq(energy["value"],10f,"the final valid prefix must be counted once before grouping its missing suffix")
+      }
       count:=(Int)EnerCubixCockpitSourceSession#.field("emptyGroups").get(session)
       if(grouped && mode!="bridge") verify(count>0,"Fixture must exercise grouping: "+mode)
       else verifyEq(count,0)

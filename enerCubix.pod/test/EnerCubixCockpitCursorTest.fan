@@ -38,6 +38,51 @@ class EnerCubixCockpitCursorTest : Test
     }
   }
 
+  Void testReadPastTailAtEofProvesMissingSuffixWithOriginalReadingsRetained()
+  {
+    [false,true].each |cleaned|
+    {
+      cfg:=config;p:=Etc.dictToMap(point(cfg));if(!cleaned) {p.remove("hisFunc");p.remove("hisFuncConfig")}
+      budget:=EnerCubixStreamBudget();end:=at+48hr
+      cursor:=EnerCubixCockpitStream.openCursor(Etc.makeDict(p),cleaned ? cfg : null,at,end,query(end),records,budget,reader([HisItem(at-1hr,Number(0)),HisItem(at,Number(10)),HisItem(at+1hr,Number(20))]))
+      try
+      {
+        cursor.advance(at+1hr);verify(cursor.scanComplete)
+        verifyNull(cursor.confirmedEmptyThrough,"the current unconsumed hour still has the valid final interval")
+        cursor.withFrame |history| {verifyEq(history.read(at,at+1hr).value,10f)}
+        cursor.advance(at+4hr)
+        retained:=(List)EnerCubixCockpitStream#.field("raw").get(cursor);verify(!retained.isEmpty)
+        verifyEq(cursor.confirmedEmptyThrough,end,"already-read stale boundary readings cannot deny the proven EOF suffix")
+        cursor.advance(end)
+        cursor.withFrame |history|
+        {
+          verifyEq(history.read(at+4hr,at+5hr).quality,"missing")
+          known:=history.knownUsage(at+4hr,at+5hr,end);verifyNull(known["knownValue"]);verifyEq(known["coveredSeconds"],0f)
+        }
+      }
+      finally {cursor.close}
+      verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+    }
+  }
+
+  Void testEofDoesNotBlendCurrentIncompleteHourWithLaterMissingSuffix()
+  {
+    cfg:=config;budget:=EnerCubixStreamBudget();end:=at+48hr
+    cursor:=EnerCubixCockpitStream.openCursor(point(cfg),cfg,at,end,query(end),records,budget,reader([HisItem(at,Number(0)),HisItem(at+2hr,Number(20))]))
+    try
+    {
+      cursor.advance(at+1hr);verifyNull(cursor.confirmedEmptyThrough,"a future closed interval is still required")
+      cursor.withFrame |history| {verifyEq(history.read(at,at+1hr).quality,"incompleteInterval")}
+      cursor.advance(at+2hr);verify(cursor.scanComplete)
+      verifyNull(cursor.confirmedEmptyThrough,"this pending strict incomplete hour must not merge into future missing")
+      cursor.withFrame |history| {verifyEq(history.read(at+1hr,at+2hr).quality,"incompleteInterval")}
+      cursor.advance(at+3hr);verifyEq(cursor.confirmedEmptyThrough,end)
+      cursor.withFrame |history| {verifyEq(history.read(at+2hr,at+3hr).quality,"missing")}
+    }
+    finally {cursor.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testEmptyYearCursorReadsTheWholeDomainWithBoundedAdaptiveSpans()
   {
     end:=at+365day;q:=query(end);budget:=EnerCubixStreamBudget();spans:=Span[,]
