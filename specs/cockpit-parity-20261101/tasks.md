@@ -133,3 +133,13 @@
 - 新增四项回归：48小时共享及独立日、顺序/空数组、8760小时21来源、破坏性冻结并关闭生产者后完整来源。保留旧码RED，按Java IdentityHashMap递归独立核对实际容器图与准入计费；不能把共享数组按小时重复计费。旧冻结转移测试因真实图由>1024缩至563触发前置断言，诊断日志保留；将fixture由2完整日扩大为4日，原>1024及禁止第二份完整图共存的断言均保留。
 - 最终全量122类943方法294441检查通过（heatmap-source-sharing-corrected-full.log，186.901秒）。Q1受控混合模型与旧冻结基线全部报告/警告顺序/值/质量/覆盖完全一致，完整业务快照仅排除已声明运行计数及验证后的opaque身份；生产TS解码逐项一致（heatmap-source-sharing-q1-equivalence.json）。该模型15.013秒、峰188687，不冒称现场年度性能达标。
 - 本修正尚未部署；待手机环图唯一提交完成后统一版本0.14.14，重新进行原生九查询与同实例观察。0.14.12原实例30分钟1805.307秒/181样本已完成；0.14.13被重启中断，不能混用。只读账号依用户暂缓，原生打印尚未验证；未写现场业务配置、采集或历史。
+
+
+## 0.14.14 实际结果及按消费清洗修正（2026-11-04 22:53）
+
+- 4c964d8e / 0.14.14 / B605F154C810D261A4CC1B3447FE29E6F14AC29D90EC6DD28E4F895FF8B895C5（4797458B）已实际安装，FIN5/10940正常停止并备份CC1D后，唯一-noAuth Java10108/launcher3212，FIN5保持停止；24份HTTP资源一致。Windows PS只读预检、14项新服务身份/静止模拟守卫和架构静态审阅通过，未强杀/改执行策略。手机环图37a45→e896已集成，431单测及29项最终UI通过；四宽双语、长名称/用量/百分比/0/NA/缺测完整可读，新UI证据仍属受控，不伪称新原生页面验收。
+- 原生九查询仍8/9，固定4816/2799.549228及双语Excel完整冻结快照回读成功。zeda-site年度422/17.531秒，Apr20 15:00；heatmap省6992，但future detail增加6817、interval多9，temporary由198634恰变198468，未来预清洗占位再次填满必需帧空间，不能称年度修好。10108观察独立记录，不能和旧实例拼接。
+- 源码4b63d81b直接移除未来派生占位：仍保留4day raw HisItem预读及原raw/activeCursor/50k/200k约束；消费每条raw时先准入32条临时空间再执行原transition、observe/append，finally先清detail根后退费。首次非空消费才验证配置；规范化cfg计入cursorCatalogCharge，close先断引用再退费；previous仅沿已消费且非removedNA原始值推进。readBlock只移除用于未消费future清洗数组的prepRoom；时间、NA、后继闭合、原始/派生/扫描/响应保护不变。
+- bulk和cursor共用step。提取之前在旧compiled14上生成32配置/单位组合及7520条detail、items/summary/previous，提取后完整JSON相同，SHA均EE241D1B71B61700FE024521E70833FB61774A93430D162A82E6C9290801802D；不是新bulk/cursor互证。见cleaning-step-independent-equivalence.json。
+- 新四测试覆盖future detail为0但raw保留、82源+peer25k可生成当前帧、空历史不验证无效cfg、cfg准入/异常保留peer且全清自身。前两旧码RED，新码94检查GREEN；相关3类54方法2364检查通过。显式清根改动后再次完整122类947方法294552检查通过（lazy-cleaning-final-fantom-full.log，162.922秒）。Q1完整报告/模块、警告、质量、覆盖、生产解码与旧冻结结果等价（lazy-cleaning-final-q1-equivalence.json）。未提高测试时限。
+- 按消费清洗尚未部署，统一下一版本0.14.15；TS src/tests与最终14相同，前端431及29UI按源码身份明确复用，不能称15重跑。最终原生年度、30分钟、49条款仍待；只读用户暂缓，原生打印未验证。未写现场配置/采集/原始历史。
