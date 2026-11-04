@@ -187,7 +187,7 @@ internal class EnerCubixCockpitSourceSession
       {
         if(w.cursor!=null && w.isCleaning) w.cursor.withCleaningMetadata |meta|
         {
-          registry.cleaning(w.id,w.from,w.to,meta)
+          registry.cleaning(w.id,w.from,w.to,meta,requestScope)
           owner.hold(8);w.cleaning=Str:Obj?["profileId":meta["profileId"],"profileVersion":meta["profileVersion"]]
           w.cleaning["parameters"]=detach(meta["parameters"])
         }

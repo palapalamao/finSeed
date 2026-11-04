@@ -3,6 +3,47 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testCleaningFactChargesImmutableDescendantsThroughFinalScopeLifetime()
+  {
+    [false,true].each |immutableRoot|
+    {
+      scope:=EnerCubixCockpitRequestScope("cleaning-fact-ownership","a");budget:=scope.stream.state
+      source:=Str:Obj?["nested":Str:Obj?["values":[1,2,3]].toImmutable]
+      if(immutableRoot) source=(Str:Obj?)source.toImmutable
+      try
+      {
+        owner:=scope.historyOutput;before:=owner.entries
+        result:=(Map)scope->freezeCleaningFact(source)
+        verify(result.isImmutable);verifyEq(result,source);verify(result["nested"]===source["nested"])
+        // Outer map2 + nested map2 + vector4, plus one retained root holder.
+        verify(owner.entries-before>=8+3,"already immutable source containers need their own surviving ownership")
+        frozen:=scope.freezeSnapshot(["fact":result]);verify(frozen["fact"]===result)
+      }
+      finally {scope.close}
+      verifyEq(budget.temporary.val,0)
+    }
+  }
+
+  Void testCleaningFactRejectsCyclesAndQuotaWithoutMutatingItsSource()
+  {
+    scope:=EnerCubixCockpitRequestScope("cleaning-fact-failure","a");budget:=scope.stream.state
+    source:=Str:Obj?[:];source["self"]=source;peer:=EnerCubixPreparedOwner(budget)
+    try
+    {
+      before:=scope.entries;verifyErr(NotImmutableErr#) {scope->freezeCleaningFact(source)}
+      verifyEq(scope.entries,before);verify(source["self"]===source)
+      bad:=Obj:Obj?[:];bad[Str:Obj?["key":1].toImmutable]=0
+      verifyErr(NotImmutableErr#) {scope->freezeCleaningFact(bad)};verifyEq(scope.entries,before)
+      source.clear;source["value"]=0
+      peer.hold(budget.remaining-1);held:=peer.entries
+      verifyErr(EnerCubixHttpErr#) {scope->freezeCleaningFact(source)}
+      verifyEq(peer.entries,held);verifyEq(scope.entries,before);verifyEq(source["value"],0)
+      peer.close;result:=(Map)scope->freezeCleaningFact(source);verifyEq(result["value"],0)
+    }
+    finally {peer.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testConservativePublicGraphCompactionFitsSmallTraversalWorkspace()
   {
     scope:=EnerCubixCockpitRequestScope("public-graph-compaction","a");budget:=scope.stream.state

@@ -94,6 +94,9 @@ class EnerCubixCockpitRegistryTest : Test
   }
 
   Void testFinalCleaningMetadataIsDetachedAndUsesTheSharedSampleRows()
+  {[false,true].each |shared| {checkFinalCleaningMetadata(shared)}}
+
+  private Void checkFinalCleaningMetadata(Bool shared)
   {
     a:=DateTime.fromIso("2026-01-01T00:00:00Z");b:=a+4hr
     q:=Str:Obj?["kind":"profile","metric":"energy","dimension":"metering","nodeIds":["m"],"categoryIds":["c"],"_cockpitCategoryId":"c","period":"day","from":a.toIso,"to":b.toIso,"asOf":b.toIso,"tz":"UTC"]
@@ -101,7 +104,9 @@ class EnerCubixCockpitRegistryTest : Test
     boundary:=Str:Obj?["meterIds":["m"],"sourcePointIds":["p"]]
     key:=EnerCubixCockpitStream.diagnosticKey("p",a,b)
     cleaningPlan:=Str:[Str:Obj?][key:["kind":"cleaningEvents","grain":"cleaningEvent","sourceIds":["p"],"objectIds":["m"],"sourceIdsComplete":true,"reportRefs":["profile-energy"],"requestRange":["from":a.toIso,"to":b.toIso,"asOf":b.toIso]]]
-    budget:=EnerCubixStreamBudget();registry:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,boundary.toImmutable,["trend"],["mode":"none"],null,[:],budget,["p":"kWh"],["p"],cleaningPlan)
+    budget:=EnerCubixStreamBudget();scope:=shared ? EnerCubixCockpitRequestScope("shared-cleaning-metadata","test",budget) : null
+    registry:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,boundary.toImmutable,shared ? ["kpis","trend"] : ["trend"],["mode":"none"],null,[:],budget,["p":"kWh"],["p"],cleaningPlan)
+    Map? savedSummary;Map? snapshot
     cfg:=Etc.makeDict(["defNull":Marker.val,"deltaMax":Number(1)])
     point:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])
     raw:=HisItem[,];amount:=0f;(0..240).each |i| {if(i>0) amount+=i%3==0 ? 3f : 0.5f;raw.add(HisItem(a+1min*i,Number(amount)))}
@@ -114,13 +119,24 @@ class EnerCubixCockpitRegistryTest : Test
       verifyErr(ArgErr#) {registry.read("profile-energy",q)}
       source.withCleaningMetadata |meta|
       {
-        registry.cleaning("p",a,b,meta)
+        registry.cleaning("p",a,b,meta,scope)
         report:=registry.read("profile-energy",q);row:=EnerCubixMath.maps(((Map)report["extra"])["cleaning"]).first
         verifyEq(row["rejectedCount"],80);verifyEq(row["pointId"],"p")
         diagnostic:=EnerCubixMath.maps(registry.diagnostics["entries"]).find |entry| {entry["id"]==row["detailsDiagnosticRef"]}
         verifyEq(diagnostic["kind"],"cleaningEvents");verifyEq(diagnostic["returnedCount"],((List)row["details"]).size)
         verify(row["details"] === meta["details"],"sample rows are pool-owned and shared")
         verify(row["summary"] !== meta["summary"],"mutable source counters must be detached")
+        if(shared)
+        {
+          cost:=registry.read("profile-cost",EnerCubixCockpitReports.metricQuery(q,"cost",null))
+          other:=EnerCubixMath.maps(((Map)cost["extra"])["cleaning"]).first
+          verify(row!==other,"each report still owns its top-level row")
+          verify(row["parameters"]===other["parameters"] && row["summary"]===other["summary"],"one request owns shared immutable facts")
+          verify(row["parameters"].isImmutable && row["summary"].isImmutable)
+          savedSummary=(Map)row["summary"]
+          frozen:=scope.freezeReport("energy",report);snapshot=scope.freezeSnapshot(["report":frozen])
+          registry.releaseReport("profile-cost");verifyEq(savedSummary["filteredCount"],80)
+        }
         ((Map)meta["summary"])["filteredCount"]=999
         verifyEq(((Map)row["summary"])["filteredCount"],80)
         verifyErr(ArgErr#) {registry.cleaning("p",a,b,meta)}
@@ -128,8 +144,17 @@ class EnerCubixCockpitRegistryTest : Test
       report:=registry.read("profile-energy",q)
       verifyEq(EnerCubixMath.maps(((Map)report["summary"])["knownTotals"]).first["value"],80f)
       verify((Int)registry.diagnostics["returnedCount"]<=1000);verifyEq(budget.state.unprepared.val,0)
+      if(shared)
+      {
+        source.close;registry.close
+        history:=(EnerCubixPreparedOwner)EnerCubixCockpitRequestScope#.field("historyOwner").get(scope)
+        verify(history.entries>0,"shared facts remain charged after source and report producers expire")
+        verifyEq(savedSummary["filteredCount"],80)
+        frozenRow:=EnerCubixMath.maps(((Map)((Map)snapshot["report"])["extra"])["cleaning"]).first
+        verify(frozenRow["summary"]===savedSummary)
+      }
     }
-    finally {source.close;registry.close}
+    finally {source.close;registry.close;scope?.close}
     verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
   }
 

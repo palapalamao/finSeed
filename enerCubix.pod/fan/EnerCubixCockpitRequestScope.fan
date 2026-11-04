@@ -77,6 +77,44 @@ internal class EnerCubixCockpitRequestScope
   }
   EnerCubixPreparedOwner historyOutput()
   {checkContext(project,user);if(historyOwner==null) historyOwner=EnerCubixPreparedOwner(stream.state);return historyOwner}
+  ** Cleaning facts outlive source/report producers and final wire delivery.
+  ** Freeze mutable containers normally. Already immutable source containers
+  ** may belong to a shorter owner, so admit their entire graph here as well.
+  ** This is the cleaning JSON domain: container keys must be strings.
+  internal Obj? freezeCleaningFact(Obj? source)
+  {
+    checkContext(project,user)
+    work:=EnerCubixPreparedOwner(stream.state);Obj[]? path
+    try
+    {
+      work.hold(8);path=Obj[,];borrowed:=immutableCleaningEntries(source,work,path)
+      output:=historyOutput;output.hold(borrowed)
+      result:=EnerCubixCockpitFreeze.value(source,output)
+      if(source!=null && source.isImmutable)
+      {
+        output.hold(2);roots:=Obj?[result];output.watch |->Void| {roots.clear}
+      }
+      return result
+    }
+    finally {path?.clear;work.close}
+  }
+  private Int immutableCleaningEntries(Obj? value,EnerCubixPreparedOwner work,Obj[] path)
+  {
+    deadline.check
+    if(value isnot Map && value isnot List)
+    {if(value!=null && !value.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue");return 0}
+    if(path.any |item| {item===value}) throw NotImmutableErr("cockpitSnapshotCycle")
+    work.hold(1);path.add(value)
+    try
+    {
+      n:=value.isImmutable ? 1+(value is Map ? ((Map)value).size : ((List)value).size) : 0
+      if(value is Map) ((Map)value).each |child,key|
+      {if(key isnot Str) throw NotImmutableErr("cockpitSnapshotMutableKey");n+=immutableCleaningEntries(child,work,path)}
+      else ((List)value).each |child| {n+=immutableCleaningEntries(child,work,path)}
+      return n
+    }
+    finally {path.removeAt(path.size-1);work.release(1)}
+  }
   [Str:Obj?][] freezeHistoryHeaders([Str:Obj?][] headers)
   {
     checkContext(project,user)

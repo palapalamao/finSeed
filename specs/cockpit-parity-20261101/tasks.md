@@ -289,3 +289,14 @@
 - 最终239物理源与-r3 pre-suite逐SHA一致；完整122类981方法298659检查、133.270秒通过。季度/全年完整business及生产decode对冻结028等价；82向量103窗口含60synthetic，仍非FIN性能。模型数字如下，不据模型速度宣称原生已达标。
 - UI284源/tests仍逐SHA同022，明确复用437单测/33不同受控场景，29 fresh type/Vite20.21秒、四版本和99runtime主点guard通过。待唯一新包原生9项/实际导出资源及最终PID30分钟；打印人工待答和readonly用户暂缓继续单列，未写现场业务/采集/历史。
 - 最终模型r3 Q1 11822ms，全年 25602ms；峰 191545/192896。
+
+
+### 2026-11-05 0.14.30 scoped immutable cleaning facts
+
+- 029真实仍8/9，但年度已降24.281秒，3951读/671878扫描/103窗口全部完成，所有report和flow均done/state0；分项ledger已实际走过。失败已推进到第87个source窗口清洗说明复制：ReportWork.copy555，peak200002、temporary199174、sourceOwner5309、diagnosticOwner20029，不能仅凭24秒标成功。原response/census保全，未warm重试。24资源和8项核对分层保留。
+- 030只在带同budget RequestScope的SourceSession路径共享每point/window的parameters和summary：私有meta.dup wrapper先按4+size准入，两个child由既有scope.historyOutput通过标准Freezer冻结一次，diagOwner先hold1再登记至pool.protectedRoots，原Work/Flow.copy和顶层行/来源/范围过滤保持，finally仅清wrapper。Stream.meta、源头header小w.cleaning独立detach和原指纹路径保持；无Scope仍原路径。不是时序存储或跨请求缓存。
+- historyOutput晚于snapshot/report及wire发送关闭。helper先按身份path验证cycle/JSON Str keys/immutable scalar，并补收所有已immutable Map/List子图费用，防止标准Freezer直接借短source-owner已immutable图而漏长生命周期配额；可变部分仍逐节点Freezer准入，不可变根补roots2+watch1。nullable path在hold8成功后才创建，深度hold1/pop/release1。别名按树多计保守，不从source/pool提前转移或释放账。
+- optionalScope仅签名shim时旧真实fixture的共享child身份断言RED；Native200002才是资源RED。另immutable复合Map键负测先NoErr RED，后明确JSON Str域Guard GREEN。最终Registry+Scope2类29方法984检查/2125ms：legacy保留，shared顶层row不同、child同identity且immutable、原source.summary修改不影响、释放单report不清其它、冻结report/snapshot后关source+registry但historyOwner仍charged，mutable含immutable后代/全immutable根独立8-entry图+roots下界、cycle/quota无输入破坏及最终0配额通过。
+- 最终239物理源与-r3-pre-suite逐SHA一致；完整122类983方法298703检查、131.225秒通过。Q1/全年完整business+production decode对冻结029等价；模型数据如下（82向量103窗口、60synthetic，不是FIN性能）。临时/raw关闭0，prepared824描述费保留。
+- UI284源/tests逐SHA同022，明确复用437单测/33不同受控场景，30 fresh type/Vite19.89秒、四版本及99runtime主点guard通过。下一步唯一候选新包真实9项、实际资源/导出和最终同PID30分钟；原生打印人工待答、真实readonly用户暂缓继续单列。没有现场配置/设备/历史写入，没有改30秒/200000 entries/8MiB等任何上限。
+- 最终模型r3 Q1 11831ms，全年 25853ms；峰 191545/188670。

@@ -293,18 +293,39 @@ internal class EnerCubixCockpitRegistry
   }
   ** Called inside the source's borrowed metadata callback, after the shared
   ** sample pool freezes. Counters/configuration detach; sample rows stay shared.
-  Void cleaning(Str pointId,DateTime from,DateTime to,Str:Obj? meta)
+  Void cleaning(Str pointId,DateTime from,DateTime to,Str:Obj? meta,EnerCubixCockpitRequestScope? scope := null)
   {
     check
     key:=EnerCubixCockpitStream.diagnosticKey(pointId,from,to)
     if(!done || !cleaningKeys.contains(key) || attachedCleaning.containsKey(key) || meta["details"] !== pool.rows(key)) throw ArgErr("cockpitRegistryCleaningPlan")
+    if(scope!=null && scope.stream.state!==budget.state) throw ArgErr("cockpitRegistryCleaningPlan")
+    EnerCubixPreparedOwner? work;Map? wrapper
     try
     {
       metadata.hold(1);attachedCleaning[key]=true
-      works.each |work| {work.cleaning(pointId,from,to,meta,pool.diagnosticId(key))}
-      flowWork?.cleaning(pointId,from,to,meta,pool.diagnosticId(key))
+      shared:=meta
+      if(scope!=null)
+      {
+        work=EnerCubixPreparedOwner(budget.state);work.hold(4+meta.size);wrapper=meta.dup
+        ["parameters","summary"].each |field|
+        {
+          value:=meta[field]
+          if(value is Map || value is List)
+          {
+            frozen:=scope.freezeCleaningFact(value)
+            // Output cleanup and later report transfer already protect these
+            // same pool roots. Their quota belongs to the longer scope owner.
+            if(!pool.protectedRoots.any |root| {root===frozen}) {diagnosticOwner.hold(1);pool.protectedRoots.add(frozen)}
+            wrapper[field]=frozen
+          }
+        }
+        shared=wrapper
+      }
+      works.each |item| {item.cleaning(pointId,from,to,shared,pool.diagnosticId(key))}
+      flowWork?.cleaning(pointId,from,to,shared,pool.diagnosticId(key))
     }
     catch(Err e) {failure=e;throw e}
+    finally {wrapper?.clear;work?.close}
   }
   ** A recognizable source configuration failure has no cleaning report in the
   ** original reader. Seal the declared group without fabricating one.
