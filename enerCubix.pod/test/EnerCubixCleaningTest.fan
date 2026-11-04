@@ -2,6 +2,48 @@ using haystack
 
 class EnerCubixCleaningTest : Test
 {
+  Void testCursorTransitionDoesNotMaterializeDiagnosticMap()
+  {
+    cfg:=EnerCubixCleaning.config(["deltaMin":0,"defNull":true],"kWh")
+    previous:=HisItem(ts(0),Number(10f));item:=HisItem(ts(1),Number(13f))
+    transition:=EnerCubixCleaning.cursorStep("kWh",cfg,item,previous)
+    verify(!transition.typeof.fields.any |f| {!f.isStatic && f.get(transition) is Map},"a scalar cursor transition must not eagerly format or retain a diagnostic map")
+    expected:=Str:Obj?["ts":item.ts.toIso,"rawValue":13f,"previousValue":10f,"value":3f,"valueType":"number","reason":"ok","substituted":false,"intervalSeconds":3600f,"emitted":true]
+    verifyEq(transition.detail,expected)
+    verifyEq(transition.detail,expected)
+    verify(!transition.typeof.fields.any |f| {!f.isStatic && f.get(transition) is Map},"materialized evidence belongs to its caller, never a hidden cursor cache")
+  }
+
+  Void testScalarTransitionRetainsNullNaReplacementRolloverAndUnits()
+  {
+    cases:=Obj?[][
+      [Str:Obj?["defNull":true],Number(10f),Number(13f),3600,3f,"ok",false,"cleaned"],
+      [Str:Obj?["deltaMin":0,"defNull":true],Number(10f),Number(3f),3600,null,"deltaMin",false,"filtered"],
+      [Str:Obj?["deltaMin":0,"defVal":["type":"number","value":5]],Number(10f),Number(3f),3600,5f,"deltaMin",true,"substituted"],
+      [Str:Obj?["deltaMin":0,"defVal":["type":"na"]],Number(10f),Number(3f),3600,null,"deltaMin",true,"na"],
+      [Str:Obj?["defNull":true],Number(10f),null,3600,null,"inputNull",false,"missing"],
+      [Str:Obj?["defNull":true],Number(10f),NA.val,3600,null,"inputNA",false,"na"],
+      [Str:Obj?["defNull":true],NA.val,Number(13f),3600,null,"previousNA",false,"na"],
+      [Str:Obj?["deltaMax":100,"hisTotalizedRollover":32768],Number(32760f),Number(12f),3600,20f,"rollover",false,"corrected"],
+      [Str:Obj?["defNull":true,"timeMax":"30min"],Number(10f),Number(13f),3600,null,"timeMax",false,"filtered"],
+      [Str:Obj?["defNull":true],Number(10f),Number(13f),0,null,"nonPositiveInterval",false,"missing"],
+      [Str:Obj?["defNull":true],Number(10000f,Unit("Wh")),Number(13000f,Unit("Wh")),3600,3f,"ok",false,"cleaned"],
+      [Str:Obj?["defNull":true],Number(-1e308f),Number(1e308f),3600,null,"ok",false,"filtered"]]
+    cases.each |c|
+    {
+      cfg:=EnerCubixCleaning.config((Str:Obj?)c[0],"kWh");previous:=HisItem(ts(0),c[1]);item:=HisItem(ts(0)+1sec*(Int)c[3],c[2])
+      transition:=EnerCubixCleaning.cursorStep("kWh",cfg,item,previous)
+      verifyEq(transition->number,c[4]);verifyEq(transition->reason,c[5]);verifyEq(transition->substituted,c[6]);verifyEq(transition->quality,c[7])
+      verifyEq(transition.detail,EnerCubixCleaning.cursorDetail("kWh",cfg,item,previous))
+      verifyEq(transition->emitted,true);verifyEq(transition->intervalSeconds,((Int)c[3]).toFloat)
+    }
+    cfg:=EnerCubixCleaning.config(["removeNA":true,"defNull":true],"kWh")
+    removed:=EnerCubixCleaning.cursorStep("kWh",cfg,HisItem(ts(1),NA.val),HisItem(ts(0),Number(10)))
+    verifyEq(removed->reason,"removedNA");verifyEq(removed->emitted,false);verifyNull(removed->intervalSeconds)
+    first:=EnerCubixCleaning.cursorStep("kWh",cfg,HisItem(ts(1),Number(10)),null)
+    verifyEq(first->reason,"noPrevious");verifyEq(first->emitted,false);verifyNull(first->number)
+  }
+
   Void testDefaultProfileDropsNegativeAndPreservesZero()
   {
     r:=run([10,10,5,8],generic)

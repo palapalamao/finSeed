@@ -168,7 +168,7 @@ internal class EnerCubixCockpitStream
         {
           i:=cursorIndex++;item:=cursorItems[i]
           scratch:=cleaned ? EnerCubixPreparedOwner(budget.state) : null
-          Map? detail
+          EnerCubixCleanStep? detail
           try
           {
             if(cleaned)
@@ -181,13 +181,13 @@ internal class EnerCubixCockpitStream
                 cursorValidatedConfig=EnerCubixCleaning.cursorConfig(point,config)
               }
               scratch.hold(32)
-              detail=EnerCubixCleaning.cursorDetail(point["unit"]?.toStr ?: "",cursorValidatedConfig,item,previous)
-              if(detail["reason"]!="removedNA") previous=item
+              detail=EnerCubixCleaning.cursorStep(point["unit"]?.toStr ?: "",cursorValidatedConfig,item,previous)
+              if(detail.reason!="removedNA") previous=item
             }
             append(item,detail,through,cursorItems.size-i)
             cursorItems[i]=null
           }
-          finally {detail?.clear;detail=null;scratch?.close}
+          finally {detail=null;scratch?.close}
           continue
         }
         clearCursorChunk
@@ -541,7 +541,7 @@ internal class EnerCubixCockpitStream
     }
     result:=cleaned ? EnerCubixCleaning.clean(point,items,config,previous,false,true) : null
     if(cleaned) previous=result.previous
-    items.each |item,i| {append(item,result == null ? null : result.details[i],to,items.size)}
+    items.each |item,i| {append(item,result == null ? null : EnerCubixCleanStep.fromDetail(result.details[i]),to,items.size)}
   }
 
   private HisItem[] readBlock(DateTime a,DateTime b,|Dict,Span,|HisItem|->Void| read)
@@ -591,7 +591,7 @@ internal class EnerCubixCockpitStream
     return items
   }
 
-  private Void append(HisItem item,Map? d,DateTime limit,Int heldItems)
+  private Void append(HisItem item,EnerCubixCleanStep? d,DateTime limit,Int heldItems)
   {
     if(last != null && item.ts <= last) throw ArgErr("nonMonotonicHistory")
     if(inferredInterval && last != null && (item.ts-last).ticks % inferredCadence.ticks != 0) throw ArgErr("streamingCadenceChanged")
@@ -602,17 +602,17 @@ internal class EnerCubixCockpitStream
     if(d != null)
     {
       observe(d,item.ts)
-      seconds:=EnerCubixMath.num(d["intervalSeconds"]) ?: 0f
-      if(d["emitted"] == true && seconds > 0f)
+      seconds:=d.intervalSeconds ?: 0f
+      if(d.emitted == true && seconds > 0f)
       {
         end:=item.ts.toTimeZone(from.tz)
         if(cursorMode) {budget.state.holdOwned(1);cursorIntervalCharge++}
-        intervals.add(EnerCubixInterval(end-Duration((seconds*1sec.ticks.toFloat).toInt),end,EnerCubixMath.num(d["value"]),EnerCubixHistory.detailQuality(d),d["valueType"].toStr))
+        intervals.add(EnerCubixInterval(end-Duration((seconds*1sec.ticks.toFloat).toInt),end,d.number,d.quality,d.valueType.toStr))
       }
     }
     if(cursorMode) budget.holdCursor(cursorId,heldItems+raw.size+(previous == null ? 0 : 1))
     else budget.hold(heldItems+raw.size)
-    if(d != null && d["reason"] == "removedNA") return
+    if(d != null && d.reason == "removedNA") return
     cursorClosable=item.ts
     firstHour:=EnerCubixMath.floorHour(item.ts)
     if(firstHour > limit) firstHour=limit
@@ -622,26 +622,26 @@ internal class EnerCubixCockpitStream
 
   private Void increment(Str k) {meta[k]=((Int)meta[k])+1}
 
-  private Void observe(Str:Obj? d, DateTime end)
+  private Void observe(EnerCubixCleanStep d, DateTime end)
   {
-    seconds:=EnerCubixMath.num(d["intervalSeconds"]) ?: 0f
+    seconds:=d.intervalSeconds ?: 0f
     start:=end-Duration((seconds*1sec.ticks.toFloat).toInt)
-    selected:=d["emitted"] == true && end > from && start < to
+    selected:=d.emitted == true && end > from && start < to
     if (selected)
     {
       increment("outputCount")
-      if (d["valueType"] == "number") increment("validCount")
-      else if (d["valueType"] == "na") {increment("naCount");naCount++}
+      if (d.valueType == "number") increment("validCount")
+      else if (d.valueType == "na") {increment("naCount");naCount++}
       else increment("nullCount")
-      if (d["substituted"] == true) substituted++
-      if (d["value"] == null && d["valueType"] != "na" && !["inputNull","previousNull","nonPositiveInterval"].contains(d["reason"])) filtered++
+      if (d.substituted == true) substituted++
+      if (d.diagnosticValue == null && d.valueType != "na" && !["inputNull","previousNull","nonPositiveInterval"].contains(d.reason)) filtered++
     }
-    if (["ok","noPrevious"].contains(d["reason"]) || !(selected || (d["emitted"] != true && end >= from && end < to))) return
+    if (["ok","noPrevious"].contains(d.reason) || !(selected || (d.emitted != true && end >= from && end < to))) return
     eventCount++
-    if (d["reason"] == "rollover") increment("rolloverCount")
-    else if (d["emitted"] == true) increment("rejectedCount")
-    if (d["reason"] == "removedNA") increment("removedNACount")
-    if (d["substituted"] == true) increment("substitutedCount")
+    if (d.reason == "rollover") increment("rolloverCount")
+    else if (d.emitted == true) increment("rejectedCount")
+    if (d.reason == "removedNA") increment("removedNACount")
+    if (d.substituted == true) increment("substitutedCount")
     capture:=cursorMode ? budget.diagnosticCapture : null
     if(capture!=null && !capture.canPutSimple(diagnosticGroup)) {capture.skipSimple(diagnosticGroup);return}
     if (capture!=null || diagnostics.size < 1000)
@@ -649,9 +649,9 @@ internal class EnerCubixCockpitStream
       scratch:=capture==null ? null : EnerCubixPreparedOwner(budget.state)
       try
       {
-      scratch?.hold(32+2*d.size)
-      event:=EnerCubixHistory.nativeDetail(d).setAll(["pointId":point.id.id,"unit":point["unit"],"profileId":meta["profileId"],"profileVersion":meta["profileVersion"],"parameters":meta["parameters"]])
-      reason:=d["reason"].toStr
+      scratch?.hold(50)
+      event:=EnerCubixHistory.nativeDetail(d.detail).setAll(["pointId":point.id.id,"unit":point["unit"],"profileId":meta["profileId"],"profileVersion":meta["profileVersion"],"parameters":meta["parameters"]])
+      reason:=d.reason.toStr
       event["rule"]=reason == "rollover" || reason == "rolloverOutOfRange" ? "hisTotalizedRollover" : (["deltaMin","deltaMax","derivMin","derivMax","timeMax"].contains(reason) ? reason : null)
       if(capture!=null) capture.put(diagnosticGroup,event)
       else {if(cursorMode) budget.state.reserveOwned(1);diagnostics.add(event)}

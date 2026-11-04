@@ -639,12 +639,16 @@ class EnerCubixHistory
   }
 
   internal static Str detailQuality(Str:Obj? d)
+  {detailQualityFields(d["valueType"],d["quality"],d["substituted"]==true,d["value"],d["reason"])}
+
+  ** Shared quality precedence for a scalar transition and its diagnostic DTO.
+  internal static Str detailQualityFields(Obj? valueType,Obj? explicitQuality,Bool substituted,Obj? value,Obj? reason)
   {
-    if (d["valueType"] == "na") return "na"
-    if (d["quality"] is Str) return d["quality"]
-    if (d["substituted"] == true) return "substituted"
-    if (d["value"] == null) return ["inputNull","previousNull","nonPositiveInterval"].contains(d["reason"]) ? "missing" : "filtered"
-    return d["reason"] == "rollover" ? "corrected" : "cleaned"
+    if(valueType=="na") return "na"
+    if(explicitQuality is Str) return explicitQuality
+    if(substituted) return "substituted"
+    if(value==null) return ["inputNull","previousNull","nonPositiveInterval"].contains(reason) ? "missing" : "filtered"
+    return reason=="rollover" ? "corrected" : "cleaned"
   }
 
   internal static Str:Obj? normalizeClean(Dict point, EnerCubixCleanResult result, DateTime from, DateTime to, Bool trend := false)

@@ -99,18 +99,20 @@ internal class EnerCubixCleaning
   internal static Str:Obj? cursorDetail(Str unit,Dict cfg,HisItem item,HisItem? previous)
   {step(unit,cfg,item,previous).detail}
 
+  internal static EnerCubixCleanStep cursorStep(Str unit,Dict cfg,HisItem item,HisItem? previous)
+  {step(unit,cfg,item,previous)}
+
   private static EnerCubixCleanStep step(Str unit,Dict cfg,HisItem item,HisItem? previous)
   {
-    detail:=[Str:Obj?]["ts":item.ts.toIso,"rawValue":jsonValue(item.val),"previousValue":jsonValue(previous?.val),
-      "value":null,"valueType":"null","reason":"noPrevious","substituted":false,"intervalSeconds":null,"emitted":false]
+    transition:=EnerCubixCleanStep(item,previous)
     if (item.val === NA.val && cfg.has("removeNA"))
     {
-      detail["reason"]="removedNA"; return EnerCubixCleanStep(detail,null)
+      transition.reason="removedNA"; return transition
     }
-    if (previous == null) return EnerCubixCleanStep(detail,null)
+    if (previous == null) return transition
     elapsed:=(item.ts-previous.ts).ticks.toFloat/1sec.ticks.toFloat
-    detail["intervalSeconds"]=elapsed
-    detail["emitted"]=true
+    transition.intervalSeconds=elapsed
+    transition.emitted=true
     Obj? value:=null; reason:="ok"
     a:=reading(previous.val,unit); b:=reading(item.val,unit)
     if (item.val === NA.val) { value=NA.val; reason="inputNA" }
@@ -148,12 +150,11 @@ internal class EnerCubixCleaning
       // rejected numeric intervals only, never to true source NA or null.
       if (cfg.has("defVal") && a != null && b != null)
       {
-        value=cfg["defVal"]; detail["substituted"]=true
+        value=cfg["defVal"]; transition.substituted=true
       }
     }
-    detail["reason"]=reason; detail["value"]=jsonValue(value)
-    detail["valueType"]=value === NA.val ? "na" : (value is Number ? "number" : "null")
-    return EnerCubixCleanStep(detail,value)
+    transition.reason=reason;transition.value=value
+    return transition
   }
 
   private static Str bounds(Float delta, Float elapsed, Str unit, Dict cfg)
@@ -236,7 +237,7 @@ internal class EnerCubixCleaning
     return n == null || n.isNaN || n == Float.posInf || n == Float.negInf ? null : n
   }
 
-  private static Obj? jsonValue(Obj? value) { value === NA.val ? "NA" : num(value) }
+  internal static Obj? jsonValue(Obj? value) { value === NA.val ? "NA" : num(value) }
 
   private static Str rateUnit(Str unit)
   {
@@ -265,10 +266,35 @@ internal class EnerCubixCleanResult
   Str:Obj? summary
 }
 
-** Single-row scratch; never retained by a stream across another source record.
+** One row's arithmetic result. Native cursors consume scalars synchronously;
+** diagnostic maps/date formatting are created only for admitted evidence.
+** The bulk API still materializes every original detail at its original visit.
 internal class EnerCubixCleanStep
 {
-  new make(Str:Obj? detail,Obj? value) {this.detail=detail;this.value=value}
-  Str:Obj? detail
+  new make(HisItem item,HisItem? previous) {this.item=item;this.previous=previous}
+  ** Existing whole-block input already owns its complete diagnostic map.
+  new fromDetail(Str:Obj? detail)
+  {
+    legacy=detail;value=detail["value"];reason=detail["reason"].toStr
+    substituted=detail["substituted"]==true;emitted=detail["emitted"]==true
+    intervalSeconds=EnerCubixMath.num(detail["intervalSeconds"])
+  }
+  private HisItem? item
+  private HisItem? previous
+  private [Str:Obj?]? legacy
   Obj? value
+  Str reason := "noPrevious"
+  Bool substituted := false
+  Bool emitted := false
+  Float? intervalSeconds
+  Float? number() {EnerCubixMath.num(value is Number ? ((Number)value).toFloat : value)}
+  Obj? diagnosticValue() {legacy == null ? EnerCubixCleaning.jsonValue(value) : value}
+  Str valueType() {legacy == null ? (value === NA.val ? "na" : (value is Number ? "number" : "null")) : legacy["valueType"].toStr}
+  Str quality() {EnerCubixHistory.detailQualityFields(valueType,legacy?.get("quality"),substituted,diagnosticValue,reason)}
+  Str:Obj? detail()
+  {
+    if(legacy!=null) return legacy
+    return ["ts":item.ts.toIso,"rawValue":EnerCubixCleaning.jsonValue(item.val),"previousValue":EnerCubixCleaning.jsonValue(previous?.val),
+      "value":EnerCubixCleaning.jsonValue(value),"valueType":valueType,"reason":reason,"substituted":substituted,"intervalSeconds":intervalSeconds,"emitted":emitted]
+  }
 }
