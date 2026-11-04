@@ -89,8 +89,9 @@ internal class EnerCubixKnownUsage
   private EnerCubixHistoryData history
   private EnerCubixInterval[] rows := [,]
 
-  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
+  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false, Int detailLimit := 1000)
   {
+    if(detailLimit<0 || detailLimit>1000) throw ArgErr("knownDetailLimit")
     values:=EnerCubixValue[,]; details:=[Str:Obj?][,]; cursor:=start; covered:=0f; count:=0
     DateTime? coverageStart:=null; DateTime? coverageEnd:=null; closedHour:=true
     lo:=0; hi:=rows.size
@@ -114,7 +115,7 @@ internal class EnerCubixKnownUsage
         coverageEnd=row.end
         covered+=(row.end-row.start).ticks.toFloat/1sec.ticks.toFloat
       }
-      if (details.size < 1000) details.add(["intervalStart":row.start.toIso,"intervalEnd":row.end.toIso,"value":row.value,"valueType":row.valueType,"quality":q])
+      if (details.size < detailLimit) details.add(["intervalStart":row.start.toIso,"intervalEnd":row.end.toIso,"value":row.value,"valueType":row.valueType,"quality":q])
     }
     if (cursor != end) values.add(EnerCubixValue(null,"incompleteInterval",history.sources))
     value:=combine(values)

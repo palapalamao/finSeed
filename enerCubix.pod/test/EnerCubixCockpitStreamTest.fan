@@ -6,6 +6,63 @@ class EnerCubixCockpitStreamTest : Test
   Void testExecutableStreamingPathExists()
   { verify(Type.find("enerCubix::EnerCubixCockpitStream",false) != null) }
 
+  Void testSharedBoundsKeepDstOffsetsAndSurviveOnlyAsCopiedEvidence()
+  {
+    [DateTime("2026-11-01T01:00:00-04:00 New_York"),DateTime("2026-03-08T01:00:00-05:00 New_York")].each |start|
+    {
+      end:=start+1hr;q:=Str:Obj?["from":start.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"New_York"]
+      budget:=EnerCubixStreamBudget();streams:=EnerCubixCockpitStream[,];EnerCubixHistoryData? expired;Str:Obj? evidence:=[:]
+      try
+      {
+        ["p","other"].each |id|
+        {
+          p:=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"New_York"])
+          stream:=EnerCubixCockpitStream.openCursor(p,null,start,end,q,[Str:Obj?][,],budget,|Dict point,Span span,|HisItem| sink| {(0..1).each |i| {ts:=start+1hr*i;if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(i)))}})
+          stream.advance(end);streams.add(stream)
+        }
+        EnerCubixCockpitStream.withFrames(streams,budget.state) |histories,owner|
+        {
+          expired=histories["p"];bounds:=expired.exactBounds(start,end)
+          verify(bounds===histories["other"].exactBounds(start,end))
+          verifyEq(bounds.fromIso,start.toIso);verifyEq(bounds.toIso,end.toIso)
+          verify(bounds.fromIso!=bounds.toIso);verifyEq(expired.exactBounds(start+1min,end),null)
+          evidence=["from":bounds.fromIso,"to":bounds.toIso]
+          verifyEq(expired.read(start,end).value,1f)
+        }
+        verifyErr(ArgErr#) {expired.exactBounds(start,end)}
+        verifyEq(evidence,["from":start.toIso,"to":end.toIso])
+      }
+      finally {streams.each |stream| {stream.close}}
+      verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+    }
+  }
+
+  Void testCaptureDetailRoomDoesNotClipNumericCoverageOrRuleFacts()
+  {
+    [false,true].each |damaged|
+    {
+      rows:=[Str:Obj?][,]
+      for(i:=0;i<6;i++) rows.add(["from":(at+10min*i).toIso,"to":(at+10min*(i+1)).toIso,"value":damaged && i==2 ? null : i.toFloat,"valueType":damaged && i==2 ? "na" : "number","quality":damaged && i==2 ? "na" : "cleaned"])
+      h:=EnerCubixHistoryData(["pointId":"p","mode":"interval","quality":"cleaned","unit":"kWh","intervals":rows])
+      full:=h.knownUsage(at,at+1hr,at+1hr,true)
+      verifyEq(full["knownValue"],damaged ? 13f : 15f);verifyEq(full["coveredSeconds"],damaged ? 3000f : 3600f)
+      verifyEq(full["intervalCount"],6);verifyEq(full["_closedOwnPrimaryHour"]==true,!damaged)
+      [0,1,2,1000].each |cap|
+      {
+        limited:=h.captureKnownUsage(at,at+1hr,at+1hr,true,cap)
+        verifyEq(((List)limited["intervals"]).size,cap.min(6))
+        verifyEq(limited["intervals"],cap==0 ? [Str:Obj?][,] : ((List)full["intervals"])[0..<cap.min(6)])
+        verifyEq(limited["detailsTruncated"],cap<6)
+        ["knownValue","knownValueType","knownQuality","coveredSeconds","intervalCount","intervalStart","intervalEnd","_closedOwnPrimaryHour"].each |key| {verifyEq(limited[key],full[key])}
+        verifyEq(((EnerCubixValue)limited["value"]).value,((EnerCubixValue)full["value"]).value)
+        verifyEq(((EnerCubixValue)limited["value"]).quality,((EnerCubixValue)full["value"]).quality)
+      }
+      verifyEq(((List)full["intervals"]).size,6,"producer capture must not trim a peer's full result")
+      verifyErr(ArgErr#) {h.captureKnownUsage(at,at+1hr,at+1hr,true,-1)}
+      verifyErr(ArgErr#) {h.captureKnownUsage(at,at+1hr,at+1hr,true,1001)}
+    }
+  }
+
   Void testCursorReusesParsedBoundsWithoutChangingOriginalConstraintOrder()
   {
     q:=query(at,at+4hr);ranges:=[Str:Obj?][,];20.times {ranges.add(["from":at.toIso,"to":(at+4hr).toIso])};ranges.add(["from":(at+15min).toIso,"to":(at+45min).toIso]);q["_cockpitReadRanges"]=ranges

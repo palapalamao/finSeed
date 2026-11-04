@@ -635,7 +635,9 @@ internal class EnerCubixContext
         detailBound:=(data["intervals"] as List)?.size ?: 0
         // maps() may simultaneously hold its filtered and mapped reference lists.
         knownWorkspace(2+2*detailBound)
-        details:=EnerCubixMath.maps(data["intervals"])
+        // Prepared/native readers already return this typed map list. Borrow
+        // it read-only; retain the filter path for other legacy input shapes.
+        details:=data["intervals"] as [Str:Obj?][] ?: EnerCubixMath.maps(data["intervals"])
         empty:=preparedBudget != null && data["knownValue"] == null && data["knownQuality"] == "missing" && data["coveredSeconds"] == 0f && data["intervalCount"] == 0 && data["intervalStart"] == null && data["intervalEnd"] == null && details.isEmpty
         unprepared:=preparedBudget != null && raw.quality == "streamingReadNotPrepared" && data.size == 1
         if(empty) omittedEmptyEvidence=true
@@ -659,8 +661,9 @@ internal class EnerCubixContext
             evidence["detailsTruncated"]=true
             evidence["intervalsCaptureId"]=Uuid().toStr
           }
-          knownDetailCount+=EnerCubixMath.maps(evidence["intervals"]).size
-          evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":from.toIso,"to":to.toIso])
+          knownDetailCount+=details.size.min(remaining)
+          bounds:=his.exactBounds(from,to)
+          evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":bounds?.fromIso ?: from.toIso,"to":bounds?.toIso ?: to.toIso])
           if(frameOwner == null && !knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }

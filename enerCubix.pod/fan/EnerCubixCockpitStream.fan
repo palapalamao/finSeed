@@ -74,7 +74,7 @@ internal class EnerCubixCockpitStream
     tz:=TimeZone.fromStr(q["tz"] as Str ?: a.tz.name)
     // Without a shared owned catalog, admit a conservative bound for the
     // per-cursor byId/children indices before constructing their copies.
-    charge:=1+(planning == null ? 1+3*records.size : 0)
+    charge:=5+(planning == null ? 1+3*records.size : 0)
     budget.state.holdOwned(charge)
     EnerCubixCockpitStream? stream
     try
@@ -116,6 +116,8 @@ internal class EnerCubixCockpitStream
         if(end != null && (at != start || stream.watermark != end)) throw ArgErr("cursorGroupWatermark")
         start=at;end=stream.watermark;ids[stream.point.id.id]=true
       }
+      EnerCubixSourceBounds? bounds
+      if(start!=null) {owner.hold(5);bounds=EnerCubixSourceBounds(start,end)}
       visit=|Int i|
       {
         if(i == streams.size)
@@ -123,7 +125,7 @@ internal class EnerCubixCockpitStream
           try {consume(histories,owner)} finally {owner.close}
           return
         }
-        streams[i].withFrame |h| {h.bindOwnEmptyFrame(owner,(DateTime)start,(DateTime)end);histories[h.id]=h;visit(i+1)}
+        streams[i].withFrame |h| {h.bindOwnEmptyFrame(owner,(DateTime)start,(DateTime)end,bounds);histories[h.id]=h;visit(i+1)}
       }
       visit(0)
     }
@@ -256,7 +258,7 @@ internal class EnerCubixCockpitStream
     parsedQueries?.each |pair| {pair.clear};parsedQueries?.clear;parsedQueries=null
     if(cursorIntervalCharge > 0) {budget.state.releaseTemporary(cursorIntervalCharge);cursorIntervalCharge=0}
     if(!cursorEscaped) clearPrepared
-    ctx=null
+    ctx=null;cutoffText="";formattedObserved=null;formattedObservedText=null
     if(cursorCatalogCharge > 0) {budget.state.releaseTemporary(cursorCatalogCharge);cursorCatalogCharge=0}
     budget.closeCursor(cursorId);cursorClosed=true
     // Escaped prefix cells remain owned/charged; only private frames can expire.
@@ -400,6 +402,7 @@ internal class EnerCubixCockpitStream
     this.to=EnerCubixMath.floorHour(to);if (this.to < to) this.to+=1hr
     hour=this.from
     cutoff=DateTime.fromIso(request["asOf"]?.toStr ?: to.toIso).toTimeZone(from.tz)
+    cutoffText=cutoff.toIso
     queries=EnerCubixMath.maps(request["_cockpitReadRanges"])
     if (queries.isEmpty) queries=[request]
     queries=queries.map |q->[Str:Obj?]| {["from":q["from"],"to":q["to"]]}
@@ -434,6 +437,9 @@ internal class EnerCubixCockpitStream
   private DateTime observedEnd
   private DateTime? ruleEnd
   private DateTime cutoff
+  private Str cutoffText
+  private DateTime? formattedObserved
+  private Str? formattedObservedText
   private DateTime[] queryEnds
   private DateTime[][]? parsedQueries
   private [Str:Obj?][] queries
@@ -652,7 +658,11 @@ internal class EnerCubixCockpitStream
       {
         // This fresh window has no prepared/borrowed map. knownUsage returns
         // its own mutable envelope; a second shallow copy repeats that work.
-        row:=history.knownUsage(a,b,qEnd,ruleEnd == qEnd);row.remove("value")
+        // The global capture may already be full. Numeric/coverage/rule facts
+        // still inspect every interval; do not build rows that cannot survive
+        // this exact visit's unchanged diagnostic admission.
+        room:=(1000-budget.detailCount).max(0)
+        row:=history.captureKnownUsage(a,b,qEnd,ruleEnd == qEnd,room);row.remove("value")
         events:=EnerCubixMath.maps(row["intervals"])
         keep:=events.size.min((1000-budget.detailCount).max(0))
         row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
@@ -761,7 +771,10 @@ internal class EnerCubixCockpitStream
       else budget.cell(n)
       captured=true
     }
-    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoff.toIso,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":lastObserved?.toIso]
+    // The cutoff is immutable; the last observed timestamp changes only when
+    // another original row is consumed. Empty hours need no repeated ISO work.
+    if(formattedObserved!=lastObserved) {formattedObservedText=lastObserved?.toIso;formattedObserved=lastObserved}
+    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"] ?: "","mode":cleaned ? "interval" : mode,"quality":cleaned ? "cleaned" : "ok","sourceIds":[point.id.id],"simulated":point.has("simulated"),"dataCutoff":cutoffText,"_preparedReads":reads,"_preparedSparse":["version":1,"from":from,"to":to,"domains":emptyDomains,"queries":queries,"queryEnds":queryEnds,"tariffs":tariffs,"tz":from.tz.name],"_preparedBudget":budget.state,"sourceLastObservedAt":formattedObservedText]
     if (cleaned)
     {
       refreshCleaningMeta

@@ -45,10 +45,9 @@ internal class EnerCubixHistoryData
     if(sparse != null)
     {
       sparseDomains=EnerCubixMath.maps(sparse["domains"])
-      sparseContext=EnerCubixContext([Str:Obj?][,],[Str:Obj?][,],TimeZone.fromStr(sparse["tz"].toStr))
-      empty=EnerCubixHistoryData(["pointId":id,"sourceIds":sources,"unit":unit,"mode":mode,"quality":quality])
       if(!sparseDomains.isEmpty)
       {
+        empty=EnerCubixHistoryData(["pointId":id,"sourceIds":sources,"unit":unit,"mode":mode,"quality":quality])
         at:=(DateTime)sparseDomains.first["from"]
         emptyValue=empty.read(at,at+1hr)
         emptyKnown=empty.knownUsage(at,at+1hr,at+1hr)
@@ -94,6 +93,7 @@ internal class EnerCubixHistoryData
   private EnerCubixPreparedOwner? ownEmptyOwner
   private EnerCubixOwnEmptyValue[]? ownEmptyValues
   private EnerCubixOwnEmptyValue[]? ownStrictValues
+  private EnerCubixSourceBounds? sourceBounds
 
   internal Bool ownedFrame(EnerCubixPreparedBudget budget)
   {sourceFrame != null && !frameExpired && preparedBudget === budget}
@@ -101,13 +101,16 @@ internal class EnerCubixHistoryData
   ** The common source owner outlives all consumer frames. Share only null
   ** results whose exact pair was already proven empty, within one real hour.
   ** Canonical record identity and strict/known queryEnd remain part of the key.
-  internal Void bindOwnEmptyFrame(EnerCubixPreparedOwner owner,DateTime from,DateTime to)
+  internal Void bindOwnEmptyFrame(EnerCubixPreparedOwner owner,DateTime from,DateTime to,EnerCubixSourceBounds bounds)
   {
     frameCheck
     if(ownEmptyOwner!=null || !ownedFrame(owner.budget)) throw ArgErr("ownEmptyFrameOwner")
     if(to-from!=1hr) return
-    owner.hold(4);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner
+    if(bounds.from!=from || bounds.to!=to) throw ArgErr("sourceBoundsFrame")
+    owner.hold(5);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner;sourceBounds=bounds
   }
+  internal EnerCubixSourceBounds? exactBounds(DateTime from,DateTime to)
+  {frameCheck;return sourceBounds?.from==from && sourceBounds?.to==to ? sourceBounds : null}
   internal EnerCubixOwnEmptyValue? ownEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd)
   {
     frameCheck
@@ -144,7 +147,7 @@ internal class EnerCubixHistoryData
   private Void clearOwnEmpty()
   {
     ownEmptyValues?.clear;ownEmptyValues=null
-    ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null
+    ownStrictValues?.clear;ownStrictValues=null;ownEmptyOwner=null;sourceBounds=null
   }
 
   internal Void expireFrame()
@@ -158,6 +161,16 @@ internal class EnerCubixHistoryData
 
   Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
   {readKnownUsage(start,end,queryEnd,includeRuleFacts,false)}
+
+  ** Native window producer only: bound detail construction by capture room,
+  ** without clipping numeric, coverage or all-interval rule evaluation.
+  internal Str:Obj? captureKnownUsage(DateTime start,DateTime end,DateTime queryEnd,Bool includeRuleFacts,Int detailLimit)
+  {
+    frameCheck
+    if(prepared!=null || sourceFrame!=null) throw ArgErr("captureKnownNeedsWindow")
+    if(knownReader==null) knownReader=EnerCubixKnownUsage(this)
+    return knownReader.read(start,end,queryEnd,includeRuleFacts,detailLimit)
+  }
 
   ** The owned context reads this view synchronously without retaining or
   ** changing it. Only the existing proven-empty map is borrowed; other reads
@@ -270,6 +283,9 @@ internal class EnerCubixHistoryData
     hour:=EnerCubixMath.floorHour(start)
     if(!sparseDomains.any |r| {hour >= (DateTime)r["from"] && hour+1hr <= (DateTime)r["to"]}) return false
     if(start == hour && end == hour+1hr) return true
+    // Full hours need no tariff-bound context. Construct it only when an
+    // original partial pair actually requires the unchanged pair expansion.
+    if(sparseContext==null) sparseContext=EnerCubixContext([Str:Obj?][,],[Str:Obj?][,],TimeZone.fromStr(sparse["tz"].toStr))
     return EnerCubixCockpitStream.pairs(hour,EnerCubixMath.maps(sparse["queries"]),( [Str:Obj?]?[])sparse["tariffs"],sparseContext).any |p| {p["from"] == start && p["to"] == end}
   }
 
@@ -440,5 +456,15 @@ internal class EnerCubixOwnEmptyValue
   Str metric
   DateTime? queryEnd
   EnerCubixValue value
+}
+
+** One source watermark's immutable text, shared by its owned reader group.
+internal const class EnerCubixSourceBounds
+{
+  new make(DateTime from,DateTime to) {this.from=from;this.to=to;fromIso=from.toIso;toIso=to.toIso}
+  const DateTime from
+  const DateTime to
+  const Str fromIso
+  const Str toIso
 }
 
