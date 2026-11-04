@@ -398,6 +398,18 @@ internal class EnerCubixContext
     if (preparedBudget == null && path.isEmpty && cache.containsKey(key)) return cache[key]
     r := byId[id]
     if (r == null) return EnerCubixValue(null,"unknownNode")
+    if(frameOwner!=null && comparison==null && utility==null && metric!="cost" && sharedModel!=null && byId===sharedModel.byId)
+    {
+      // The exact group is only inspected here, never reset or allocated.
+      // A stored proof came after all original validation of this immutable
+      // canonical record. Replacing the byId entry forces the original path.
+      prior:=peekOwnFrameValue(id,category,from,to,metric)
+      if(prior!=null && prior.record===r)
+      {
+        if(prior.repeatWarning && prior.value.value==null) warnValue(r,id,prior.value.quality)
+        return prior.value
+      }
+    }
     if (comparison != null && (r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false)) return EnerCubixValue(null,"forbidden")
     if (r["configurationError"] != null)
     {
@@ -420,7 +432,7 @@ internal class EnerCubixContext
     sharedStrict:=strictContext==null ? ownSource?.ownStrict(r,category,from,to,metric) : null
     if(sharedStrict!=null)
     {
-      saveOwnFrameValue(id,category,from,to,metric,sharedStrict.value,false)
+      saveOwnFrameValue(id,category,from,to,metric,sharedStrict.value,false,r)
       return sharedStrict.value
     }
     queryEnd:=strictContext==null ? null : knownEnd
@@ -434,7 +446,7 @@ internal class EnerCubixContext
     if(stable != null && cache.containsKey(stable))
     {
       preparedBudget.contextEmptyHits.increment;value:=cache[stable]
-      if(own) saveOwnFrameValue(id,category,from,to,metric,value,false)
+      if(own) saveOwnFrameValue(id,category,from,to,metric,value,false,r)
       return value
     }
     // Consumer domain reuse takes precedence over source exact-pair reuse:
@@ -446,7 +458,7 @@ internal class EnerCubixContext
       if(strictContext!=null) omittedEmptyEvidence=true
       retain(2);cache[stable]=sharedEmpty.value
       warnValue(r,id,sharedEmpty.value.quality)
-      saveOwnFrameValue(id,category,from,to,metric,sharedEmpty.value,false)
+      saveOwnFrameValue(id,category,from,to,metric,sharedEmpty.value,false,r)
       return sharedEmpty.value
     }
     // A device always reads its own primary history. Reuse that exact result
@@ -543,15 +555,15 @@ internal class EnerCubixContext
     if(sharedEmpty!=null)
     {
       if(!cache.containsKey(stable)) retain(2);cache[stable]=result
-      saveOwnFrameValue(id,category,from,to,metric,result,false)
+      saveOwnFrameValue(id,category,from,to,metric,result,false,r)
       return result
     }
     if(stable != null && result.value == null)
     {
       if(!cache.containsKey(stable)) retain(2);cache[stable]=result
-      if(own) saveOwnFrameValue(id,category,from,to,metric,result,false)
+      if(own) saveOwnFrameValue(id,category,from,to,metric,result,false,r)
     }
-    else if(own) saveOwnFrameValue(id,category,from,to,metric,result,true)
+    else if(own) saveOwnFrameValue(id,category,from,to,metric,result,true,r)
     else if(ownKey!=null) {retain(2);cache[ownKey]=result}
     return result
   }
@@ -569,15 +581,21 @@ internal class EnerCubixContext
     {ownFrameValues.clear;ownFrameFrom=from;ownFrameTo=to;ownFrameCategory=category;ownFrameMetric=metric}
     return ownFrameValues[id]
   }
-  private Void saveOwnFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric,EnerCubixValue value,Bool repeatWarning)
+  private EnerCubixOwnFrameValue? peekOwnFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric)
+  {
+    if(ownMemoDisabled || ownFrameValues==null || ownFrameFrom!=from || ownFrameTo!=to || ownFrameCategory!=category || ownFrameMetric!=metric) return null
+    return ownFrameValues[id]
+  }
+  private Void saveOwnFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric,EnerCubixValue value,Bool repeatWarning,Map? record := null)
   {
     if(ownMemoDisabled) return
     // A recursive evaluation may have used another range/category/metric.
     // Restore this result's exact group before publishing its reusable slot.
     previous:=ownFrameValue(id,category,from,to,metric)
-    if(previous!=null) {previous.value=value;previous.repeatWarning=repeatWarning;return}
-    if(ownFrameValues.size>=ownFrameSlots) {retain(5);ownFrameSlots++}
-    ownFrameValues[id]=EnerCubixOwnFrameValue(value,repeatWarning)
+    proof:=record!=null && record.isImmutable && comparison==null && sharedModel!=null && byId===sharedModel.byId ? record : null
+    if(previous!=null) {previous.record=proof;previous.value=value;previous.repeatWarning=repeatWarning;return}
+    if(ownFrameValues.size>=ownFrameSlots) {retain(6);ownFrameSlots++}
+    ownFrameValues[id]=EnerCubixOwnFrameValue(value,repeatWarning,proof)
   }
 
   private Str? emptyKey(Str:Obj? r,Str category,DateTime from,DateTime to,Str metric)
@@ -965,9 +983,10 @@ internal class EnerCubixContext
 ** One admitted physical-result slot in the current consumer frame.
 internal class EnerCubixOwnFrameValue
 {
-  new make(EnerCubixValue value,Bool repeatWarning) {this.value=value;this.repeatWarning=repeatWarning}
+  new make(EnerCubixValue value,Bool repeatWarning,Map? record := null) {this.value=value;this.repeatWarning=repeatWarning;this.record=record}
   EnerCubixValue value
   Bool repeatWarning
+  Map? record
 }
 
 

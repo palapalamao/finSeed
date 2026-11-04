@@ -278,3 +278,14 @@
 - 最终239物理源与final-r3-pre-suite清单逐SHA一致；全量122类979方法298589检查、136.989秒通过。Q1/全年完整business与production decode对冻结027等价，实际耗时如下；82向量103窗口含60synthetic，不冒充FIN性能。关闭temporary/raw0，prepared824描述费保留。
 - UI284物理源/tests仍与022完全一致，明确复用437单测和33不同受控场景；28 fresh type/Vite21.06秒、四版本和99runtime主点guard通过。冻结后仍执行新包真实9项、导出/资源和最终同PID30分钟；不写现场业务/采集/历史。原生打印人工未答、真实readonly用户暂缓，继续单列。
 - 最终模型r3 Q1 12355ms，全年 25486ms；峰 191371/192896。
+
+
+### 2026-11-05 0.14.29 canonical memo validation and interval-only cleaned windows
+
+- 028实际8/9：新服务首轮年度50430.031秒，3858原生读/663652扫描、watermarkNov1T21，峰196895，尚未进finalizer，不能据此称28分项ledger原生通过。实际资源/fixed/其他8项保留，随后单次40s/64MiB JFR诊断同原请求又50430.094秒。JFR从06:26:08到48，而请求22到52，仅覆盖其前26秒；1737业务样本是采样而非确定耗时。TreeNode归因含immutable类型表和大量截断栈，不推断SDK缺陷；43GC事件最大暂停16.3ms，不把G1Old并发周期duration当整段暂停。
+- 29仍先做frame/128次deadline/pathcycle与byId查找，只在canonical共享目录、comparisonnull、utilitynull、非费用、exactgroup且slot.record与本次r同一引用时前移已有memo命中。非分配peek不清空或初始化group；proof仅原完整校验后的deepimmutable r；替换/可变/绑定/比较仍原路径。record/value/repeat在已有slot更新中同步，新增ref先按slot6（原5）准入，无长期缓存或来源变化，重复警告及原lookup/诊断计数不跳过。
+- 清洗分支closeHour新建仅供strict/known读取的closedWindow，只按原规则filter闭合区间end<=cutoff，省去不会读取的raw样本数值/时区投影。原window、未清洗累计、raw/previous、validTicks、observe/counters、费率、pairs、headers、读取次数和所有上限保持。该history本体不逃逸到raw/gauge路径。
+- 2新内部合同测试先在旧源运行因缺proof字段/ctor RED，明确不是数值/性能RED；真正性能RED为上述实际504。首次target一个synthetic替换记录缺name触发原配置错误分支NullErr，补齐fixture名称后最终ContextOwner23方法383检查通过；未改生产错误逻辑或把38方法211888的interim带1失败日志称全绿。新两测试10/60断言分别验证身份/config/cycle/更新撤销与owner关闭，以及对旧window完整strict/known/rulefacts/NA/substitution/partial cutoff/detailLimit0与1000等价，未清洗累计40独立期望不变。
+- 最终239物理源与-r3 pre-suite逐SHA一致；完整122类981方法298659检查、133.270秒通过。季度/全年完整business及生产decode对冻结028等价；82向量103窗口含60synthetic，仍非FIN性能。模型数字如下，不据模型速度宣称原生已达标。
+- UI284源/tests仍逐SHA同022，明确复用437单测/33不同受控场景，29 fresh type/Vite20.21秒、四版本和99runtime主点guard通过。待唯一新包原生9项/实际导出资源及最终PID30分钟；打印人工待答和readonly用户暂缓继续单列，未写现场业务/采集/历史。
+- 最终模型r3 Q1 11822ms，全年 25602ms；峰 191545/192896。

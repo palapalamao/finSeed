@@ -4,6 +4,76 @@ using [java] java.lang::Class as JavaClass
 ** Actual private producer frames; no FIN data or project mutation.
 class EnerCubixContextOwnerTest : Test
 {
+  Void testValidatedMemoProofTracksRecordIdentityAndIsClearedOnReplacement()
+  {
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state);state:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model,[:],false,false,true)
+    ctx:=EnerCubixContext.shared(catalog,"metering",false,state)
+    cursor:=source(budget,[HisItem(at,Number(0)),HisItem(at+1hr,Number(10))])
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,outer|
+      {
+        frame:=EnerCubixPreparedOwner(budget.state);record:=catalog.byId["m"]
+        try
+        {
+          ctx.beginFrame(frame,histories);value:=ctx.node("m","c",at,at+1hr)
+          verifyEq(value.value,10f);verify(ctx.node("m","c",at,at+1hr)===value)
+          slots:=(Map)EnerCubixContext#.field("ownFrameValues").get(ctx);slot:=slots["m"]
+          verify(slot->record===record,"only the validated immutable canonical record proves this hit")
+          catalog.byId["m"]=record.dup.set("name","meter").set("configurationError","changed configuration").toImmutable
+          verifyEq(ctx.node("m","c",at,at+1hr).quality,"invalidConfiguration")
+          catalog.byId["m"]=record
+          verifyEq(ctx.node("m","c",at,at+1hr,"energy",["m"]).quality,"cycle")
+          verify(ctx.node("m","c",at,at+1hr)===value)
+          EnerCubixContext#.method("saveOwnFrameValue").callOn(ctx,Obj?["m","c",at,at+1hr,"energy",EnerCubixValue(99f,"ok",["p"]),true,record.dup])
+          verifyEq(slot->record,null,"updating a slot must also revoke its obsolete record proof")
+        }
+        finally {catalog.byId["m"]=record;frame.close}
+        verifyErr(ArgErr#) {ctx.node("m","c",at,at+1hr)}
+      }
+    }
+    finally {cursor.close;state.close;model.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
+  Void testIntervalOnlyWindowPreservesClosedValuesQualityAndRuleFacts()
+  {
+    point:=Etc.makeDict(["id":Ref("p"),"unit":"kWh","tz":"UTC"])
+    raw:=HisItem[,];for(i:=0;i<720;i++) raw.add(HisItem(at+Duration(i*10sec.ticks),Number(i)))
+    closed:=EnerCubixInterval[
+      EnerCubixInterval(at-10min,at+10min,2f,"cleaned","number"),
+      EnerCubixInterval(at+10min,at+20min,3f,"cleaned","number"),
+      EnerCubixInterval(at+20min,at+30min,null,"na","na"),
+      EnerCubixInterval(at+30min,at+50min,8f,"substituted","number"),
+      EnerCubixInterval(at+50min,at+80min,9f,"cleaned","number"),
+      EnerCubixInterval(at+80min,at+2hr,null,"filtered","null")]
+    factory:=EnerCubixHistoryData#.method("closedWindow")
+    [at+90min,at+2hr].each |cutoff|
+    {
+      old:=EnerCubixHistoryData.window(point,"interval",raw,closed,cutoff)
+      fast:=(EnerCubixHistoryData)factory.call(point,closed,cutoff)
+      verify(fast.samples.isEmpty && fast.rawSamples.isEmpty)
+      [DateTime[at,at+1hr],DateTime[at+5min,at+40min],DateTime[at+1hr,at+2hr]].each |range|
+      {
+        a:=old.read(range[0],range[1]);b:=fast.read(range[0],range[1])
+        verifyEq([b.value,b.quality,b.sources],[a.value,a.quality,a.sources])
+        [false,true].each |rules| {[0,1000].each |limit|
+        {
+          before:=old.captureKnownUsage(range[0],range[1],cutoff,rules,limit)
+          after:=fast.captureKnownUsage(range[0],range[1],cutoff,rules,limit)
+          av:=(EnerCubixValue)before.remove("value");bv:=(EnerCubixValue)after.remove("value")
+          verifyEq([bv.value,bv.quality,bv.sources],[av.value,av.quality,av.sources]);verifyEq(after,before)
+        }}
+      }
+    }
+    simple:=(EnerCubixHistoryData)factory.call(point,[EnerCubixInterval(at,at+1hr,12f,"cleaned","number")],at+1hr)
+    verifyEq(simple.read(at,at+1hr).value,12f);verifyEq(simple.knownUsage(at,at+1hr,at+1hr)["knownValue"],12f)
+    cumulative:=EnerCubixHistoryData.window(point,"cumulative",[HisItem(at,Number(10)),HisItem(at+1hr,Number(50))],null,at+1hr)
+    verifyEq(cumulative.samples.size,2);verifyEq(cumulative.read(at,at+1hr).value,40f)
+  }
+
   Void testKnownHeaderAdmitsNewSlotAndFieldsAtomically()
   {
     budget:=EnerCubixStreamBudget();persistent:=EnerCubixPreparedOwner(budget.state);frame:=EnerCubixPreparedOwner(budget.state);peer:=EnerCubixPreparedOwner(budget.state)

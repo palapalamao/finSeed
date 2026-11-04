@@ -68,6 +68,12 @@ internal class EnerCubixHistoryData
     rawSamples=samples
     if (closed != null) intervals=closed.findAll |row| {row.end <= cutoff}
   }
+  ** Private cleaned producer projection. Its strict/known scalar readers use
+  ** authoritative closed intervals only; it never escapes to raw/gauge reads.
+  ** The general window above retains its complete raw sample behavior.
+  new closedWindow(Dict point,EnerCubixInterval[] closed,DateTime cutoff)
+    : this.make(["pointId":point.id.id,"unit":point["unit"] ?: "","mode":"interval","quality":"cleaned"])
+  {intervals=closed.findAll |row| {row.end<=cutoff}}
   Str id
   Str unit
   Str mode

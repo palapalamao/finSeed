@@ -667,7 +667,7 @@ internal class EnerCubixCockpitStream
     EnerCubixHistoryData? history
     if (cleaned || mode == "cumulative")
     {
-      history=EnerCubixHistoryData.window(point,cleaned ? "interval" : mode,raw,cleaned ? intervals : null,cutoff)
+      history=cleaned ? EnerCubixHistoryData.closedWindow(point,intervals,cutoff) : EnerCubixHistoryData.window(point,mode,raw,null,cutoff)
       if (cleaned) intervals.each |row|
       {
         if (row.start >= hour && row.end <= end && row.value != null && row.quality != "substituted" && row.quality != "filtered") validTicks+=(row.end-row.start).ticks
