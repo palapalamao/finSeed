@@ -42,8 +42,8 @@ internal class EnerCubixCockpitSourceSession
       owner.hold(48);this.request=request;this.records=records;this.prepared=prepared;reader=read
       owner.watch |->Void|
       {
-        headers.each |h| {(h["sourceIds"] as List)?.clear;(h["_cockpitRequestMeta"] as Map)?.clear;h.clear};headers.clear
-        stats.clear;windows.each |w| {w.unavailable?.clear;w.cleaning?.clear};detached.each |v| {if(v is Map) ((Map)v).clear;else ((List)v).clear};detached.clear;windows.clear;this.request=null;this.records=null;this.prepared=null;reader=null;this.requestScope=null
+        headers.each |h| {if(!h.isImmutable) {(h["sourceIds"] as List)?.clear;(h["_cockpitRequestMeta"] as Map)?.clear;h.clear}};headers.clear
+        if(!stats.isImmutable) stats.clear;windows.each |w| {w.unavailable?.clear;w.cleaning?.clear};detached.each |v| {if(v is Map) ((Map)v).clear;else ((List)v).clear};detached.clear;windows.clear;this.request=null;this.records=null;this.prepared=null;reader=null;this.requestScope=null
       }
       plan:=(Map)request["_cockpitConsumers"];q:=(Str:Obj?)plan["request"];tz:=TimeZone(q["tz"].toStr)
       clockFrom=EnerCubixMath.floorHour(DateTime.fromIso(q["from"].toStr).toTimeZone(tz));clockTo=ceiling(DateTime.fromIso(q["to"].toStr).toTimeZone(tz))
@@ -193,13 +193,31 @@ internal class EnerCubixCockpitSourceSession
         else addHeader(w,w.unavailable)
         w.cursor?.close;w.cursor=null
       }
-      if(requestScope!=null) registry.prepareReportBorrows(requestScope)
       owner.hold(48);observed:=budget.evidence;stats.setAll(observed);observed.clear
+      if(requestScope!=null)
+      {
+        frozen:=requestScope.freezeSourceHeaders(headers,owner)
+        owner.hold(1+frozen.size);headers=frozen.dup
+        // All headers share this same admitted immutable statistics map. Keep
+        // the request metadata alias on it instead of the consumed old map.
+        if(!headers.isEmpty) stats=(Str:Obj?)headers.first["streaming"]
+      }
       owner.hold(12)
       meta:=Str:Obj?["schemaVersion":1,"diagnostics":registry.diagnostics,"preparedBudget":budget.state,"streaming":stats,"publishDiagnostics":|Str:Obj? reports->Str:Obj?| {ready;return registry.publishDiagnostics(reports)}]
-      if(requestScope!=null) {owner.hold(1);meta["releaseSources"]=|->Void| {close}}
+      if(requestScope!=null)
+      {
+        owner.hold(2);meta["releaseSources"]=|->Void| {close}
+        meta["releasePlanning"]=|->Void| {ready;if(registry.retirePlanning) {requestScope.releaseReportBorrows;requestScope.finishPlanning}}
+      }
       if(prepared["observedFrom"] is Str) meta["historyConfigObservedFrom"]=prepared["observedFrom"]
       if(prepared["observedTo"] is Str) meta["historyConfigObservedTo"]=prepared["observedTo"]
+      if(requestScope!=null)
+      {
+        retireSourceScratch
+        // Header freezer and source-only roots have expired before admitting
+        // the report borrow index and compacting the completed public flow.
+        registry.prepareReportBorrows(requestScope)
+      }
       headers.add(["_cockpitRequestMeta":meta]);done=true;return headers
     }
     catch(EnerCubixCockpitNativeReadErr e)
@@ -208,6 +226,25 @@ internal class EnerCubixCockpitSourceSession
       failure=EnerCubixHttpErr(502,"HISTORY_READ_FAILED","cockpitHistoryReadFailed");close;throw failure
     }
     catch(Err e) {failure=e;close;throw e}
+  }
+  ** All source cursors are closed and every public header is immutable. Retire
+  ** the consumed source builders/window metadata before report/provenance work;
+  ** the registry, frozen headers and diagnostic/catalog owners remain alive.
+  private Void retireSourceScratch()
+  {
+    windows.each |w| {if(w.cursor!=null) throw ArgErr("cockpitSourceCursorStillOpen");w.unavailable?.clear;w.cleaning?.clear}
+    windows.clear
+    detached.each |v| {if(v is Map) ((Map)v).clear;else ((List)v).clear};detached.clear
+    request=null;records=null;prepared=null;reader=null
+    // Preserve the conservative fixed session allowance, mutable header vector
+    // and (only for an empty source plan) mutable statistics. Immutable header
+    // facts are still charged to the request's history/configuration owners.
+    retained:=68+headers.size+(stats.isImmutable ? 0 : 1+stats.size)
+    owner.retainPublic(retained) |->Void|
+    {
+      headers.each |h| {if(!h.isImmutable) {(h["_cockpitRequestMeta"] as Map)?.clear;h.clear}};headers.clear
+      if(!stats.isImmutable) stats.clear;this.requestScope=null
+    }
   }
   private Void nativeRead(Dict point,Span span,|HisItem| sink)
   {

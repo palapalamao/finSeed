@@ -3,9 +3,11 @@ using [java] java.util::IdentityHashMap
 
 ** Negotiated, lossless representation of one cockpit response. It does not
 ** alter reports, arithmetic, source identity or the legacy /report contract.
+** Owned encoding borrows unchanged immutable business containers; the caller
+** must keep their original owner alive until the payload owner expires.
 internal class EnerCubixCockpitPayload
 {
-  static Str:Obj? encode(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null,EnerCubixPreparedBudget? budget := null,EnerCubixPreparedOwner? output := null)
+  static Str:Obj? encode(Str:Obj? snapshot, EnerCubixCockpitDeadline? deadline := null,EnerCubixPreparedBudget? budget := null,EnerCubixPreparedOwner? output := null,EnerCubixCockpitRequestScope? sourceScope := null)
   {
     if(output!=null)
     {
@@ -19,6 +21,7 @@ internal class EnerCubixCockpitPayload
     {
       if(output!=null) {work=EnerCubixPreparedOwner(budget);work.hold(12)}
       codec=EnerCubixCockpitPayload();codec.work=work;codec.deadline=deadline;codec.budget=budget
+      codec.canBorrow=output!=null && sourceScope?.canBorrowPayload(snapshot,output)==true
       body=codec.value(snapshot,"")
       codec.hold(5);envelope=["payloadEncoding":"compact-v1","codecVersion":1,"snapshot":body,"evidence":codec.entries]
       return output==null ? (Str:Obj?)envelope.toImmutable : (Str:Obj?)EnerCubixCockpitFreeze.value(envelope,output,null,|Obj value|
@@ -40,6 +43,7 @@ internal class EnerCubixCockpitPayload
   private EnerCubixPreparedBudget? budget
   private EnerCubixPreparedOwner? work
   private Int visited := 0
+  private Bool canBorrow := false
   private Void check() {if(++visited % 256 == 0) deadline?.check}
   private static const Str[] shared := ["periods","sourceUsage","cleaning","usageCoverage","tariffSnapshot","energyFlow"]
   private Void hold(Int n) {work?.hold(n)}
@@ -76,13 +80,24 @@ internal class EnerCubixCockpitPayload
     Obj? out:=input
     if (input is Map)
     {
-      m:=(Map)input;hold(1+m.size);local?.hold(2+2*m.size)
-      map:=Str:Obj?[:];map.ordered=true
+      m:=(Map)input;local?.hold(2+2*m.size)
       fields:=m.keys.map |k->Str| {k.toStr}.sort
-      fields.each |field| {map[field]=value(m[field],field)}
-      if(fields.any |field| {["\$cockpitRef","\$cockpitTable","\$cockpitLiteral"].contains(field)})
-      {hold(2);out=["\$cockpitLiteral":map]}
-      else out=map
+      literal:=fields.any |field| {["\$cockpitRef","\$cockpitTable","\$cockpitLiteral"].contains(field)}
+      borrow:=canBorrow && input.isImmutable && m.keys.all |k| {k is Str}
+      [Str:Obj?]? map
+      if(!borrow || literal) {hold(1+m.size);map=Str:Obj?[:];map.ordered=true}
+      fields.each |field,i|
+      {
+        original:=m[field];encoded:=value(original,field)
+        if(map==null && encoded!==original)
+        {
+          hold(1+m.size);map=Str:Obj?[:];map.ordered=true
+          for(j:=0;j<i;j++) map[fields[j]]=m[fields[j]]
+        }
+        if(map!=null) map[field]=encoded
+      }
+      out=map ?: input
+      if(literal) {hold(2);out=["\$cockpitLiteral":map]}
     }
     else if (input is List)
     {
@@ -109,11 +124,29 @@ internal class EnerCubixCockpitPayload
           out=["\$cockpitTable":data]
         }
       }
-      if (!table) {hold(1+list.size);out=list.map |v->Obj?| {value(v,"")}}
+      if(!table)
+      {
+        if(canBorrow && input.isImmutable)
+        {
+          Obj?[]? changed
+          list.each |v,i|
+          {
+            encoded:=value(v,"")
+            if(changed==null && encoded!==v)
+            {
+              hold(1+list.size);changed=Obj?[,]
+              for(j:=0;j<i;j++) changed.add(list[j])
+            }
+            changed?.add(encoded)
+          }
+          out=changed ?: input
+        }
+        else {hold(1+list.size);out=list.map |v->Obj?| {value(v,"")}}
+      }
     }
     if (shared.contains(key) && (out is Map || out is List))
     {
-      hash:=EnerCubixCockpitDigest.json(out,deadline,budget)
+      hash:=canBorrow ? EnerCubixCockpitDigest.encoded(out,deadline,budget) : EnerCubixCockpitDigest.json(out,deadline,budget)
       if (hash.size > 512)
       {
         id:=hash.sha256

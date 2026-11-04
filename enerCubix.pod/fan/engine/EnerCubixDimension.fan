@@ -5,11 +5,11 @@ class EnerCubixDimension
   {this.dimension=dimension;initialize(dimension,source,nativeSpace,null)}
 
   ** Private request-owned projection; the ordinary report constructor is unchanged.
-  internal new owned(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner owner,Bool borrowMetadata := false)
+  internal new owned(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner owner,Bool borrowMetadata := false,Bool borrowBusinessFacts := false)
   {
     this.dimension=dimension
     if(!source.isImmutable) throw ArgErr("catalogSourceNotFrozen")
-    initialize(dimension,source,nativeSpace,owner,borrowMetadata)
+    initialize(dimension,source,nativeSpace,owner,borrowMetadata,borrowBusinessFacts)
   }
   internal new projected(Str dimension,EnerCubixDimension source,Bool nativeSpace)
   {
@@ -18,7 +18,7 @@ class EnerCubixDimension
     records=source.records;byId=source.byId;originals=source.originals
   }
   private static const Str[] borrowedMetadataKinds := ["nativePoint","job","alarm","settings","template"]
-  private Void initialize(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner? owner,Bool borrowMetadata := false)
+  private Void initialize(Str dimension,[Str:Obj?][] source,Bool nativeSpace,EnerCubixPreparedOwner? owner,Bool borrowMetadata := false,Bool borrowBusinessFacts := false)
   {
     if (!["space","metering","organization"].contains(dimension)) throw ArgErr("Invalid report dimension")
     this.nativeSpace=dimension == "space" && nativeSpace
@@ -43,11 +43,12 @@ class EnerCubixDimension
     {
       id:=r["id"]?.toStr
       if (id == null || canonical(id) != id) return
-      // These read-only metadata kinds do not participate in report config
-      // fingerprints. Business records keep the existing canonical map shape.
-      if(borrowMetadata && borrowedMetadataKinds.contains(r["kind"]) && r.isImmutable && r["variables"]==null)
+      // A request's admitted input owner outlives this projection. Unchanged
+      // immutable business facts may share those exact maps only with explicit
+      // permission; ordinary reports and metadata-only callers still copy.
+      if(((borrowMetadata && borrowedMetadataKinds.contains(r["kind"])) || borrowBusinessFacts) && r.isImmutable && r["variables"]==null)
       {
-        changed:=["meterParentId","numeratorId","denominatorId"].any |key| {ref:=r[key];return ref!=null && ref!=canonical(ref.toStr)}
+        changed:=["meterParentId","numeratorId","denominatorId"].any |key| {ref:=r[key];return ref!=null && (ref isnot Str || ref!=canonical(ref.toStr))}
         if(!changed) {owner?.hold(2);records.add(r);byId[id]=r;return}
       }
       owner?.hold(2+r.size)

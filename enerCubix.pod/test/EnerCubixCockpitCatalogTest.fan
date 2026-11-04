@@ -1,5 +1,21 @@
 class EnerCubixCockpitCatalogTest : Test
 {
+  Void testRequestOwnedUnchangedBusinessFactsShareIdentityButCanonicalChangesStayOwned()
+  {
+    rows:=records;rows.add(["id":"child","kind":"meter","meterParentId":"alias","categoryId":"c"])
+    source:=rows.toImmutable;budget:=EnerCubixStreamBudget().state;owner:=EnerCubixPreparedOwner(budget)
+    dim:=EnerCubixDimension.owned("metering",source,false,owner,true,true)
+    try
+    {
+      verify(dim.byId["a"]===source[1]);verify(dim.byId["c"]===source.first);verify(dim.byId["s"]===source[3])
+      verify(dim.byId["child"]!==source.last);verifyEq(dim.byId["child"]["meterParentId"],"a")
+      verify(dim.byId["expression"]!==source[4]);verifyEq(((Map)dim.byId["expression"]["variables"])["x"],"a")
+      ["space","metering","organization"].each |name| {verifyEq(EnerCubixDimension.projected(name,dim,false).records,EnerCubixDimension(name,source).records)}
+    }
+    finally {owner.close}
+    verifyEq(source[1]["name"],"Original A");verifyEq(source.last["meterParentId"],"alias");verifyEq(budget.temporary.val,0)
+  }
+
   Void testOnlyRequestOwnedNonBusinessMetadataCanShareFrozenMapHeads()
   {
     rows:=records;rows.add(["id":"rawPoint","kind":"nativePoint","name":"Raw metadata"]);source:=rows.toImmutable

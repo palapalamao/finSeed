@@ -3,6 +3,68 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testConservativePublicGraphCompactionFitsSmallTraversalWorkspace()
+  {
+    scope:=EnerCubixCockpitRequestScope("public-graph-compaction","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    rows:=[Str:Obj?][,];400.times |i| {rows.add(["value":i])};source:=Str:Obj?["rows":rows]
+    producer.hold(2000);scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-96);held:=peer.entries
+    try
+    {
+      verifyEq(scope.publicReportEntries(["value":0],12),12)
+      compact:=scope.publicReportEntries(source,producer.entries)
+      verifyEq(compact,2+401+400*2+32)
+      verifyEq(peer.entries,held);verifyEq(rows.size,400);verifyEq(rows.last["value"],399)
+      verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testPrivateSourceHeadersTransferBeforeReportsWithoutAnExtraDeepCopy()
+  {
+    scope:=EnerCubixCockpitRequestScope("owned-source-headers","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);rows:=[Str:Obj?][,];stats:=Str:Obj?["nativeReadCount":17]
+    100.times |i|
+    {
+      row:=Str:Obj?["pointId":"p$i","unit":"kWh","sourceIds":["p$i"],"configRefs":[["id":"cfg$i","mod":"version"]],"streaming":stats]
+      20.times |j| {row["metadata$j"]=j};rows.add(row)
+    }
+    expected:=rows.toImmutable;producer.hold(8000);producer.watch |->Void| {rows.clear}
+    peer.hold(budget.remaining-2200);held:=peer.entries
+    try
+    {
+      result:=scope.freezeSourceHeaders(rows,producer)
+      verify(result.isImmutable);verifyEq(result,expected);verify(rows.isEmpty);verify(stats.isEmpty)
+      verify(result.first["streaming"]===result.last["streaming"]);verifyEq(((Map)result.first["streaming"])["nativeReadCount"],17)
+      verify(scope.freezeHistoryHeaders(result.dup)===result)
+      verifyErr(ArgErr#) {scope.freezeHistoryHeaders([result.first.dup])}
+      producer.close;verifyEq(peer.entries,held);scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testImmutablePayloadBorrowingRequiresThisScopesLiveSnapshotAndOutput()
+  {
+    scope:=EnerCubixCockpitRequestScope("payload-source","a");foreign:=EnerCubixCockpitRequestScope("payload-source","b")
+    other:=EnerCubixPreparedOwner(scope.stream.state)
+    try
+    {
+      source:=scope.freezeSnapshot(["rows":[["value":0f]],"diagnostics":["rowBudget":1000]])
+      output:=scope.payloadOutput;verify(scope.canBorrowPayload(source,output))
+      equal:=source.dup.toImmutable;verifyEq(equal,source);verify(!scope.canBorrowPayload(equal,output))
+      verify(!scope.canBorrowPayload(source,other));verify(!foreign.canBorrowPayload(source,output))
+      // A diagnostic projection may construct a new immutable graph. It has
+      // equal business values, but does not carry this scope's admission proof.
+      projected:=(Str:Obj?)source.dup.set("diagnostics",["changed":true]).toImmutable
+      verify(!scope.canBorrowPayload(projected,output))
+      output.close;verify(!scope.canBorrowPayload(source,output))
+    }
+    finally {other.close;scope.close;foreign.close}
+    verifyEq(scope.stream.state.temporary.val,0);verifyEq(foreign.stream.state.temporary.val,0)
+  }
+
   Void testOwnedReportTransferPreservesAliasesAndEveryBorrowedDescendant()
   {
     scope:=EnerCubixCockpitRequestScope("transfer-aliases","a");budget:=scope.stream.state

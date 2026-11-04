@@ -2,6 +2,22 @@ using util
 
 class EnerCubixCockpitHistoryMetaTest : Test
 {
+  Void testPerHeaderFilteringWorkspaceExpiresBeforeTheNextHeader()
+  {
+    budget:=EnerCubixStreamBudget().state;work:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    collector:=EnerCubixCockpitHistoryMeta(Str[,],at,work,output);peer.hold(budget.remaining-800);held:=peer.entries
+    header:=Str:Obj?["pointId":"not-planned","streaming":Str:Obj?["nativeReadCount":17].toImmutable]
+    try
+    {
+      400.times {collector.observe(header)}
+      verifyEq(peer.entries,held);verifyEq(budget.temporary.val,work.entries+output.entries+held)
+      peer.close;proof:=collector.snapshot;verifyJson(proof["streaming"],[["nativeReadCount":17]])
+      work.close;verifyJson(proof["streaming"],[["nativeReadCount":17]])
+    }
+    finally {work.close;output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testDetachedConfigurationAndCleaningSurviveSourceRelease()
   {
     from:=at-1sec; to:=at+1sec

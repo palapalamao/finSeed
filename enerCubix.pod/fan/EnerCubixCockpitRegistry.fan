@@ -180,6 +180,7 @@ internal class EnerCubixCockpitRegistry
   private Str:Bool attachedCleaning := [:]
   private Bool done := false
   private Bool closed := false
+  private Bool planningRetired := false
   private Bool closing := false
   private DateTime? watermark
   private Err? failure
@@ -337,7 +338,7 @@ internal class EnerCubixCockpitRegistry
   {
     source:=read(key,query)
     if(key.startsWith("cop:")) throw ArgErr("cockpitRegistryReportNotPrepared")
-    result:=key=="energy-flow" ? scope.freezeReport(key,source) : works[key].freezeReport(scope)
+    result:=key=="energy-flow" ? flowWork.freezeReport(scope) : works[key].freezeReport(scope)
     releaseReport(key);return result
   }
   Void prepareReportBorrows(EnerCubixCockpitRequestScope scope)
@@ -345,6 +346,20 @@ internal class EnerCubixCockpitRegistry
     check
     if(!done || attachedCleaning.size!=cleaningKeys.size) throw ArgErr("cockpitRegistryReportNotPrepared")
     scope.prepareReportBorrows(catalog.protectedRoots,pool.protectedRoots)
+    // Projection/cleaning are complete. Retire flow's numerical lookup objects
+    // before transferring the other reports, retaining its full public DAG.
+    flowWork?.retainPublic(scope)
+  }
+  ** After publication planning has no remaining producer/output borrower. Keep
+  ** the diagnostic owner alive: the snapshot still borrows its public graph.
+  Bool retirePlanning()
+  {
+    check
+    if(planningRetired) return true
+    if(!done || !copWorks.isEmpty || !ruleWorks.isEmpty || works.any |work,key| {!work.released} || (flowWork!=null && !flowWork.released)) return false
+    metadata.close;flowWork=null;flowMeters.clear;flowPeriods.clear
+    flowModel?.close;copModel?.close;model.close;planningRetired=true
+    return true
   }
   private Void expectQuery(Str:Obj? query,Str:Obj? registered,Str error)
   {
@@ -495,7 +510,8 @@ internal class EnerCubixCockpitReportWork
     }
     retained:=key=="face-heatmap" ? output.entries : consumer.publicEntries
     done=true;state.close
-    if(retained<output.entries)
+    if(key=="face-heatmap") {heatmaps.each |h| {h.retirePrivateLinks};heatmaps.clear;retained=output.entries}
+    if(key=="face-heatmap" || retained<output.entries)
     {
       // State close severed Work -> consumer/report/cursors. Replace callbacks
       // without running clearFrames, whose containers alias the public result.
@@ -507,8 +523,20 @@ internal class EnerCubixCockpitReportWork
   Str:Obj? freezeReport(EnerCubixCockpitRequestScope scope)
   {
     if(!done || state.entries!=0 || result.isEmpty) throw ArgErr("cockpitReportTransferNotFinished")
+    if(transferReady && key=="face-heatmap")
+    {
+      // Reducer objects and their field-dependent cleanup are retired. Only
+      // the completed public cells/excluded-day graph stays under this owner.
+      retained:=scope.publicReportEntries(result,output.entries)
+      if(retained<output.entries)
+      {
+        publicResult:=result;catalogRoots:=catalog.protectedRoots;sampleRoots:=pool.protectedRoots
+        output.retainPublic(retained) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
+      }
+    }
     return transferReady ? scope.freezeOwnedReport(key,result,output) : scope.freezeReport(key,result)
   }
+  Bool released() {done && (state?.entries ?: 0)==0 && (output?.entries ?: 0)==0}
   Int stateEntries() {(state?.entries ?: 0)+(consumer?.childStateEntries ?: 0)}
   Void finishReady() {if(!done && next==to) finish}
   Void cleaning(Str pointId,DateTime a,DateTime b,Str:Obj? meta,Str diagnosticRef)

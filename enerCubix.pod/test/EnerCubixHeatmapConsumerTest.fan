@@ -1,5 +1,26 @@
 class EnerCubixHeatmapConsumerTest : Test
 {
+  Void testCompletedHeatmapRetiresOnlyDuplicatePrivateLinks()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixStreamBudget().state;state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(31);held:=peer.entries
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+49hr,at+49hr,state,output)
+    49.times |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(0f,"ok",["p"])))}
+    data:=consumer.finish;cells:=((List)data["heatmap"]).dup;excluded:=((List)data["excludedDays"]).dup;n:=cells.size+excluded.size+data.size
+    output.hold(2+cells.size+excluded.size)
+    output.watch |->Void| {cells.each |Map row| {((List)row["sourceIds"]).clear;row.clear};excluded.each |Map row| {row.clear};cells.clear;excluded.clear}
+    try
+    {
+      verifyErr(ArgErr#) {consumer.retirePrivateLinks}
+      state.close;before:=output.entries;consumer.retirePrivateLinks
+      verifyEq(output.entries,before-n);verify(data.isEmpty);verifyEq(cells.size,48);verifyEq(excluded.size,1)
+      verifyEq(((Map)cells.first)["value"],0f);verifyEq(((Map)cells.first)["sourceIds"],["p"])
+      verifyEq(peer.entries,held);output.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {state.close;output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testCompleteDstDaysAndPartialBoundsMatchOriginalFace()
   {
     tz:=TimeZone("New_York")

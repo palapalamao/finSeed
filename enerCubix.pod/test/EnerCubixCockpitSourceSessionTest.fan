@@ -5,6 +5,99 @@ using [java] java.util::IdentityHashMap
 ** Controlled cursor I/O; no native FIN reads or whole-request heap proof.
 class EnerCubixCockpitSourceSessionTest : Test
 {
+  Void testFinalPlanningRetirementPreservesTheWholeSnapshotAndPublishedDiagnostics()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+2hr
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    Obj? expected
+    [false,true].each |retire|
+    {
+      request:=input;request["modules"]=["kpis","trend","space","time","endUse","organization","balance"]
+      scope:=EnerCubixCockpitRequestScope("test",retire ? "retire" : "keep");budget:=scope.stream;EnerCubixCockpitSourceSession? session;called:=false
+      try
+      {
+        actual:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {
+          session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10)))}},scope)
+          loaded:=session.load;meta:=(Map)loaded.last["_cockpitRequestMeta"];release:=(|->Void|)meta["releasePlanning"]
+          meta["releasePlanning"]=|->Void|
+          {
+            called=true
+            registry:=EnerCubixCockpitSourceSession#.field("registry").get(session)
+            // The fixture may omit optional public modules locally. Explicitly
+            // finish every registered report in both paths before testing the
+            // all-consumers-released retirement boundary.
+            works:=(Map)EnerCubixCockpitRegistry#.field("works").get(registry)
+            queries:=(Map)EnerCubixCockpitRegistry#.field("queries").get(registry)
+            works.keys.each |key| {if(scope.frozenReport(key.toStr)==null) session.read(key.toStr,queries[key])}
+            if(retire)
+            {
+              before:=JsonOutStream.writeJsonToStr(meta["diagnostics"])
+              release();release()
+              verifyEq(JsonOutStream.writeJsonToStr(meta["diagnostics"]),before)
+              verifyEq(((EnerCubixPreparedOwner)EnerCubixCockpitRegistry#.field("metadata").get(registry)).entries,0)
+              verify(((EnerCubixPreparedOwner)EnerCubixCockpitRegistry#.field("diagnosticOwner").get(registry)).entries>0)
+              verifyEq(((EnerCubixPreparedOwner)EnerCubixCockpitRequestScope#.field("planningModel").get(scope)).entries,0)
+            }
+          }
+          return loaded
+        },"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},null,null,scope)
+        verify(called);stable:=stableRetirement(normalize(actual,actual))
+        if(retire) verifyEq(stable,expected);else expected=stable
+        before:=JsonOutStream.writeJsonToStr(actual);sent:=""
+        scope.deliver(actual,|Buf bytes| {sent=bytes.readAllStr})
+        verify(!sent.isEmpty);verifyEq(JsonOutStream.writeJsonToStr(actual),before)
+        session.close;session.close;scope.close;verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+      }
+      finally {session?.close;scope.close}
+    }
+  }
+  private Obj? stableRetirement(Obj? value)
+  {
+    if(value is Map)
+    {out:=Str:Obj?[:];((Map)value).each |v,k| {if(!["streaming","preparedRuntime"].contains(k)) out[k.toStr]=stableRetirement(v)};return out}
+    if(value is List) return ((List)value).map |v->Obj?| {stableRetirement(v)}
+    if(value is Str && Regex<|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|>.matches(value)) return "<uuid>"
+    return value
+  }
+
+  Void testLoadedSessionRetiresPrivateSourceWindowsButKeepsReportAndHeaderFacts()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+24hr;request:=input
+    request["time"]=["preset":"custom","period":"day","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","retired-source-windows");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state);peer.hold(77);peerHeld:=peer.entries
+    EnerCubixCockpitSourceSession? session;checked:=false
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,records,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..24).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10)))}},scope)
+        loaded:=session.load
+        verify(((List)EnerCubixCockpitSourceSession#.field("windows").get(session)).isEmpty)
+        verify(((List)EnerCubixCockpitSourceSession#.field("detached").get(session)).isEmpty)
+        verifyNull(EnerCubixCockpitSourceSession#.field("reader").get(session))
+        reg:=EnerCubixCockpitSourceSession#.field("registry").get(session)
+        flow:=EnerCubixCockpitRegistry#.field("flowWork").get(reg)
+        verifyEq(((EnerCubixPreparedOwner)EnerCubixCockpitFlowWork#.field("numbers").get(flow)).entries,0)
+        sourceOwner:=(EnerCubixPreparedOwner)EnerCubixCockpitSourceSession#.field("owner").get(session)
+        verify(sourceOwner.entries<=80+loaded.size)
+        verifyEq(peer.entries,peerHeld);verify(loaded.first.isImmutable);verify(((Map)loaded.first["streaming"])["nativeReadCount"]!=null)
+        retire:=((Map)loaded.last["_cockpitRequestMeta"])["releasePlanning"] as |->Void|
+        verifyNotNull(retire);retire()
+        verify(((EnerCubixPreparedOwner)EnerCubixCockpitRequestScope#.field("planningModel").get(scope)).entries>0,"unread reports keep the shared planning catalog alive")
+        checked=true;return loaded
+      },"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?| {verifyNull(EnerCubixCockpitRequestScope#.field("historyMetadataWork").get(scope));return session.read(key,q)},|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      verify(checked);verify(((Map)snapshot["reports"]).containsKey("profile-energy"));verifyEq(peer.entries,peerHeld)
+    }
+    finally {session?.close;scope.close;peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+
   Void testFinishedReportFreezeDoesNotRequireASecondResidentPublicGraph()
   {
     a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
@@ -46,6 +139,94 @@ class EnerCubixCockpitSourceSessionTest : Test
     finally {peer.close;session?.close;scope.close}
     verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
   }
+  Void testFinishedFlowFreezeDoesNotRequireASecondResidentPublicGraph()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    rs:=records
+    extra:=Str[,];12.times |i| {extra.add("p$i")}
+    extra.each |id| {rs.add(["id":"meter-"+id,"kind":"meter","name":id,"nativeEquip":true,"nativeTreeParentId":"s","nativeSpaceId":"s","spaceId":"s","categoryId":"cd","pointId":id])}
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].dup.addAll(extra).each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","finished-flow-transfer");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;checked:=false
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope)
+        // This boundary targets the owned report, not a second copy of shared
+        // optional diagnostics. Shared nonempty borrows are checked separately.
+        registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+        pool:=EnerCubixCockpitRegistry#.field("pool").get(registry)
+        EnerCubixCockpitCapture#.method("limitSamples").callOn(pool,[,])
+        return session.load
+      },"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+      {
+        if(!checked && key=="energy-flow")
+        {
+          registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+          source:=registry.read(key,q);expected:=source.toImmutable
+          graph:=mutableGraphEntries(source,IdentityHashMap());headroom:=(graph*3/4).max(256)
+          verify(graph>1024,"The fixture must contain a real multi-period report graph")
+          verify(headroom<graph,"A complete second public graph must not fit")
+          peer.hold(budget.state.remaining-headroom)
+          try {frozen:=session.read(key,q);verify(frozen.isImmutable);verifyEq(frozen,expected);checked=true;return frozen}
+          finally {peer.close}
+        }
+        return session.read(key,q)
+      },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      verify(checked);verify(((Map)snapshot["reports"]).containsKey("energy-flow"))
+      verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<=200000)
+    }
+    finally {peer.close;session?.close;scope.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  Void testFinishedHeatmapFreezeDoesNotRequireASecondResidentPublicGraph()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    rs:=records
+    extra:=Str[,];12.times |i| {extra.add("p$i")}
+    extra.each |id| {rs.add(["id":"meter-"+id,"kind":"meter","name":id,"nativeEquip":true,"nativeTreeParentId":"s","nativeSpaceId":"s","spaceId":"s","categoryId":"cd","pointId":id])}
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].dup.addAll(extra).each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","finished-heatmap-transfer");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;checked:=false
+    try
+    {
+      snapshot:=EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+      {
+        session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope)
+        // This boundary targets the owned report, not a second copy of shared
+        // optional diagnostics. Shared nonempty borrows are checked separately.
+        registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+        pool:=EnerCubixCockpitRegistry#.field("pool").get(registry)
+        EnerCubixCockpitCapture#.method("limitSamples").callOn(pool,[,])
+        return session.load
+      },"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+      {
+        if(!checked && key=="face-heatmap")
+        {
+          registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+          source:=registry.read(key,q);expected:=source.toImmutable
+          graph:=mutableGraphEntries(source,IdentityHashMap());headroom:=(graph*3/4).max(256)
+          verify(graph>1024,"The fixture must contain a real multi-period report graph")
+          verify(headroom<graph,"A complete second public graph must not fit")
+          peer.hold(budget.state.remaining-headroom)
+          try {frozen:=session.read(key,q);verify(frozen.isImmutable);verifyEq(frozen,expected);checked=true;return frozen}
+          finally {peer.close}
+        }
+        return session.read(key,q)
+      },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+      verify(checked);time:=(Map)((Map)((Map)snapshot["modules"])["time"])["data"];verify(!((List)time["heatmap"]).isEmpty)
+      verifyEq(budget.state.unprepared.val,0);verify(budget.state.peak.val<=200000)
+    }
+    finally {peer.close;session?.close;scope.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
   private Int mutableGraphEntries(Obj? value,IdentityHashMap seen)
   {
     if(value==null || value.isImmutable || (value isnot Map && value isnot List) || seen.containsKey(value)) return 0
@@ -71,6 +252,48 @@ class EnerCubixCockpitSourceSessionTest : Test
         {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope);return session.load},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
         {
           if(!injected && key=="profile-energy")
+          {
+            registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
+            source:=registry.read(key,q)
+            containers:=Obj[,];collectMutableContainers(source,IdentityHashMap(),containers);nonempty:=containers.findAll |v| {v is Map ? !((Map)v).isEmpty : !((List)v).isEmpty}
+            peer.hold(budget.state.remaining-512);held=peer.entries;injected=true
+            try {session.read(key,q);fail("Expected capacity failure during the owned report transfer")}
+            catch(EnerCubixHttpErr e)
+            {
+              verifyEq(e.code,"PREPARED_READ_LIMIT");verifyNull(scope.frozenReport(key));verify(!scope.responseStarted)
+              verify(nonempty.any |v| {v is Map ? ((Map)v).isEmpty : ((List)v).isEmpty},"Some owned descendants must already have been consumed")
+              throw e
+            }
+          }
+          return session.read(key,q)
+        },|Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},|Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
+        fail("No partial snapshot may escape")
+      }
+      catch(EnerCubixHttpErr e) {verifyEq(e.code,"PREPARED_READ_LIMIT")}
+      verify(injected);session.close;scope.close;verifyEq(budget.state.temporary.val,held)
+    }
+    finally {session?.close;scope.close;peer.close}
+    verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
+  }
+  Void testRegistryClosesFlowProducersAfterMidTransferCapacityFailure()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+48hr;request:=input
+    request["time"]=["preset":"custom","period":"hour","from":a.toIso,"to":b.toIso];request["asOf"]=b.toIso
+    rs:=records;extra:=Str[,];12.times |i| {extra.add("p$i")}
+    extra.each |id| {rs.add(["id":"meter-"+id,"kind":"meter","name":id,"nativeEquip":true,"nativeTreeParentId":"s","nativeSpaceId":"s","spaceId":"s","categoryId":"cd","pointId":id])}
+    points:=Str:Dict[:];refs:=Str:[Str:Obj?][][:]
+    ["pn","pd"].dup.addAll(extra).each |id| {points[id]=Etc.makeDict(["id":Ref(id),"his":Marker.val,"hisTotalized":Marker.val,"unit":id=="pn" ? "MWh" : "kWh","tz":"UTC"]);refs[id]=[Str:Obj?][,]}
+    prepared:=Str:Obj?["points":points,"configs":Str:Dict[:],"configRefs":refs].toImmutable
+    scope:=EnerCubixCockpitRequestScope("test","failed-real-flow-transfer");budget:=scope.stream;peer:=EnerCubixPreparedOwner(budget.state)
+    EnerCubixCockpitSourceSession? session;injected:=false;held:=0
+    try
+    {
+      try
+      {
+        EnerCubixCockpit.execute(request,rs,|Str:Obj? q,[Str:Obj?][] frozen->[Str:Obj?][]|
+        {session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict point,Span span,|HisItem| sink| {(0..48).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(i*10))) }},scope);return session.load},"test",TimeZone.utc,b,true,|->DateTime| {b},null,null,scope.deadline,configuration,|Str key,Str:Obj? q->Str:Obj?|
+        {
+          if(!injected && key=="energy-flow")
           {
             registry:=(EnerCubixCockpitRegistry)EnerCubixCockpitSourceSession#.field("registry").get(session)
             source:=registry.read(key,q)
@@ -188,7 +411,8 @@ class EnerCubixCockpitSourceSessionTest : Test
           session=EnerCubixCockpitSourceSession(q,frozen,prepared,budget,|Dict p,Span span,|HisItem| sink| {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(100f+10f*i))) }},scope)
           headers:=session.load;meta:=(Map)headers.last["_cockpitRequestMeta"];publish:=(|Str:Obj?->Str:Obj?|)meta["publishDiagnostics"]
           release:=(|->Void|)meta["releaseSources"];meta["releaseSources"]=|->Void| {released=true;release()}
-          meta["publishDiagnostics"]=|Str:Obj? reports->Str:Obj?| {result:=publish(reports);late=true;peer.hold(budget.state.remaining);held=peer.entries;return result}
+          retire:=(|->Void|)meta["releasePlanning"];meta["releasePlanning"]=|->Void| {retire();peer.hold(budget.state.remaining);held=peer.entries}
+          meta["publishDiagnostics"]=|Str:Obj? reports->Str:Obj?| {result:=publish(reports);late=true;return result}
           return headers
         },"test",TimeZone.utc,a+2hr,false,null,null,null,scope.deadline,[:],|Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},null,null,scope)
         returned=true

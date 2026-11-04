@@ -80,8 +80,27 @@ internal class EnerCubixCockpitRequestScope
   [Str:Obj?][] freezeHistoryHeaders([Str:Obj?][] headers)
   {
     checkContext(project,user)
-    if(historyHeaders!=null) throw ArgErr("cockpitHistoryHeadersAlreadyFrozen")
+    if(historyHeaders!=null)
+    {
+      if(headers.size==historyHeaders.size && headers.all |row,i| {row===historyHeaders[i]}) return historyHeaders
+      throw ArgErr("cockpitHistoryHeadersAlreadyFrozen")
+    }
     historyHeaders=([Str:Obj?][])EnerCubixCockpitFreeze.value(headers,historyOutput);return historyHeaders
+  }
+  ** The completed source session lends only its private header graph here,
+  ** before request metadata/closures are appended. Immutable configuration
+  ** facts remain borrowed; the source owner keeps empty headers until close.
+  [Str:Obj?][] freezeSourceHeaders([Str:Obj?][] headers,EnerCubixPreparedOwner producer)
+  {
+    checkContext(project,user)
+    if(historyHeaders!=null || producer.budget!==stream.state || producer.entries==0 || headers.isImmutable) throw ArgErr("cockpitSourceHeaderTransfer")
+    historyHeaders=([Str:Obj?][])EnerCubixCockpitFreeze.value(headers,historyOutput,null,|Obj value|
+    {
+      count:=value is Map ? ((Map)value).size : ((List)value).size
+      if(value is Map) ((Map)value).clear;else ((List)value).clear
+      producer.release(count)
+    })
+    return historyHeaders
   }
   EnerCubixPreparedOwner metadataWorkspace(Int pointCount)
   {
@@ -98,7 +117,8 @@ internal class EnerCubixCockpitRequestScope
     checkContext(project,user)
     if(planningModel!=null) throw ArgErr("cockpitPlanningAlreadyCreated")
     planningModel=EnerCubixPreparedOwner(stream.state)
-    catalog:=EnerCubixCockpitCatalog(records,tz,planningModel,[:],false,inputs?.get("records")===records);planningCatalog=catalog;planningRecords=records
+    ownedFacts:=inputs?.get("records")===records
+    catalog:=EnerCubixCockpitCatalog(records,tz,planningModel,[:],false,ownedFacts,ownedFacts);planningCatalog=catalog;planningRecords=records
     planningState=EnerCubixPreparedOwner(stream.state)
     return EnerCubixContext.shared(catalog,dimension,nativeSpace,planningState)
   }
@@ -109,6 +129,10 @@ internal class EnerCubixCockpitRequestScope
     planningCatalog.prepareUnits(units);return planningCatalog
   }
   Void finishPlanning() {planningState?.close;planningModel?.close;planningCatalog=null;planningRecords=null;sourcePlan=null;sourcePlanOwner?.close}
+  ** Only this already-admitted frozen snapshot may lend immutable business
+  ** containers to its own payload. Reprojected or foreign inputs use copying.
+  Bool canBorrowPayload(Str:Obj? source,EnerCubixPreparedOwner target)
+  {checkContext(project,user);return source===snapshot && (snapshotOwner?.entries ?: 0)>0 && target===payloadOwner && target.entries>0 && target.budget===stream.state}
   EnerCubixPreparedOwner payloadOutput()
   {checkContext(project,user);if(payloadOwner==null) payloadOwner=EnerCubixPreparedOwner(stream.state);return payloadOwner}
   Void checkContext(Str project,Str user)
@@ -143,6 +167,27 @@ internal class EnerCubixCockpitRequestScope
       inputs=(Str:Obj?)EnerCubixCockpitFreeze.value(bundle,inputOwner);finishPreparation;return inputs
     }
     finally {bundle?.clear;facts?.clear;model?.clear;normalizedOwned?.clear;scratch.close}
+  }
+  ** Preserve the legacy byte fingerprint of canonical business map heads.
+  ** Only unchanged facts borrowed by the canonical context need its former
+  ** shallow dup layout; these small hash-only copies expire immediately.
+  Str configurationFingerprint([Str:Obj?][] configuration,[Str:Obj?][] canonicalRows,[Str:Obj?][] refs,Obj? appliedCleaning)
+  {
+    checkContext(project,user)
+    work:=EnerCubixPreparedOwner(stream.state);[Str:Obj?][]? rows;[Str:Obj?][]? copies;Map? root
+    try
+    {
+      work.hold(6+configuration.size);rows=[,];copies=[,]
+      configuration.each |row|
+      {
+        if(row.isImmutable && canonicalRows.any |source| {source===row})
+        {work.hold(2+row.size);copy:=row.dup;copies.add(copy);rows.add(copy)}
+        else rows.add(row)
+      }
+      root=Str:Obj?["refs":refs,"configuration":rows,"appliedCleaning":appliedCleaning]
+      return EnerCubixCockpitDigest.json(root,deadline,stream.state).sha256
+    }
+    finally {root?.clear;rows?.clear;copies?.each |copy| {copy.clear};copies?.clear;work.close}
   }
   Str:Obj? freezeSnapshot(Str:Obj? source)
   {
@@ -199,6 +244,58 @@ internal class EnerCubixCockpitRequestScope
     deadline.check;scratch.hold(3);borrowedGraph.put(value,true)
     if(value is Map) ((Map)value).each |v| {protectReportBorrow(v,borrowedGraph,scratch)}
     else ((List)value).each |v| {protectReportBorrow(v,borrowedGraph,scratch)}
+  }
+  ** Optional exact private-container compaction. Exhausted scratch retains
+  ** the original conservative allowance; it never causes an admission failure.
+  ** Mutable catalog/pool descendants are borrowed; immutable containers counted
+  ** conservatively here remain charged if their ownership cannot be excluded.
+  Int publicReportEntries(Str:Obj? source,Int cap)
+  {
+    checkContext(project,user)
+    if(reportBorrows==null || cap<0) throw ArgErr("cockpitReportTransferOwner")
+    // A small valid graph needs no optional compaction workspace.
+    if(cap<32 || stream.state.remaining<24) return cap
+    scratch:=EnerCubixPreparedOwner(stream.state);IdentityHashMap? seen
+    try
+    {
+      scratch.hold(16)
+      // Count a conservative tree first: aliases may overcount but cannot
+      // undercount live containers. This uses bounded depth-only workspace,
+      // so optional compaction need not allocate an index of the whole DAG.
+      tree:=reportTreeEntries(source,cap-32,scratch,0)
+      if(tree<cap-32) return tree+32
+      seen=IdentityHashMap()
+      return (reportEntries(source,cap-32,seen,scratch)+32).min(cap)
+    }
+    finally {seen?.clear;scratch.close}
+  }
+  private Int reportTreeEntries(Obj? value,Int cap,EnerCubixPreparedOwner scratch,Int depth)
+  {
+    if(cap<=0 || value==null || (value isnot Map && value isnot List) || reportBorrows.containsKey(value)) return 0
+    deadline.check
+    if(depth>=64 || stream.state.remaining<4) return cap
+    scratch.hold(4)
+    try
+    {
+      n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+      if(n>=cap) return cap
+      if(value is Map) ((Map)value).each |child| {if(n<cap) n+=reportTreeEntries(child,cap-n,scratch,depth+1)}
+      else ((List)value).each |child| {if(n<cap) n+=reportTreeEntries(child,cap-n,scratch,depth+1)}
+      return n
+    }
+    finally {scratch.release(4)}
+  }
+  private Int reportEntries(Obj? value,Int cap,IdentityHashMap seen,EnerCubixPreparedOwner scratch)
+  {
+    if(cap<=0 || value==null || (value isnot Map && value isnot List) || reportBorrows.containsKey(value) || seen.containsKey(value)) return 0
+    deadline.check
+    if(stream.state.remaining<3) return cap
+    scratch.hold(3);seen.put(value,true)
+    n:=1+(value is Map ? ((Map)value).size : ((List)value).size)
+    if(n>=cap) return cap
+    if(value is Map) ((Map)value).each |child| {if(n<cap) n+=reportEntries(child,cap-n,seen,scratch)}
+    else ((List)value).each |child| {if(n<cap) n+=reportEntries(child,cap-n,seen,scratch)}
+    return n
   }
   Void deliver(Str:Obj? data,|Buf| send)
   {

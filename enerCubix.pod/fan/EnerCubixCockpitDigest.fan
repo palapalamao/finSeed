@@ -5,6 +5,40 @@ using [java] java.security::MessageDigest
 ** The final response's byte limit does not apply to internal hash input.
 internal const class EnerCubixCockpitDigest
 {
+  ** Match the existing codec's ordered-map hash without cloning unchanged
+  ** immutable business containers. New encoding/table builders retain their
+  ** original iteration order; only borrowed business maps are sorted here.
+  static EnerCubixCockpitDigestValue encoded(Obj? value,EnerCubixCockpitDeadline? deadline := null,EnerCubixPreparedBudget? budget := null)
+  {
+    if(budget!=null) {if(deadline!=null && deadline!==budget.deadline) throw ArgErr("cockpitDigestDeadline");deadline=budget.deadline}
+    deadline?.check;EnerCubixPreparedOwner? owner
+    try
+    {
+      if(budget!=null) {owner=EnerCubixPreparedOwner(budget);owner.hold(64)}
+      out:=EnerCubixCockpitDigestOut(deadline);writeEncoded(out,value,owner);deadline?.check;return out.result
+    }
+    finally {owner?.close}
+  }
+  private static Void writeEncoded(OutStream out,Obj? value,EnerCubixPreparedOwner? owner)
+  {
+    if(value is Map)
+    {
+      m:=(Map)value;out.writeChar('{');first:=true
+      emit:=|Obj k|
+      {if(!first) out.writeChar(',');first=false;JsonOutStream(out).writeJson(k.toStr);out.writeChar(':');writeEncoded(out,m[k],owner)}
+      if(m.isImmutable)
+      {
+        charge:=2+2*m.size;owner?.hold(charge);List? keys
+        try {keys=m.keys.sort;keys.each |k| {emit(k)}}
+        finally {keys?.clear;owner?.release(charge)}
+      }
+      else m.each |v,k| {emit(k)}
+      out.writeChar('}');return
+    }
+    if(value is List)
+    {out.writeChar('[');((List)value).each |v,i| {if(i>0) out.writeChar(',');writeEncoded(out,v,owner)};out.writeChar(']');return}
+    JsonOutStream(out).writeJson(value)
+  }
   static EnerCubixCockpitDigestValue json(Obj? value,EnerCubixCockpitDeadline? deadline := null,EnerCubixPreparedBudget? budget := null)
   {
     if(budget!=null)

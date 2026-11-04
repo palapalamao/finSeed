@@ -1,5 +1,44 @@
 class EnerCubixPreparedOwnerTest : Test
 {
+  Void testPublicChargeTransferIsAtomicAtTheLimitAndClosesTheDonor()
+  {
+    budget:=EnerCubixStreamBudget().state;source:=EnerCubixPreparedOwner(budget);target:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    value:=Str:Obj?["value":17f];oldDrop:=false
+    source.hold(30);source.watch |->Void| {oldDrop=true;value.clear}
+    target.hold(40);target.watch |->Void| {value.clear}
+    source.retainPublic(source.entries) |->Void| {};target.retainPublic(target.entries) |->Void| {value.clear}
+    n:=source.entries+target.entries;peer.hold(budget.remaining);held:=peer.entries;before:=budget.temporary.val
+    try
+    {
+      source.transferRetainedTo(target)
+      verifyEq(budget.temporary.val,before);verifyEq(target.entries,n);verifyEq(source.entries,0);verify(!oldDrop)
+      verifyEq(value["value"],17f);verifyEq(peer.entries,held)
+      verifyErr(ArgErr#) {source.hold(1)};verifyErr(ArgErr#) {source.watch |->Void| {}};verifyErr(ArgErr#) {source.fork}
+      source.close;verifyEq(value["value"],17f);target.close;verify(value.isEmpty);verifyEq(budget.temporary.val,held)
+      verify(budget.peak.val<=200000)
+    }
+    finally {source.close;target.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testPublicChargeTransferRejectsForeignOwnersAndSamplePoolsBeforeChangingCredit()
+  {
+    budget:=EnerCubixStreamBudget().state;source:=EnerCubixPreparedOwner(budget);target:=EnerCubixPreparedOwner(budget)
+    foreign:=EnerCubixPreparedOwner(EnerCubixStreamBudget().state);poolOwner:=EnerCubixPreparedOwner(budget)
+    pool:=EnerCubixCockpitCapture(["g":["kind":"cleaningEvents","grain":"event","reportRefs":["r"]]],poolOwner)
+    sampled:=EnerCubixPreparedOwner(budget,pool);before:=budget.temporary.val;n:=source.entries
+    try
+    {
+      verifyErr(ArgErr#) {source.transferRetainedTo(source)}
+      verifyErr(ArgErr#) {source.transferRetainedTo(foreign)}
+      verifyErr(ArgErr#) {source.transferRetainedTo(sampled)}
+      verifyEq(budget.temporary.val,before);verifyEq(source.entries,n)
+      target.close;verifyErr(ArgErr#) {source.transferRetainedTo(target)}
+      source.close;verifyErr(ArgErr#) {source.transferRetainedTo(sampled)}
+    }
+    finally {source.close;target.close;sampled.close;poolOwner.close;foreign.close}
+    verifyEq(budget.temporary.val,0);verifyEq(foreign.budget.temporary.val,0)
+  }
+
   Void testPublicRetirementReplacesOnlyItsOwnCleanupAndCharge()
   {
     budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline())

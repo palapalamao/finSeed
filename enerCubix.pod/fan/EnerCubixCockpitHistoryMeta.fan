@@ -27,9 +27,11 @@ internal class EnerCubixCockpitHistoryMeta
   Void observe(Str:Obj? history)
   {
     check
-    work?.hold(2+3*((history["configRefs"] as List)?.size ?: 0))
-    sourceRefs:=EnerCubixMath.maps(history["configRefs"])
-    refs.addAll(work==null ? ([Str:Obj?][])sourceRefs.toImmutable : sourceRefs)
+    withRows(history["configRefs"]) |sourceRefs|
+    {
+      work?.hold(sourceRefs.size)
+      refs.addAll(work==null ? ([Str:Obj?][])sourceRefs.toImmutable : sourceRefs)
+    }
     profile:=history["cleaning"] as Map
     if(profile != null)
     {work?.hold(6);row:=Str:Obj?["pointId":history["pointId"],"profileId":profile["profileId"],"profileVersion":profile["profileVersion"],"parameters":profile["parameters"]];cleaning.add(work==null ? (Str:Obj?)row.toImmutable : row)}
@@ -40,10 +42,21 @@ internal class EnerCubixCockpitHistoryMeta
     {work?.hold(4);row:=Str:Obj?["pointId":history["pointId"],"reason":history["limitation"]];limitations.add(work==null ? (Str:Obj?)row.toImmutable : row)}
     if(!pointIds.contains(history["pointId"])) return
     observed(history["sourceLastObservedAt"] as Str)
-    raw:=history["rawSamples"] ?: history["samples"];work?.hold(2+2*((raw as List)?.size ?: 0))
-    rows:=EnerCubixMath.maps(raw)
-    rows.each |row| {observed(row["ts"]?.toStr)}
-    if(rows.isEmpty) {work?.hold(2+2*((history["intervals"] as List)?.size ?: 0));EnerCubixMath.maps(history["intervals"]).each |row| {observed(row["to"]?.toStr)}}
+    raw:=history["rawSamples"] ?: history["samples"]
+    withRows(raw) |rows|
+    {
+      rows.each |row| {observed(row["ts"]?.toStr)}
+      if(rows.isEmpty) withRows(history["intervals"]) |intervals| {intervals.each |row| {observed(row["to"]?.toStr)}}
+    }
+  }
+
+  ** Filtering/mapping vectors expire within one observation. Only retained
+  ** reference/configuration rows above continue to charge this owner.
+  private Void withRows(Obj? value,|[Str:Obj?][]| consume)
+  {
+    charge:=2+2*((value as List)?.size ?: 0);work?.hold(charge);[Str:Obj?][]? rows
+    try {rows=EnerCubixMath.maps(value);consume(rows)}
+    finally {rows?.clear;work?.release(charge)}
   }
 
   private Void observed(Str? text)

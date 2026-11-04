@@ -67,6 +67,15 @@ internal class EnerCubixHeatmapConsumer
     try {seal;done=true;return data}
     catch(Err e) {failure=e;throw e}
   }
+  ** The work has copied row references into its completed public vectors.
+  ** Retire only these duplicate private vector links, never the shared rows or
+  ** source arrays. Their original output charge now protects the public graph.
+  internal Void retirePrivateLinks()
+  {
+    if(!done || !stateClosed || outputClosed) throw ArgErr("heatmapPublicTransfer")
+    n:=cells.size+excluded.size+data.size
+    cells.clear;excluded.clear;data.clear;output.release(n)
+  }
   private Void seal()
   {
     if(date==null) return

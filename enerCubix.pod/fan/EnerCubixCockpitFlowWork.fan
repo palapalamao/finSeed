@@ -24,6 +24,7 @@ internal class EnerCubixCockpitFlowWork
   internal Str:Obj? result := [:] {private set}
   private Bool done := false
   private Bool projected := false
+  private Bool transferStarted := false
 
   Void addFrame(DateTime a,DateTime b,Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
   {addFrames(a,b,histories,frame)}
@@ -87,5 +88,27 @@ internal class EnerCubixCockpitFlowWork
     if(value is Map) {((Map)value).each |child| {drop(child)};((Map)value).clear}
     else {((List)value).each |child| {drop(child)};((List)value).clear}
   }
+  Void retainPublic(EnerCubixCockpitRequestScope scope)
+  {
+    if(!done || !projected || state.entries!=0 || result.isEmpty) throw ArgErr("cockpitFlowTransferNotFinished")
+    if(transferStarted) return
+    transferStarted=true
+    // The projected graph borrows overview rows and source arrays from numbers.
+    // Retire both private cleanup closures before consuming that combined DAG.
+    // Keep the graph's catalog/pool bindings alive after the donor closes.
+    catalog.bind(graph);pool.bind(graph)
+    publicResult:=result;catalogRoots:=catalog.protectedRoots;sampleRoots:=pool.protectedRoots
+    graph.retainPublic(graph.entries) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
+    numbers.retainPublic(numbers.entries) |->Void| {}
+    consumer=null;numbers.transferRetainedTo(graph)
+    retained:=scope.publicReportEntries(result,graph.entries)
+    if(retained<graph.entries) graph.retainPublic(retained) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
+  }
+  Str:Obj? freezeReport(EnerCubixCockpitRequestScope scope)
+  {
+    retainPublic(scope)
+    return scope.freezeOwnedReport("energy-flow",result,graph)
+  }
+  Bool released() {done && (state?.entries ?: 0)==0 && (graph?.entries ?: 0)==0 && (numbers?.entries ?: 0)==0}
   Void close() {state?.close;graph?.close;numbers?.close;consumer=null}
 }

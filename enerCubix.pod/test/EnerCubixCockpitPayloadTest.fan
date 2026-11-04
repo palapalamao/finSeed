@@ -3,6 +3,66 @@ using concurrent
 
 class EnerCubixCockpitPayloadTest : Test
 {
+  Void testOwnedEncodingBorrowsUnchangedImmutableBusinessRowsWithinTheOriginalBudget()
+  {
+    rows:=[Str:Obj?][,];3000.times |i| {rows.add(["name":"表计"+i,"value":i==1 ? null : i.toFloat,"quality":i==1 ? "na" : "ok","sourceIds":["point"]])}
+    scope:=EnerCubixCockpitRequestScope("codec-borrow","a");budget:=scope.stream.state
+    source:=scope.freezeSnapshot(["snapshotId":"borrow-immutable","rows":rows,"zero":0f])
+    before:=JsonOutStream.writeJsonToStr(source);expected:=JsonInStream(JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source)).in).readJson
+    output:=scope.payloadOutput;peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining-2000);held:=peer.entries
+    try
+    {
+      // An immutable source without this scope's proof must still copy and be
+      // rejected here. The permitted same-snapshot path then fits unchanged.
+      verifyErr(EnerCubixHttpErr#) {EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output)}
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output,scope)
+      verify(actual.isImmutable);verifyEq(JsonInStream(JsonOutStream.writeJsonToStr(actual).in).readJson,expected)
+      verify(((Map)actual["snapshot"])["rows"]===source["rows"])
+      verify(output.entries<100);verifyEq(JsonOutStream.writeJsonToStr(source),before);verifyEq(peer.entries,held)
+      verifyEq(budget.temporary.val,scope.entries+held);output.close;verifyEq(budget.temporary.val,scope.entries+held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testBorrowedUnsortedBusinessMapsKeepExactLegacyEvidenceHashes()
+  {
+    rows:=[Str:Obj?][,]
+    100.times |i|
+    {
+      nested:=Str:Obj?[:];nested.ordered=true;nested["z"]="中文 😀\n\"\\";nested["a"]=null
+      row:=Str:Obj?[:];row.ordered=true;row["z"]="quoted\"";row["a"]=i==1 ? null : i.toFloat;row["nested"]=nested;rows.add(row)
+    }
+    scope:=EnerCubixCockpitRequestScope("codec-ordered-hash","a");source:=scope.freezeSnapshot(["sourceUsage":rows,"zero":0f])
+    before:=JsonOutStream.writeJsonToStr(source);legacy:=EnerCubixCockpitPayload.encode(source)
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,scope.deadline,scope.stream.state,scope.payloadOutput,scope)
+      verifyEq(JsonInStream(JsonOutStream.writeJsonToStr(actual).in).readJson,JsonInStream(JsonOutStream.writeJsonToStr(legacy).in).readJson)
+      verifyEq(((Map)actual["evidence"]).keys.sort,((Map)legacy["evidence"]).keys.sort)
+      id:=((Map)actual["evidence"]).keys.first
+      verify(((Map)actual["evidence"])[id]===source["sourceUsage"])
+      verifyEq(JsonOutStream.writeJsonToStr(source),before);verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testImmutableBorrowingKeepsLegacyReferencesTablesAndLiteralControlKeys()
+  {
+    literal:=Str:Obj?["\$cockpitRef":"user data","\$cockpitTable":["name":"business value"],"__proto__":["safe":true]]
+    rows:=[Str:Obj?][,];100.times |i| {rows.add(["value":i==1 ? null : i.toFloat,"quality":i==1 ? "na" : "ok","metadata":literal,"pointId":"中文 🌍"])}
+    scope:=EnerCubixCockpitRequestScope("codec-controls","a");source:=scope.freezeSnapshot(["periods":rows,"sourceUsage":rows,"literal":literal,"zero":0f,"nonString":Int:Str[1:"one"]])
+    expected:=JsonInStream(JsonOutStream.writeJsonToStr(EnerCubixCockpitPayload.encode(source)).in).readJson
+    budget:=scope.stream.state;output:=scope.payloadOutput
+    try
+    {
+      actual:=EnerCubixCockpitPayload.encode(source,budget.deadline,budget,output,scope)
+      verifyEq(JsonInStream(JsonOutStream.writeJsonToStr(actual).in).readJson,expected)
+      verify(((Map)((Map)actual["snapshot"])["literal"]).containsKey("\$cockpitLiteral"));verifyEq(((Map)source["literal"])["\$cockpitRef"],"user data")
+      verifyEq(budget.temporary.val,scope.entries)
+    }
+    finally {scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
   Void testEqualDetachedEvidenceDoesNotRetainDiscardedDuplicateBuilders()
   {
     source:=Str:Obj?[:]

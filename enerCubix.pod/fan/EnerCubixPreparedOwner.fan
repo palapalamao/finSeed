@@ -39,6 +39,14 @@ internal class EnerCubixPreparedOwner
     drops.clear;drops.add(drop)
     budget.releaseTemporary(held-n);held=n
   }
+  ** A caller that retired both owners' private roots may hand the remaining
+  ** admitted public graph to one owner. Existing catalog/pool bindings must
+  ** already protect the target. No shared budget is released or re-admitted.
+  internal Void transferRetainedTo(EnerCubixPreparedOwner target)
+  {
+    if(closed || target.closed || target===this || target.budget!==budget || target.samples!==samples) throw ArgErr("preparedOwnerTransfer")
+    target.held+=held;held=0;drops.clear;samples=null;closed=true
+  }
   Void close()
   {
     if(closed) return
