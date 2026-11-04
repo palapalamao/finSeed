@@ -137,6 +137,27 @@ class EnerCubixCockpitRequestScopeTest : Test
     finally {producer.close;other.close;scope.close}
     verifyEq(budget.temporary.val,0)
   }
+  Void testOwnedWideReportTransfersParentLinksBeforeCopyingItsChildren()
+  {
+    scope:=EnerCubixCockpitRequestScope("wide-report-transfer","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    rows:=(0..<2000).map |i->Str:Obj?| {["index":i,"value":i.toFloat]}
+    source:=Str:Obj?["rows":rows];expected:=source.toImmutable
+    // Root, row vector, 2000 distinct three-entry maps and cleanup/control.
+    producer.hold(32+2+2001+6000);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-11000);held:=peer.entries
+      frozen:=scope.freezeOwnedReport("daily",source,producer)
+      verify(frozen.isImmutable);verifyEq(frozen,expected);verifyEq(((List)frozen["rows"]).size,2000)
+      verify(source.isEmpty);verify(rows.isEmpty);verifyEq(peer.entries,held)
+      verify(budget.peak.val<=200000);echo("OWNED_WIDE rows=2000 peak="+budget.peak.val+" producerRemaining="+producer.entries);producer.close
+      snapshot:=scope.freezeSnapshot(["report":frozen]);verifyEq(snapshot["report"],expected)
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
   Void testOwnedReportTransferFailurePublishesNothingAndPreservesPeerAndBorrowedInputs()
   {
     scope:=EnerCubixCockpitRequestScope("transfer-failure","a");budget:=scope.stream.state
@@ -155,6 +176,49 @@ class EnerCubixCockpitRequestScopeTest : Test
     }
     finally {producer.close;scope.close;peer.close}
     verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedEarlyCycleRejectsAfterRetiringParentsWithoutReleasingPeer()
+  {
+    scope:=EnerCubixCockpitRequestScope("early-cycle","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(31);held:=peer.entries
+    cycle:=Str:Obj?[:];cycle["self"]=cycle;source:=Str:Obj?["cycle":cycle]
+    producer.hold(64);producer.watch |->Void| {source.clear;cycle.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,])
+      verifyErr(NotImmutableErr#) {scope.freezeOwnedReport("cyclic",source,producer)}
+      verify(source.isEmpty);verify(cycle.isEmpty);verifyNull(scope.frozenReport("cyclic"))
+      verifyEq(peer.entries,held);verify(!scope.responseStarted)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testOwnedEarlyTransferKeepsReadOnlyBorrowedViewsAndTheirDescendants()
+  {
+    scope:=EnerCubixCockpitRequestScope("early-readonly","a");producer:=EnerCubixPreparedOwner(scope.stream.state)
+    child:=Str:Obj?["values":[0f,null,3f]];catalog:=Str:Obj?["nested":[child]].ro
+    expectedCatalog:=catalog.toImmutable;source:=Str:Obj?[:];source.ordered=true
+    ids:=[1,2,3];equal:=child.dup
+    source["catalog"]=catalog;source["direct"]=child;source["alias"]=child
+    source["collisions"]=Str:Obj?["Aa":child,"BB":equal,"AaAa":ids,"BBBB":ids]
+    expected:=source.toImmutable
+    producer.hold(128);producer.watch |->Void| {source.clear}
+    try
+    {
+      scope.prepareReportBorrows([catalog],Obj[,]);frozen:=scope.freezeOwnedReport("readonly",source,producer)
+      verify(frozen.ordered);verifyEq(frozen,expected);verify(frozen["direct"]===frozen["alias"])
+      verify(((List)((Map)frozen["catalog"])["nested"]).first===frozen["direct"])
+      verifyEq(catalog,expectedCatalog);verifyEq(child["values"],[0f,null,3f])
+      collision:=(Map)frozen["collisions"]
+      verify(collision["Aa"]!==collision["BB"]);verify(collision["AaAa"]===collision["BBBB"])
+      verifyEq(collision["AaAa"].typeof,ids.typeof);verifyEq(collision["AaAa"],[1,2,3])
+      verifyEq(JsonOutStream.writeJsonToStr(frozen),JsonOutStream.writeJsonToStr(expected))
+      producer.close;scope.releaseReportBorrows;verifyEq(frozen,expected);scope.close
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
   }
   Void testOwnedReportTransferRejectsUnpreparedCrossRequestAndClosedProducers()
   {

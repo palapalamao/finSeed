@@ -4,13 +4,14 @@ using [java] java.util::IdentityHashMap
 ** before allocation; existing immutable values remain borrowed from their owner.
 internal const class EnerCubixCockpitFreeze
 {
-  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null,|Obj|? consume := null)
+  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null,|Obj|? consume := null,Bool consumeParentBeforeChildren := false)
   {
+    if(consumeParentBeforeChildren && consume==null) throw ArgErr("cockpitSnapshotConsumeRequired")
     if(source==null || source.isImmutable) return source
     work:=EnerCubixPreparedOwner(output.budget);EnerCubixCockpitFreezer? freezer
     try
     {
-      work.hold(16);freezer=EnerCubixCockpitFreezer(output,work,borrow,consume)
+      work.hold(17);freezer=EnerCubixCockpitFreezer(output,work,borrow,consume,consumeParentBeforeChildren)
       result:=freezer.copy(source)
       output.hold(2);roots:=Obj?[result]
       output.watch |->Void| {roots.clear}
@@ -22,12 +23,13 @@ internal const class EnerCubixCockpitFreeze
 
 internal class EnerCubixCockpitFreezer
 {
-  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow,|Obj|? consume)
-  {this.output=output;this.work=work;this.borrow=borrow;this.consume=consume}
+  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow,|Obj|? consume,Bool consumeParentBeforeChildren)
+  {this.output=output;this.work=work;this.borrow=borrow;this.consume=consume;this.consumeParentBeforeChildren=consumeParentBeforeChildren}
   private EnerCubixPreparedOwner output
   private EnerCubixPreparedOwner work
   private |Obj|? consume
   private |Obj->Obj?|? borrow
+  private Bool consumeParentBeforeChildren
   private IdentityHashMap memo := IdentityHashMap()
   Obj? copy(Obj? source)
   {
@@ -53,18 +55,25 @@ internal class EnerCubixCockpitFreezer
       if(source is Map)
       {
         sourceMap:=(Obj:Obj?)source;target:=sourceMap.dup;builder=target
-        sourceMap.each |Obj? v,Obj k|
+        // An owned report may retire this parent's links once the admitted
+        // private builder holds every child. Each child and the empty source
+        // header remain paid until their own original lifetime ends.
+        if(consumeParentBeforeChildren) consume.call(source)
+        visit:=consumeParentBeforeChildren ? target : sourceMap
+        visit.each |Obj? v,Obj k|
         {if(!k.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableKey");target[k]=copy(v)}
       }
       else
       {
         sourceList:=(Obj?[])source;target:=sourceList.dup;builder=target
-        sourceList.each |Obj? v,Int i| {target[i]=copy(v)}
+        if(consumeParentBeforeChildren) consume.call(source)
+        visit:=consumeParentBeforeChildren ? target : sourceList
+        visit.each |Obj? v,Int i| {target[i]=copy(v)}
       }
       // All children are now immutable. This final shallow copy preserves the
       // input's map/list types and ordering without recopying shared children.
       output.hold(1+size);result:=builder.toImmutable
-      memo.put(source,result);consume?.call(source);return result
+      memo.put(source,result);if(!consumeParentBeforeChildren) consume?.call(source);return result
     }
     finally {node.close}
   }

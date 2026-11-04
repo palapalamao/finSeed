@@ -310,3 +310,13 @@
 - 最终全量122类985方法298797检查通过（`candidate-01431-final-fantom-r1.log`，140.061秒），239个后端文件与测试开始清单一致。前端284个src/test文件与022完全相同，显式复用437单测/33个不同受控浏览器用例；031类型/Vite构建新执行20.53秒，不能称031新原生浏览器通过。
 - Q1/年度完整快照、报告、警告、质量、覆盖、原来源数组顺序及生产TS解码与冻结030等价；仍按原始固定观察时刻与103窗口/82源向量，不是FIN实机性能。Q1 12.005秒、峰191545；年度28.089秒、峰188670。临时所有权和raw关闭后归零；824条prepared描述计费按原定义保留。另与改造前独立bulk二进制结果比较32组/7520条明细、values/units、summary/previous完整JSON一致，SHA均 `EE241D1B71B61700FE024521E70833FB61774A93430D162A82E6C9290801802D`，见 `cleaning-step-031-independent-equivalence.json`。
 - 架构师已只读核对四文件算术、生命周期、单位/NA/Inf、32+50工作空间和Stream计数/捕获顺序，无阻断；未由架构聊天执行编译或现场操作。031尚未部署；实际年度9/9及最终同PID30分钟、49条款收尾待继续。不提高30秒/200000条/8MiB、50k块/200k原始/20m扫描限制；未写现场业务配置、设备点位或历史。只读账号依用户暂缓，原生打印人工检查仍待，受控PDF不能替代。
+
+
+## 0.14.31 实机与 0.14.32 报告所有权转换（2026-11-05 07:57）
+
+- 0.14.31 / fe723cb7a1e91fa4e46a4801a5380a8d5f800986 / Pod `3AABFB75F7AE8870FC3FF814DEBC06D1423E550283C5C31A0932A6CCC08EBAFB` 已正常部署，唯一 -noAuth Java6580/launcher21372；原生九查询8/9。此次zeda全站年度26.218秒内完成所有历史和SourceSession.load，随后422 PREPARED_READ_LIMIT准确发生于 `Faces.time:34 → face-daily → freezeOwnedReport → Freezer.copy:66` 的最终immutable报告准入，不是heatmap（该调用在Faces.time:39）。030共享清洗事实已走过，不能把031失败继续说成Stream timeout。其余8组本版生产TS解码、固定4816/2799.549228与双语Excel、24份HTTP资源核对通过；证据 `live-0.14.31-20261105/annual-failure-finalizer.txt`。误取的上一条030 census已保留并改名为 `prior-030-census-before-finalizer-failure.txt`，不作031新census。
+- 先离线定量，未盲试：Q1全部ordinary `publicReportEntries`等于现cap，不能通过收紧保守上界解决；mutable protected borrowed图每当前报告仅80条/参照19条，不以新增缓存协议扩大改面。未实施cache、heatmap预冻结、all-report compaction或in-place builder方案；这几条研究不作为修复证据。
+- 032只在Scope-owned且已退休私有reducer的报告启用显式 `consumeParentBeforeChildren`。Freezer先记pending identity，完整准入并dup私有builder，builder接住所有原children后才浅clear原parent并释放其size字段/元素费；从builder递归替换immutablechild；新immutable图仍完整准入。旧空header及child图继续原owner付费；无原位修改或提前退实际live图。generic/header/payload默认postorder保持；新增flag工作空间由16增至17。别名仍同memo，cycle仍pending拒绝，protected图不清除；异常finally先断builder/memo/work，producer剩余及部分immutable仍分别留到原close，无部分report发表。
+- 宽daily形状2000 distinct rows＋peer仅剩11000条空间：旧031在同copy66真实资源RED，032成功、峰199045，producer仍保留2039条空header/control费到close。补全ordered/unordered碰撞键、typed list、distinct-equal与alias、循环、protected RO/direct descendant、默认postorder及必须显式early参数。原错误和未采用热力图RED独立保留，后者不宣称为此次修复因果证据。
+- 最终全量122类989方法298842检查通过（`candidate-01432-final-fantom-r1.log`，140.825秒）；239个后端文件与测试前清单一致。Q1/年度完整报告、模块、质量、覆盖、警告、source数组顺序和生产TS解码与冻结031等价；11.269秒/24.752秒、峰191545/188670，临时/root raw关闭归零；不是现场性能证明。独立原bulk32组/7520明细JSON继续同SHA EE241D1B...1802D。前端284文件与022相同，437单测/33不同受控UI按身份明确复用；032新type/Vite20.40秒，未作新原生浏览器声明。
+- 架构师只读复核收费/失败生命周期、Map.dup独立底层、alias/cycle/默认路径，无阻断。032尚待冻结部署及最终九查询、同PID30分钟、49条款和Linear收尾；30秒/200000条/8MiB等保护及每设备自身主点历史规则不变。只读账号依用户暂缓，原生打印人工检查仍待；未写现场业务配置、设备点位或历史。

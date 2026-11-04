@@ -235,13 +235,13 @@ internal class EnerCubixCockpitRequestScope
     snapshot=(Str:Obj?)EnerCubixCockpitFreeze.value(source,snapshotOwner);return snapshot
   }
   [Str:Obj?]? frozenReport(Str key) {checkContext(project,user);return frozenReports?.get(key)}
-  Str:Obj? freezeReport(Str key,Str:Obj? source,|Obj|? consume := null)
+  Str:Obj? freezeReport(Str key,Str:Obj? source,|Obj|? consume := null,Bool consumeParentBeforeChildren := false)
   {
     checkContext(project,user)
     cached:=frozenReports?.get(key);if(cached!=null) return cached
     if(reportOwner==null)
     {reportOwner=EnerCubixPreparedOwner(stream.state);reportOwner.hold(1);frozenReports=[:]}
-    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner,null,consume)
+    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner,null,consume,consumeParentBeforeChildren)
     reportOwner.hold(1);frozenReports[key]=value;return value
   }
   ** Only a completed registry work may consume its exclusive mutable result.
@@ -271,10 +271,11 @@ internal class EnerCubixCockpitRequestScope
       if(reportBorrows.containsKey(value)) return
       count:=value is Map ? ((Map)value).size : ((List)value).size
       if(value is Map) ((Map)value).clear;else ((List)value).clear
-      // Memoization precedes consumption; aliases receive the full target.
+      // The freezer has admitted its private builder and pending identity.
+      // Aliases still receive the complete target after this node finishes.
       // Keep the empty source header charged until its producer closes.
       producer.release(count)
-    })
+    },true)
   }
   private Void protectReportBorrow(Obj? value,IdentityHashMap borrowedGraph,EnerCubixPreparedOwner scratch)
   {

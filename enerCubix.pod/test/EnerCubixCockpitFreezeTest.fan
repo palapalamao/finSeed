@@ -4,6 +4,28 @@ using concurrent
 ** Copy ownership over already supplied fixture inputs, not complete request heap.
 class EnerCubixCockpitFreezeTest : Test
 {
+  Void testDefaultConsumeRemainsPostorderAndEarlyRetirementRequiresExplicitOptIn()
+  {
+    [false,true].each |early|
+    {
+      child:=Str:Obj?["value":12f];source:=Str:Obj?["child":child];expected:=source.toImmutable;order:=Str[,]
+      budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget)
+      try
+      {
+        result:=EnerCubixCockpitFreeze.value(source,output,null,|Obj value|
+        {order.add(value===source ? "parent" : "child");((Map)value).clear},early)
+        verifyEq(order,early ? ["parent","child"] : ["child","parent"])
+        verifyEq(result,expected);verify(result.isImmutable);verify(source.isEmpty);verify(child.isEmpty)
+      }
+      finally {output.close}
+      verifyEq(budget.temporary.val,0)
+    }
+    owner:=EnerCubixPreparedOwner(EnerCubixStreamBudget().state)
+    try {verifyErr(ArgErr#) {EnerCubixCockpitFreeze.value(["value":1],owner,null,null,true)}}
+    finally {owner.close}
+    verifyEq(owner.budget.temporary.val,0)
+  }
+
   Void testBorrowedFactsMustBeImmutableAndKeepTheOriginalContainerType()
   {
     budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget)
