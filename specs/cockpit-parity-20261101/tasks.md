@@ -143,3 +143,12 @@
 - bulk和cursor共用step。提取之前在旧compiled14上生成32配置/单位组合及7520条detail、items/summary/previous，提取后完整JSON相同，SHA均EE241D1B71B61700FE024521E70833FB61774A93430D162A82E6C9290801802D；不是新bulk/cursor互证。见cleaning-step-independent-equivalence.json。
 - 新四测试覆盖future detail为0但raw保留、82源+peer25k可生成当前帧、空历史不验证无效cfg、cfg准入/异常保留peer且全清自身。前两旧码RED，新码94检查GREEN；相关3类54方法2364检查通过。显式清根改动后再次完整122类947方法294552检查通过（lazy-cleaning-final-fantom-full.log，162.922秒）。Q1完整报告/模块、警告、质量、覆盖、生产解码与旧冻结结果等价（lazy-cleaning-final-q1-equivalence.json）。未提高测试时限。
 - 按消费清洗尚未部署，统一下一版本0.14.15；TS src/tests与最终14相同，前端431及29UI按源码身份明确复用，不能称15重跑。最终原生年度、30分钟、49条款仍待；只读用户暂缓，原生打印未验证。未写现场配置/采集/原始历史。
+
+
+## 0.14.15 实际结果及确定性开销优化（2026-11-04 23:32）
+
+- b17dedad / 0.14.15 / BE31843D879AC75947052FBFF47C396E273818B2F71EBAC5233EFC8A7B48F940（4808776B）于22:59实际部署；正常停原10108/8348/3212，备份B605后唯一-noAuth Java20640/launcher12204，FIN5停止，24HTTP资源一致，守卫15项模拟及WinPS预检/架构审阅通过。九查询仍8/9，但zeda-site已从prepared拒绝变30.047秒504；census推进09-02 21:00，峰188646，future cursorTotals为0/0/0，不再占派生空间。固定数值、双语Excel与其余8报告生产解码通过。该版本同实例1803.066秒181样本观察完成，仅属015，不替代下一候选。
+- 同payload只读JVM采样3份实际成功，30.016秒504，观察到Stream.pairs List.dup、ValueFold.add membership闭包及Stream.closeHour Map.dup；不是独立性能保证。第一次私有采样脚本编码错误在解析阶段退出，无ready/无查询/无attach，invalid文件保留；修正后标准RunAs、20640/ticks/BE318/唯一noAuth守卫通过才采样，没有更换附加技术或改FIN配置。
+- bf764ed3 + cc2e387c：cursor首次closeHour按真实容器1+4*N准入不可变DateTime预解析bounds，仍保留原字符串queries及完整重复/顺序；关闭先清内部/外部数组再退catalogcharge。只去新window返回knownUsage外层冗余dup；并把来源union、pair展开变等序for，保留原containsKey→hold→put、数值加法、base snapshot和最终unique。非空rules/exception及null tariff走原tariffBounds；明确无规则的非null费率直接生成同一新from/to Map，原a>hour短路保留。
+- 未实施推定的Map内容去重：TDD显示旧pairs真实重复序列并非预想，去重可能改变诊断预算，因此保留原行为。UTC及纽约春秋DST×flat/月阶梯绝对日期/年阶梯半小时时段9组，以冻结015原legacyPairs完整数组对照cached/uncached，均一致。预解析cache实际图计费64vs85的RED保留，修正1+4*N后GREEN；不是漏算容器规避容量。
+- 最终6类55方法2439检查、完整122类949方法294620检查（158.978秒）和旧010完整Q1报告/警告/质量/诊断/覆盖/生产解码对账通过。Q1约13.429秒，不能当作现场年度性能成功。后端冻结cc2e387c；统一下一版016，TS src/tests与已验14/15物理相同，431/29按明确同源复用，未重复全量UI。下一步实际年度+最终同实例30分钟；未改现场业务/采集/原始历史，原生打印未验、只读用户暂缓。
