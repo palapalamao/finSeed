@@ -2,6 +2,7 @@ import type {ReportResult} from './types';
 import type {CockpitBudget,RuleEvaluation} from './cockpitConfig';
 
 export type CockpitFace='space'|'time'|'endUse'|'organization'|'balance'|'efficiency';
+export const cockpitEnabled=true;
 export const cockpitModules=['kpis','space','trend','time','endUse','organization','balance','efficiency','issues'] as const;
 export interface CockpitScope {dimension:'space'|'metering'|'organization';nodeIds:string[];selectionIntent:'range'|'explicitObjects'}
 export interface CockpitAreaSource {id:string;name:string;area:number|null;source:'space'|'custom';nativeRef:string|null;mod:string|null;nativeArea:null|{nativeRef:string;mod:string|null;tag:'area';value:number|null;unit:string|null;areaM2:number|null}}

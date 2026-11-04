@@ -15,9 +15,9 @@ import {NativeEquipEnrollDrawer} from './NativeEquipEnrollDrawer';
 import {MeterManager} from './MeterManager';
 import {OtherSettings} from './OtherSettings';
 import {SpaceAssets} from './SpaceAssets';
-export type ManageView='budgets'|'ruleProfiles'|'spaceAssets'|'tree'|'categories'|'tariffs'|'calendars'|'expressions'|'copConfig'|'templates'|'settings'|'otherSettings'|'bindings'|'tasks';
+import {manageTitles,type ManageView} from './managementNavigation';
+export {manageTitles,type ManageView} from './managementNavigation';
 export const manageKinds:Record<ManageView,Kind[]>= {budgets:[],ruleProfiles:[],spaceAssets:[],tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
-export const manageTitles:Record<ManageView,string>={get budgets(){return t('月度预算配置');},get ruleProfiles(){return t('核查规则配置');},spaceAssets:t("空间素材配置"),tree:t("计量对象管理"),categories:t("能源分类与分项"),tariffs:t("费率管理"),calendars:t("日历与时段"),expressions:t("计算公式"),copConfig:t("COP 配置"),templates:t("报表模板"),settings:t("概览设置"),otherSettings:t("其他配置"),bindings:t("参考点绑定"),tasks:t("计算与报警任务")};
 export function treeData(records:EnerCubixRecord[],query=''):DataNode[]{
  const nodes=records.filter(record=>nodeKinds.includes(record.kind));
  const build=(parentId:string|undefined,path:Set<string>):DataNode[]=>nodes.filter(record=>(record.parentId||undefined)===parentId).filter(record=>!path.has(record.id!)).map(record=>{const children=build(record.id,new Set([...path,record.id!]));return {key:record.id!,title:<span><span>{record.name}</span><span className="tree-kind">{names[record.kind]}</span></span>,children,isLeaf:!children.length};});

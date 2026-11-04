@@ -4,7 +4,7 @@ import type {CockpitFace,CockpitHeatmapCell,CockpitSnapshot} from './cockpitType
 import type {ReportSnapshot} from './types';
 import type {CockpitTargetKind} from './cockpitNavigation';
 import {cockpitOrganizationReport,cockpitReferencedReport} from './cockpitReport';
-import {ReportChart} from './ReportView';
+import {ReportChart} from './ReportChart';
 import {CockpitFlow} from './CockpitFlow';
 import {CockpitEfficiency} from './CockpitEfficiency';
 import {CockpitQuality} from './CockpitQuality';

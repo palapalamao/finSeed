@@ -1,24 +1,28 @@
 import {locale,t,serverMessage,subscribeLocale,localeSnapshot,type Locale} from './i18n';
-import {useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {lazy,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {Alert,Button,ConfigProvider,Drawer,Empty,Layout,Space,Spin,Tabs,Tag} from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import {BarChartOutlined,BellOutlined,DashboardOutlined,FileTextOutlined,MenuOutlined,ReloadOutlined,SettingOutlined,UserOutlined} from '@ant-design/icons';
 import {projectFromLocation,EnerCubixApi} from './api';
-import {MessageCenter} from './MessageCenter';
-import {Management,manageTitles,type ManageView} from './Management';
-import {ReportWorkspace} from './ReportWorkspace';
+import {manageTitles,type ManageView} from './managementNavigation';
+import {PageBoundary} from './PageBoundary';
 import {analysisGroups} from './navigation';
 import {BrandMark} from './brand';
 import {type Catalog,type ReportKind,type ReportRequest,type FinPoint} from './types';
 import {version as uiVersion} from '../package.json';
 import {LanguageSwitcher} from './LanguageSwitcher';
-import {CockpitPage,cockpitEnabled} from './CockpitPage';
+import {cockpitEnabled} from './cockpitTypes';
 import {CockpitReturnStore,createNavigation,decodeNavigation,encodeNavigation,readableNavigation,projectCockpitReport,type NavigationContextV1,type CockpitViewState} from './cockpitNavigation';
 import type {CockpitSnapshot} from './cockpitTypes';
 import {buildReportDisplay} from './reportDisplay';
 
 const startupLocale=locale;
+const loadCockpit=()=>import('./CockpitPage').then(module=>({default:module.CockpitPage}));
+const loadManagement=()=>import('./Management').then(module=>({default:module.Management}));
+const loadMessages=()=>import('./MessageCenter').then(module=>({default:module.MessageCenter}));
+const loadWorkspace=()=>import('./ReportWorkspace').then(module=>({default:module.ReportWorkspace}));
+const CockpitPage=lazy(loadCockpit),Management=lazy(loadManagement),MessageCenter=lazy(loadMessages),ReportWorkspace=lazy(loadWorkspace);
 const componentLocales:Record<Locale,typeof zhCN>={'zh-CN':zhCN,'en-US':enUS};
 type View=ReportKind|ManageView|'messages'|'cockpit';
 const management:ManageView[]=['tree','categories','tariffs','calendars','expressions','copConfig','bindings','templates','tasks','settings','otherSettings','spaceAssets','budgets','ruleProfiles'];
@@ -33,6 +37,8 @@ export function App(){
  const productName=t('能源魔方'),productTagline=t('楼宇能源分析');
  const[project,setProject]=useState(()=>projectFromLocation(location));
  const[view,setView]=useState<View>(readView);
+ // Start the selected page download alongside catalog I/O, after FIN locale initialization.
+ useEffect(()=>{void (view==='cockpit'?loadCockpit():view==='messages'?loadMessages():management.includes(view as ManageView)?loadManagement():loadWorkspace()).catch(()=>{});},[view]);
  const[templateId,setTemplateId]=useState(readTemplate);
  const[catalog,setCatalog]=useState<Catalog|null>(null);
  const[loading,setLoading]=useState(true);
@@ -95,7 +101,9 @@ export function App(){
      {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开能源魔方以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/enerCubix/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame" inert={exportLocked}>
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
+      <PageBoundary key={view}>
       {sessionExpired?<Alert type="error" message={t('FIN 会话已失效，请在 FIN 中重新登录。')}/>:routeNavigation&&(!context||!navigationAllowed)?<Alert type="warning" message={t('返回条件无效或对象已不可读，请重新选择统计范围。')} action={<Button onClick={()=>navigate('cockpit')}>{t('重新选择范围')}</Button>}/>:view==='cockpit'?<CockpitPage onExportLock={setExportLocked} initialView={context&&navigationAllowed?{focusObjectId:context.focusObjectId,selectedFace:context.selectedFace,presentationMode:context.presentationMode,scrollY:context.scrollAnchor}:undefined} key={project+(context?.returnToken||'')} initialRequest={context?.appliedContext} restored={restored} onDrill={drill} onSnapshot={syncSnapshot} api={api!} catalog={catalog} onLegacy={()=>navigate('dashboard')} onConfigure={()=>navigate('tree')} onConfigureAssets={()=>navigate('spaceAssets')}/>:view==='messages'?<MessageCenter eventId={new URLSearchParams(location.hash.split('?')[1]||'').get('eventId')||undefined} api={api!} canWrite={catalog.user.canWrite} records={catalog.records}/>:configView?<Management key={view} view={view as ManageView} api={api!} catalog={catalog} reload={reload} onOpenTemplate={record=>{const request=record.request as ReportRequest;if(request&&reportViews.includes(request.kind))navigate(request.kind,record.id);}}/>:<ReportWorkspace key={project+(context?.returnToken||'')+(context?view:'')} initialRequest={context?.targetKind===view?context.targetRequest:undefined} initialSnapshot={initialReportSnapshot} navigationContext={context} configurationChanged={restored?.configurationChanged} onReturn={context?returnToCockpit:undefined} initialTemplateId={templateId} kind={view as ReportKind} api={api!} catalog={catalog} reload={reload} navigate={navigate}/>}
+      </PageBoundary>
      </div>
     </>}
    </Layout.Content>

@@ -12,7 +12,7 @@ import {reportLabel,isReportBusinessKey,reportCellText} from './reportDisplay';
 import type {ReportSnapshot} from './types';
 import {freezeCockpitExport,cockpitExportTables,cockpitPrintEvidence,exportCockpitXlsx,exportCockpitJson,type CockpitExport} from './cockpitExports';
 
-import {ReportChart} from './ReportView';
+import {ReportChart} from './ReportChart';
 import {cockpitProfileSnapshot,cockpitReferencedReport,cockpitOrganizationReport} from './cockpitReport';
 import {cockpitCopSnapshot} from './cockpitEfficiencyProjection';
 import {cockpitBalanceSnapshot} from './cockpitFlowProjection';

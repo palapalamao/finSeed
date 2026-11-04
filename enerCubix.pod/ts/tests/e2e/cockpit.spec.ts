@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {installTransport,resultFor,type TransportState} from './fixtures';
+import {installTransport,openCockpitActions,resultFor,type TransportState} from './fixtures';
 import type {CockpitRequest,CockpitSnapshot} from '../../src/cockpitTypes';
 import type {ReportRequest} from '../../src/types';
 import {readFileSync} from 'node:fs';
@@ -32,7 +32,7 @@ for(const language of ['zh-CN','en-US']){
   await expect(page.locator('.cockpit-trend canvas')).toBeVisible();
   await page.screenshot({path:'test-results/cockpit-'+language+'-desktop.png',fullPage:true});
   expect(requests).toHaveLength(1);expect(requests[0]).toMatchObject({reportScope:{dimension:'space',nodeIds:['site']},time:{preset:'thisMonth'}});
-  await expect(page.locator('.cockpit-context')).toContainText('真实园区名称');
+  await expect(page.locator('.cockpit-project-line')).toContainText('真实园区名称');
   control.value=0;await page.getByRole('button',{name:language==='zh-CN'?'刷新数据':'Refresh data',exact:true}).click();
   await expect(page.locator('.cockpit-number')).toHaveText('0 kWh');
   control.status=500;await page.getByRole('button',{name:language==='zh-CN'?'刷新数据':'Refresh data',exact:true}).click();
@@ -41,7 +41,7 @@ for(const language of ['zh-CN','en-US']){
   await expect(page.getByText(language==='zh-CN'?'当前保留上次成功快照，范围和时间以此处标注为准。':'The previous successful snapshot is retained. Its scope and period are shown below.')).toBeVisible();
   const count=requests.length;await page.getByText(language==='zh-CN'?'查看趋势明细与数据来源':'View trend values and data sources',{exact:true}).click();
   await expect(page.locator('.cockpit-details')).toContainText('point1');expect(requests).toHaveLength(count);
-  await page.getByRole('button',{name:language==='zh-CN'?'旧版总览':'Legacy overview'}).click();
+  await openCockpitActions(page);await page.getByRole('button',{name:language==='zh-CN'?'旧版总览':'Legacy overview'}).click();
   await expect(page).toHaveURL(/#\/dashboard\?project=testproject/);
  });
  test('cockpit mobile layout and no-history state '+language,async({page})=>{

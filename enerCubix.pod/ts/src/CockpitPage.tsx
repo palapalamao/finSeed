@@ -6,7 +6,7 @@ import type {Catalog} from './types';
 import {cockpitModules,type CockpitFace,type CockpitRequest,type CockpitScope} from './cockpitTypes';
 import {CockpitQuery,defaultCockpitSelection,cockpitQueryError} from './cockpitQuery';
 import {dimensionRecords} from './dimensionTree';
-import {ReportChart} from './ReportView';
+import {ReportChart} from './ReportChart';
 import {locale,t} from './i18n';
 import {reportQualityText} from './reportQuality';
 import {cockpitProfileSnapshot,cockpitCompleteValue} from './cockpitReport';
@@ -31,7 +31,7 @@ import './cockpit.css';
 import './cockpitP01.css';
 
 // Keep the legacy dashboard route available throughout incremental delivery.
-export const cockpitEnabled=true;
+export {cockpitEnabled} from './cockpitTypes';
 function time(value:string|null|undefined){return value?value.replace('T',' '):t('暂无数据');}
 export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,initialRequest,restored,initialView,onDrill,onSnapshot,onExportLock}:{onExportLock?:(value:boolean)=>void;initialView?:{focusObjectId?:string;selectedFace:CockpitFace;presentationMode:boolean;scrollY:number};onSnapshot?:(snapshot:import('./cockpitTypes').CockpitSnapshot,view:CockpitViewState)=>void;initialRequest?:CockpitRequest;restored?:CockpitReturnState;onDrill:(navigation:NavigationContextV1,snapshot:import('./cockpitTypes').CockpitSnapshot,view:CockpitViewState)=>void;api:EnerCubixApi;catalog:Catalog;onLegacy:()=>void;onConfigure:()=>void;onConfigureAssets?:()=>void}){
  const selection=useMemo(()=>defaultCockpitSelection(catalog),[catalog]);

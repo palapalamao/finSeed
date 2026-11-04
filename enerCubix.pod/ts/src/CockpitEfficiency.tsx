@@ -2,7 +2,7 @@ import {Alert,Button,Empty} from 'antd';
 import type {CockpitSnapshot} from './cockpitTypes';
 import {cockpitCopSnapshot} from './cockpitEfficiencyProjection';
 import {cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
-import {ReportChart} from './ReportView';
+import {ReportChart} from './ReportChart';
 import {locale,t} from './i18n';
 export function CockpitEfficiency({snapshot,onOpen,name}:{snapshot:CockpitSnapshot;onOpen:(id:string)=>void;name:(id:string)=>string}){
  const items=snapshot.modules.efficiency?.data?.items||[];

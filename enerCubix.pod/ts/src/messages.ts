@@ -1,6 +1,9 @@
 // Application-owned text only. Project names and source data remain unchanged.
 // Physical-boundary comparison controls and frozen report metadata.
 export const englishMessages:Record<string,string> = {
+"正在加载页面…":"Loading page…",
+"页面加载失败，请重新加载。":"The page could not be loaded. Reload to try again.",
+"重新加载页面":"Reload page",
 "暂无数据":"No data",
 "驾驶舱响应与当前查询不一致，请重新查询。":"The cockpit response does not match the current query. Run the query again.",
 "无法读取驾驶舱，请检查当前 FIN 会话。":"Unable to load the cockpit. Check the current FIN session.",
