@@ -1,4 +1,5 @@
 import {Tag} from 'antd';
+import {Fragment} from 'react';
 import type {CockpitMetric,CockpitSnapshot} from './cockpitTypes';
 import {cockpitCards,cockpitComparisonText,cockpitConclusionText,cockpitMetricTitle,cockpitMetricValue,cockpitReasonText} from './cockpitMetrics';
 import {locale,t} from './i18n';
@@ -12,6 +13,14 @@ function basis(metric:CockpitMetric):string{
  return metric.id==='cost'?t('完整区间费用'):metric.id==='co2'?t('完整区间碳排放'):metric.id==='areaIntensity'?t('完整区间单位面积用量'):t('完整区间用量');
 }
 const time=(value:string)=>value.replace('T',' ');
+function metricValue(metric:CockpitMetric){
+ const text=cockpitMetricValue(metric);
+ if(metric.id!=='cost'||metric.valueType!=='number')return text;
+ const group=new Intl.NumberFormat(locale).formatToParts(1000).find(part=>part.type==='group')?.value;
+ if(!group)return text;
+ const parts=text.split(group);
+ return parts.map((part,index)=><Fragment key={index}>{part}{index<parts.length-1&&<>{group}<wbr/></>}</Fragment>);
+}
 export function CockpitKpis({snapshot,name}:{snapshot:CockpitSnapshot;name:(id:string)=>string}){
  const metrics=cockpitCards(snapshot),conclusions=snapshot.modules.kpis?.data?.conclusions||[];
  return <>
@@ -20,7 +29,7 @@ export function CockpitKpis({snapshot,name}:{snapshot:CockpitSnapshot;name:(id:s
    {metrics.map(metric=><section key={metric.id} className={'cockpit-kpi'+(metric.id==='energy'?' cockpit-energy':'')} data-metric={metric.id} aria-label={cockpitMetricTitle(metric.id)}>
     <h3>{cockpitMetricTitle(metric.id)}</h3>
     {metric.id==='auxiliaryEnergy'&&metric.categoryId&&<p className="cockpit-card-category">{name(metric.categoryId)}</p>}
-    <p className={metric.id==='energy'?'cockpit-number':'cockpit-card-number'}><span className="cockpit-value">{cockpitMetricValue(metric)}</span> <small>{metric.unit==='count'?t('个'):metric.unit}</small></p>
+    <p className={metric.id==='energy'?'cockpit-number':'cockpit-card-number'}><span className="cockpit-value">{metricValue(metric)}</span> <small>{metric.unit==='count'?t('个'):metric.unit}</small></p>
     <Tag className="cockpit-card-basis" color={['complete','currentState'].includes(metric.valueBasis)?'green':'gold'}>{basis(metric)}</Tag>
     {metric.id!=='activeAlarms'&&metric.comparison&&<p className="cockpit-card-comparison">{cockpitComparisonText(metric)}</p>}
     <details className="cockpit-card-details"><summary>{t('查看指标依据')}</summary>{metric.id==='activeAlarms'&&<p>{t('状态观察：{0}',metric.stateObservedAt?time(metric.stateObservedAt):t('暂无数据'))}</p>}{metric.id==='cost'&&<p>{t('按当前费率分析估算，非结算账单。')}</p>}{!!metric.reasonCodes?.length&&<p>{[...new Set(metric.reasonCodes.map(cockpitReasonText))].join(t('；'))}</p>}
