@@ -102,7 +102,7 @@ internal class EnerCubixKnownUsage
   {
     if(detailLimit<0 || detailLimit>1000) throw ArgErr("knownDetailLimit")
     values:=EnerCubixValue[,]; details:=[Str:Obj?][,]; cursor:=start; covered:=0f; count:=0
-    DateTime? coverageStart:=null; DateTime? coverageEnd:=null; closedHour:=true
+    DateTime? coverageStart:=null; DateTime? coverageEnd:=null; closedHour:=true;containsSubstitution:=false;continuous:=true
     lo:=0; hi:=rows.size
     while (lo < hi) { mid:=(lo+hi)/2; if (rows[mid].start < start) lo=mid+1; else hi=mid }
     for (i:=lo;i<rows.size && rows[i].start < end;i++)
@@ -112,8 +112,10 @@ internal class EnerCubixKnownUsage
       // queryEnd is the query/as-of bound, never a fabricated bucket boundary.
       if (row.end > queryEnd) continue
       if (row.start < cursor) return ["value":EnerCubixValue(null,"invalidConfiguration",history.sources),"intervals":details,"coveredSeconds":covered]
-      if (row.start > cursor) values.add(EnerCubixValue(null,"missing",history.sources))
+      if (row.start > cursor) {values.add(EnerCubixValue(null,"missing",history.sources));if(includeRuleFacts) continuous=false}
+      if(includeRuleFacts && row.end>end) continuous=false
       q:=row.valueType == "na" ? "na" : row.quality
+      if(includeRuleFacts && q=="substituted") containsSubstitution=true
       if (row.value == null && ["ok","good","derived","estimated","cleaned","corrected"].contains(q)) q="missing"
       if(includeRuleFacts && (row.value == null || row.end > end || !["ok","cleaned","corrected"].contains(q))) closedHour=false
       values.add(EnerCubixValue(row.value,q,history.sources)); cursor=row.end
@@ -132,6 +134,7 @@ internal class EnerCubixKnownUsage
     // Business eligibility is proven over every source interval, before either
     // the local or request-wide diagnostic capture can discard interval rows.
     if(includeRuleFacts && closedHour && count > 0 && covered == 3600f && end-start == 1hr) out["_closedOwnPrimaryHour"]=true
+    if(includeRuleFacts && (containsSubstitution || (continuous && cursor==end && count>0 && covered==3600f && end-start==1hr))) out["_containsSubstitutedIntervals"]=containsSubstitution
     return out
   }
 

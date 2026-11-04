@@ -7,14 +7,28 @@ class EnerCubixValueFoldTest : Test
     fold:=EnerCubixValueFold.strict(owner)
     initial:=owner.entries
     fold.add(EnerCubixValue(1f,"ok",["p"]))
-    verifyEq(owner.entries,initial+1)
+    verifyEq(owner.entries,initial,"a single source fits the already-owned scalar field without a map")
     fold.add(EnerCubixValue(2f,"ok",["p"]))
-    verifyEq(owner.entries,initial+1)
+    verifyEq(owner.entries,initial)
     result:=fold.finish;owner.close
     verifyEq(result.value,3f);verifyEq(result.sources,["p"]);verifyEq(budget.temporary.val,13)
     verifyErr(ArgErr#) {fold.add(EnerCubixValue(1f,"ok"))}
     verifyErr(ArgErr#) {fold.finish}
     budget.releaseTemporary(13)
+  }
+  Void testSecondSourceAdmitsItsOrderedMapBeforePublishingAndKeepsPeerOwnership()
+  {
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget)
+    fold:=EnerCubixValueFold.known(owner);input:=["p"]
+    fold.add(EnerCubixValue(1f,"ok",input));input.clear
+    first:=fold.finish;first.sources.add("caller-only");verifyEq(fold.finish.sources,["p"])
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining-2);held:=peer.entries;ownHeld:=owner.entries
+    verifyErr(EnerCubixHttpErr#) {fold.add(EnerCubixValue(2f,"ok",["q"]))}
+    verifyEq(owner.entries,ownHeld);verifyEq(peer.entries,held)
+    verifyValue(fold.finish,1f,"ok",["p"])
+    peer.close;fold.add(EnerCubixValue(2f,"ok",["q","p","r"]))
+    verifyValue(fold.finish,3f,"ok",["p","q","r"])
+    result:=fold.finish;owner.close;verifyEq(result.sources,["p","q","r"]);verifyEq(budget.temporary.val,0)
   }
   Void testIndependentStrictAndKnownExpectedStates()
   {

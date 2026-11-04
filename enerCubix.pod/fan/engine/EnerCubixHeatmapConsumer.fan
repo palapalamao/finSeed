@@ -7,11 +7,11 @@ internal class EnerCubixHeatmapConsumer
   {
     if(state === output || state.budget !== output.budget || to<=from || definition.ratio || definition.gauge || !definition.ticks.isEmpty) throw ArgErr("heatmapConsumerPlan")
     line=definition;this.from=from;this.to=to;this.cutoff=cutoff;at=from;this.state=state;this.output=output
-    state.watch |->Void| {closeDay(false);line=null;stateClosed=true};state.hold(18)
+    state.watch |->Void| {closeDay(false);previousSources=null;line=null;stateClosed=true};state.hold(19)
     output.watch |->Void|
     {
       cells.each |row| {((List)row["sourceIds"]).clear;row.clear};excluded.each |row| {row.clear}
-      cells.clear;excluded.clear;data.clear;outputClosed=true
+      cells.clear;excluded.clear;data.clear;previousSources=null;outputClosed=true
     }
     output.hold(5);data=Str:Obj?["heatmap":cells,"excludedDays":excluded]
   }
@@ -28,6 +28,8 @@ internal class EnerCubixHeatmapConsumer
   private [Str:Obj?][] cells := [,]
   private [Str:Obj?][] excluded := [,]
   private Str:Obj? data := [:]
+  // Borrow one vector already owned by this output, never a source-frame list.
+  private Str[]? previousSources
   private Bool stateClosed := false
   private Bool outputClosed := false
   private Bool done := false
@@ -91,20 +93,22 @@ internal class EnerCubixHeatmapConsumer
       {
         ids:=(List)p["sourceIds"];seen:=false
         for(j:=0;j<i;j++) {if(pending[j]["sourceIds"]==ids) {seen=true;break}}
-        // Every hourly cell keeps its full map and list link. Only equal,
-        // ordered source vectors within this one day share the same array.
-        entries+=11+(seen ? 0 : 1+ids.size)
+        // Every cell retains its full map/link. An equal ordered vector from
+        // the preceding complete day is already admitted by this same output.
+        entries+=11+(seen || previousSources==ids ? 0 : 1+ids.size)
       }
       output.hold(entries)
       firstCell:=cells.size
       pending.each |p,i|
       {
         ids:=(List)p["sourceIds"]
-        for(j:=0;j<i;j++) {if(pending[j]["sourceIds"]==ids) {ids=(List)cells[firstCell+j]["sourceIds"];break}}
+        if(previousSources==ids) ids=previousSources
+        else for(j:=0;j<i;j++) {if(pending[j]["sourceIds"]==ids) {ids=(List)cells[firstCell+j]["sourceIds"];break}}
         ts:=DateTime.fromIso(p["ts"].toStr).toTimeZone(from.tz)
         cells.add(["seriesId":line.id,"nodeId":line.nodeId,"date":date.toStr,"hour":ts.hour,"ts":p["ts"],"value":p["value"],"unit":line.unit,"quality":p["quality"],"sourceIds":ids])
       }
       closeDay(true,firstCell)
+      previousSources=(Str[])cells.last["sourceIds"]
     }
     else {output.hold(5);excluded.add(Str:Obj?["seriesId":line.id,"date":date.toStr,"reasonCode":"INCOMPLETE_DAY"]);closeDay(false)}
   }

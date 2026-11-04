@@ -2,7 +2,7 @@ using [java] java.util::IdentityHashMap
 
 class EnerCubixHeatmapConsumerTest : Test
 {
-  Void testCompleteDaySharesOnlyEqualOrderedSourceVectorsWithinItsOutputOwner()
+  Void testCompleteDaysShareOnlyEqualOrderedSourceVectorsWithinTheirOutputOwner()
   {
     at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
     budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
@@ -13,7 +13,7 @@ class EnerCubixHeatmapConsumerTest : Test
     try
     {
       verifyEq(cells.size,48);verify(cells[0]["sourceIds"]===cells[23]["sourceIds"])
-      verify(cells[24]["sourceIds"]===cells[47]["sourceIds"]);verify(cells[0]["sourceIds"]!==cells[24]["sourceIds"],"days have independent owner transfers")
+      verify(cells[24]["sourceIds"]===cells[47]["sourceIds"]);verify(cells[0]["sourceIds"]===cells[24]["sourceIds"],"completed days borrow an equal source vector already owned by this output")
       cells.each |row,i| {verifyEq(row["value"],i.toFloat);verifyEq(row["sourceIds"],ids);verifyEq(row["hour"],i%24)}
       verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()),"charge every actual map/list entry exactly once")
       state.close;verifyEq(cells[23]["sourceIds"],ids)
@@ -29,6 +29,28 @@ class EnerCubixHeatmapConsumerTest : Test
     if(value is Map) ((Map)value).each |v| {n+=graphEntries(v,seen)}
     else ((List)value).each |v| {n+=graphEntries(v,seen)}
     return n
+  }
+
+  Void testExcludedDaysDoNotClearEarlierSourcesAndChangedOrderStaysDistinct()
+  {
+    at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
+    budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget)
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+96hr,at+96hr,state,output)
+    ids:=["p","q"];reverse:=["q","p"]
+    (0..<96).each |i|
+    {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i==29 ? null : i.toFloat,i==29 ? "missing" : "ok",i<72 ? ids : reverse)))}
+    data:=consumer.finish;cells:=EnerCubixMath.maps(data["heatmap"])
+    verifyEq(cells.size,72);verifyEq(EnerCubixMath.maps(data["excludedDays"]).size,1)
+    verify(cells[0]["sourceIds"]===cells[24]["sourceIds"])
+    verify(cells[0]["sourceIds"]!==cells[48]["sourceIds"])
+    verifyEq(cells[0]["sourceIds"],ids);verifyEq(cells[48]["sourceIds"],reverse)
+    verifyEq(cells[24]["value"],48f);verifyEq(cells[48]["value"],72f)
+    verifyEq(output.entries,5+graphEntries(data,IdentityHashMap()))
+    ids.clear;reverse.clear;verifyEq(cells[0]["sourceIds"],["p","q"])
+    peer:=EnerCubixPreparedOwner(budget);peer.hold(budget.remaining);held:=peer.entries
+    state.close;verifyEq(cells[24]["sourceIds"],["p","q"])
+    output.close;verify(data.isEmpty);verifyEq(budget.temporary.val,held)
+    peer.close;verifyEq(budget.temporary.val,0)
   }
 
   Void testOrderedAndEmptySourceVectorsKeepAllHourlyCells()
@@ -72,8 +94,8 @@ class EnerCubixHeatmapConsumerTest : Test
   {
     at:=DateTime.fromIso("2026-01-01T00:00:00Z");line:=EnerCubixLine("a|c","a","A","c","kWh")
     budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());state:=EnerCubixPreparedOwner(budget);output:=EnerCubixPreparedOwner(budget);target:=EnerCubixPreparedOwner(budget)
-    consumer:=EnerCubixHeatmapConsumer(line,at,at+24hr,at+24hr,state,output)
-    (0..<24).each |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",["p","q"])))}
+    consumer:=EnerCubixHeatmapConsumer(line,at,at+48hr,at+48hr,state,output)
+    (0..<48).each |i| {consumer.add(EnerCubixTick(at+1hr*i,at+1hr*(i+1),EnerCubixValue(i.toFloat,"ok",["p","q"])))}
     data:=consumer.finish
     try
     {
@@ -84,7 +106,7 @@ class EnerCubixHeatmapConsumerTest : Test
         output.release(count)
       })
       verifyEq(output.entries,5);state.close;output.close
-      cells:=(List)frozen["heatmap"];verifyEq(cells.size,24)
+      cells:=(List)frozen["heatmap"];verifyEq(cells.size,48)
       cells.each |Map cell,i| {verifyEq(cell["value"],i.toFloat);verifyEq(cell["sourceIds"],["p","q"])}
       verify(((Map)cells.first)["sourceIds"]===((Map)cells.last)["sourceIds"])
     }

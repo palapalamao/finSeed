@@ -1,12 +1,27 @@
 import {describe,expect,it,vi} from 'vitest';
 vi.mock('haystack-nclient',()=>({finCsrfFetch:vi.fn()}));
 import {ApiError} from './api';
-import {CockpitQuery,defaultCockpitSelection} from './cockpitQuery';
+import {CockpitQuery,defaultCockpitSelection,accessibleCockpitSiteIds} from './cockpitQuery';
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
 export const request=(id:string):CockpitRequest=>({schemaVersion:1,requestId:id,reportScope:{dimension:'space',nodeIds:['site'],selectionIntent:'range'},focusCategoryId:'electricity',time:{preset:'thisMonth',period:'day'},modules:['kpis','trend']});
 export const snapshot=(id:string):CockpitSnapshot=>({schemaVersion:1,snapshotId:'snapshot-'+id,requestId:id,generatedAt:'2026-10-31T14:37:03+08:00',context:{project:'test',projectTimeZone:'Asia/Shanghai',reportScope:request(id).reportScope,focusCategoryId:'electricity',time:{preset:'thisMonth',period:'day',from:'2026-10-01T00:00:00+08:00',to:'2026-10-31T14:37:00+08:00'},asOf:'2026-10-31T14:37:00+08:00'},provenance:{configFingerprint:'config',relationshipBasis:'currentConfiguration',historyBasis:'ownPrimaryPointRaw',historyObservedFrom:'2026-10-31T14:37:00+08:00',historyObservedTo:'2026-10-31T14:37:02+08:00',sourceLastObservedAt:null,configRefs:[]},boundary:{id:'b',meterIds:['meter'],sourcePointIds:['primary'],aggregateAllowed:true,overlaps:[],excluded:[]},modules:{kpis:{status:'partial',data:{values:[{id:'energy',categoryId:'electricity',value:0,valueType:'number',unit:'kWh',quality:'partial',valueBasis:'knownSubtotal',completeValue:null,knownValue:0,sourceIds:['primary']}],conclusions:[]}}},reports:{},quality:[],capabilities:{canRead:true,canManage:false,availableFaces:[]},limitations:[]});
 function deferred<T>(){let resolve!:(value:T)=>void,reject!:(reason:Error)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
+
+it('uses only actual accessible site IDs for the all-sites draft while preserving the single-site default',()=>{
+ const catalog:Catalog={project:'local',version:'test',user:{name:'reader',canWrite:false},records:[
+  {id:'north',kind:'space',name:'North',nativeSourceKind:'site'},
+  {id:'south',kind:'space',name:'South',nativeSourceKind:'site'},
+  {id:'north',kind:'space',name:'Duplicate',nativeSourceKind:'site'},
+  {id:'hidden',kind:'space',name:'Hidden',nativeSourceKind:'site',nativeHidden:true},
+  {id:'floor',kind:'space',name:'Floor',parentId:'north',nativeSourceKind:'floor'},
+  {id:'c',kind:'category',name:'Electricity',unit:'kWh'},
+  {id:'m',kind:'meter',name:'M',categoryId:'c',pointId:'p'}
+ ]};
+ const before=structuredClone(catalog);expect(accessibleCockpitSiteIds(catalog)).toEqual(['north','south']);
+ expect(defaultCockpitSelection(catalog)?.scope.nodeIds).toEqual(['north']);expect(catalog).toEqual(before);
+ expect(accessibleCockpitSiteIds({...catalog,records:catalog.records.filter(record=>record.nativeSourceKind!=='site')})).toEqual([]);
+});
 
 describe('cockpit submitted contexts',()=>{
  it('keeps the latest request even when an aborted transport resolves late',async()=>{

@@ -67,7 +67,7 @@ internal class EnerCubixCockpitRules
     {
       dim:=EnerCubixDimension(q["dimension"].toStr,records,q["spaceSource"] == "fin")
       ctx:=EnerCubixContext(dim.records,EnerCubixCockpitMetrics.histories(q,histories),tz,dim);ctx.calendar=calendar
-      valid:=0;invalid:=0;triggerCount:=0;off:=0;Float? maximum:=null
+      valid:=0;invalid:=0;triggerCount:=0;off:=0;substituted:=0;unknownSubstitution:=0;Float? maximum:=null
       cursor:=EnerCubixMath.floorHour(from)
       while(cursor < end)
       {
@@ -75,19 +75,22 @@ internal class EnerCubixCockpitRules
         next:=cursor+1hr
         if(!ctx.working(cursor.toTimeZone(tz),false) || !ctx.working(cursor.toTimeZone(tz),true))
         {
-          off++;values:=EnerCubixValue[,];reliable:=cursor >= from && next <= end
+          off++;values:=EnerCubixValue[,];completeHour:=cursor >= from && next <= end;reliable:=completeHour;hadSubstitution:=false;substitutionUnknown:=false
           EnerCubixMath.strings(boundary["meterIds"]).each |id|
           {
             r:=ctx.byId[id];h:=ctx.byPoint[r?.get("pointId") as Str ?: ""]
-            if(r == null || h == null || !EnerCubixBudgetScope.readable(r)) {reliable=false;return}
+            if(r == null || h == null || !EnerCubixBudgetScope.readable(r)) {reliable=false;substitutionUnknown=true;return}
             value:=ctx.node(id,category,cursor,next)
             evidence:=h.knownUsage(cursor,next,end,true);intervals:=EnerCubixMath.maps(evidence["intervals"])
+            subState:=completeHour ? substitutionEvidence(evidence,intervals,cursor,next,value.quality) : 2
+            hadSubstitution=hadSubstitution || subState==1;substitutionUnknown=substitutionUnknown || subState==2
             proven:=evidence["_closedOwnPrimaryHour"] == true
             completeDetails:=evidence["detailsTruncated"] != true && !intervals.isEmpty && intervals.all |i| {DateTime.fromIso(i["intervalStart"].toStr) >= cursor && DateTime.fromIso(i["intervalEnd"].toStr) <= next && ["ok","cleaned","corrected"].contains(i["quality"])}
             if(value.value == null || !["ok","cleaned","corrected"].contains(value.quality) || EnerCubixMath.num(evidence["coveredSeconds"]) != 3600f || (!proven && !completeDetails)) reliable=false
             values.add(value)
           }
           actual:=EnerCubixValue.sum(values).value
+          if(hadSubstitution) substituted++;if(substitutionUnknown) unknownSubstitution++
           if(!reliable || actual == null) invalid++
           else
           {
@@ -101,9 +104,20 @@ internal class EnerCubixCockpitRules
         }
         cursor=next
       }
-      out.setAll(["calendar":["id":calendar["id"],"mod":calendar["mod"],"workDays":calendar["workDays"],"workHours":calendar["workHours"],"exceptions":calendar["exceptions"]],"inputs":["validNonWorkingHours":valid,"unavailableNonWorkingHours":invalid,"nonWorkingHours":off,"triggerCount":triggerCount,"normalizedThreshold":normalized,"unit":unit,"coverageRequirement":"completeClosedOwnPrimaryIntervalsWithinActualHour"],"actual":maximum,"unit":unit,"formula":"completeOwnPrimaryHourUsage > normalizedThreshold","status":triggerCount > 0 ? "triggered" : (invalid > 0 ? "unavailable" : "notTriggered"),"reasonCodes":invalid > 0 ? ["RULE_HOURLY_EVIDENCE_INCOMPLETE"] : (off == 0 ? ["RULE_NO_NON_WORKING_HOURS"] : Str[,])])
+      out.setAll(["calendar":["id":calendar["id"],"mod":calendar["mod"],"workDays":calendar["workDays"],"workHours":calendar["workHours"],"exceptions":calendar["exceptions"]],"inputs":["validNonWorkingHours":valid,"unavailableNonWorkingHours":invalid,"nonWorkingHours":off,"triggerCount":triggerCount,"normalizedThreshold":normalized,"unit":unit,"coverageRequirement":"completeClosedOwnPrimaryIntervalsWithinActualHour","substitutedNonWorkingHours":substituted,"unknownSubstitutionNonWorkingHours":unknownSubstitution],"actual":maximum,"unit":unit,"formula":"completeOwnPrimaryHourUsage > normalizedThreshold","status":triggerCount > 0 ? "triggered" : (invalid > 0 ? "unavailable" : "notTriggered"),"reasonCodes":invalid > 0 ? ["RULE_HOURLY_EVIDENCE_INCOMPLETE"] : (off == 0 ? ["RULE_NO_NON_WORKING_HOURS"] : Str[,])])
     }
     finally {if(guard != null) guard.temporary.val=baseline}
+  }
+  ** Presence is provable even if diagnostics are truncated. Absence needs a
+  ** complete hour or the full original interval evidence. Unknown is not zero.
+  internal static Int substitutionEvidence(Str:Obj? evidence,[Str:Obj?][] intervals,DateTime from,DateTime to,Str quality := "")
+  {
+    count:=EnerCubixMath.num(evidence["intervalCount"]) ?: 0f
+    if(evidence["_containsSubstitutedIntervals"]==true || (quality=="substituted" && count>0f) || intervals.any |i| {i["quality"]=="substituted"}) return 1
+    if(evidence["_containsSubstitutedIntervals"]==false) return 0
+    if(evidence["_closedOwnPrimaryHour"]==true) return 0
+    if(EnerCubixMath.num(evidence["coveredSeconds"])==3600f && count>0f && evidence["detailsTruncated"]!=true && intervals.size.toFloat==count && intervals.all |i| {DateTime.fromIso(i["intervalStart"].toStr)>=from && DateTime.fromIso(i["intervalEnd"].toStr)<=to}) return 0
+    return 2
   }
   internal static Bool validCalendar(Str:Obj? c)
   {

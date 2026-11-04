@@ -33,6 +33,9 @@ export class CockpitQuery {
  restore(snapshot:CockpitSnapshot){this.cancel();this.publish({phase:'ready',snapshot:freeze(structuredClone(snapshot))});}
  cancel(){++this.sequence;this.controller?.abort();if(this.state.phase==='loading'||this.state.phase==='refreshing')this.publish({phase:this.state.snapshot?'ready':'idle',snapshot:this.state.snapshot});}
 }
+export function accessibleCockpitSiteIds(catalog:Catalog):string[]{
+ return [...new Set(catalog.records.filter(record=>record.kind==='space'&&record.nativeSourceKind==='site'&&!record.nativeHidden&&record.id).map(record=>String(record.id)))];
+}
 export function defaultCockpitSelection(catalog:Catalog):{scope:CockpitRequest['reportScope'];categoryId:string}|undefined{
  const meters=catalog.records.filter(r=>['meter','totalMeter'].includes(r.kind)&&r.pointId&&!r.canonicalId);
  const categories=catalog.records.filter(r=>r.kind==='category'&&meters.some(m=>m.categoryId===r.id));

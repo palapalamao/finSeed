@@ -11,6 +11,53 @@ class EnerCubixCockpitRulesTest : Test
     verifyEq(EnerCubixMath.maps(run([profile],h)["evaluations"]).first["status"],"notTriggered")
     verifyEq(EnerCubixMath.maps(run([profile],[Str:Obj?][,])["evaluations"]).first["status"],"unavailable")
   }
+  Void testSubstitutionAbsenceRequiresTheActualHourAndMissingIsUnknown()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+1hr
+    shifted:=[Str:Obj?][["intervalStart":(a+30min).toIso,"intervalEnd":(b+30min).toIso,"quality":"ok"]]
+    evidence:=Str:Obj?["coveredSeconds":3600f,"intervalCount":1,"detailsTruncated":false]
+    verifyEq(EnerCubixCockpitRules.substitutionEvidence(evidence,shifted,a,b),2)
+    shifted.first["intervalStart"]=a.toIso;shifted.first["intervalEnd"]=b.toIso
+    verifyEq(EnerCubixCockpitRules.substitutionEvidence(evidence,shifted,a,b),0)
+    evidence["detailsTruncated"]=true;verifyEq(EnerCubixCockpitRules.substitutionEvidence(evidence,[Str:Obj?][,],a,b),2)
+    evidence["_containsSubstitutedIntervals"]=true;verifyEq(EnerCubixCockpitRules.substitutionEvidence(evidence,[Str:Obj?][,],a,b),1)
+    verifyEq(EnerCubixCockpitRules.substitutionEvidence(Str:Obj?[:],[Str:Obj?][,],a,b),2)
+  }
+  Void testSubstitutionFactsRemainStableBeyondTheDiagnosticPrefixAndAtZeroQuota()
+  {
+    a:=DateTime.fromIso("2026-10-01T00:00:00Z");b:=a+1hr
+    rows:=[Str:Obj?][["from":a.toIso,"to":b.toIso,"value":10f,"quality":"estimated","valueType":"number"]]
+    h:=EnerCubixHistoryData(["pointId":"p","mode":"interval","unit":"kWh","intervals":rows])
+    [0,1,1000].each |cap|
+    {
+      e:=h.captureKnownUsage(a,b,b,true,cap)
+      verifyEq(e["_containsSubstitutedIntervals"],false)
+      verifyEq(EnerCubixCockpitRules.substitutionEvidence(e,EnerCubixMath.maps(e["intervals"]),a,b),0)
+    }
+    rows.first["quality"]="substituted"
+    h=EnerCubixHistoryData(["pointId":"p","mode":"interval","unit":"kWh","intervals":rows])
+    [0,1,1000].each |cap| {e:=h.captureKnownUsage(a,b,b,true,cap);verifyEq(e["_containsSubstitutedIntervals"],true);verifyEq(EnerCubixCockpitRules.substitutionEvidence(e,EnerCubixMath.maps(e["intervals"]),a,b),1)}
+    future:=h.captureKnownUsage(a,b,a+30min,true,0)
+    verifyNull(future["_containsSubstitutedIntervals"]);verifyEq(EnerCubixCockpitRules.substitutionEvidence(future,[Str:Obj?][,],a,b),2)
+    verify(!h.knownUsage(a,b,b).containsKey("_containsSubstitutedIntervals"))
+  }
+  Void testMultipleSourcesCountOneHourAndKeepUnverifiedSourcesSeparate()
+  {
+    rs:=records;rs.add(["id":"b","kind":"meter","nativeEquip":true,"spaceId":"s","categoryId":"c","pointId":"pb"])
+    bound:=boundary.setAll(["meterIds":["a","b"],"sourcePointIds":["p","pb"]])
+    a:=DateTime.fromIso(query["from"].toStr);b:=a+1hr
+    substituted:=Str:Obj?["pointId":"p","mode":"interval","unit":"kWh","intervals":[["from":a.toIso,"to":b.toIso,"value":10f,"quality":"substituted","valueType":"number"]]]
+    second:=substituted.dup.set("pointId","pb")
+    [false,true].each |missing|
+    {
+      histories:=[substituted,missing ? Str:Obj?["pointId":"pb","mode":"interval","unit":"kWh","samples":[Str:Obj?][,]] : second]
+      result:=EnerCubixCockpitRules.project(query,rs,histories,info([profile]),bound,EnerCubixBudgetMath.unavailable("BUDGET_NOT_CONFIGURED"),"snapshot")
+      evaluation:=EnerCubixMath.maps(result["evaluations"]).first;inputs:=(Map)evaluation["inputs"]
+      verifyEq(inputs["substitutedNonWorkingHours"],1)
+      verifyEq(inputs["unknownSubstitutionNonWorkingHours"],missing ? 1 : 0)
+      verifyEq(evaluation["status"],"unavailable");verify(EnerCubixMath.maps(result["items"]).isEmpty)
+    }
+  }
   Void testLongIntervalsSubstitutesPartialHoursAndInvalidCalendarNeverTrigger()
   {
     h:=history;h.first["mode"]="cumulative";h.first["samples"]=[["ts":"2026-10-01T00:00:00Z","value":0f],["ts":"2026-10-01T02:00:00Z","value":20f]]
@@ -60,9 +107,10 @@ class EnerCubixCockpitRulesTest : Test
       budget:=EnerCubixStreamBudget();budget.detailCount=1000-quota
       hs:=EnerCubixCockpitStream.prepare(q,records,["p":point],["p":cfg],|Dict pt,Span span,|HisItem| sink| {raw.each |row| {if(row.ts>=span.start && row.ts<span.end) sink(row)}},budget)
       facts:=0
-      ((Map)hs.first["_preparedReads"]).vals.each |pair| {((Map)((Map)pair)["known"]).vals.each |row| {if(((Map)row)["_closedOwnPrimaryHour"] == true) facts++}}
+      substitutionFacts:=0
+      ((Map)hs.first["_preparedReads"]).vals.each |pair| {((Map)((Map)pair)["known"]).vals.each |row| {if(((Map)row)["_closedOwnPrimaryHour"] == true) facts++;if(((Map)row).containsKey("_containsSubstitutedIntervals")) substitutionFacts++}}
       // Two original pairs cost12 entries; each retained private fact adds one.
-      verifyEq(budget.cells,12+facts)
+      verifyEq(budget.cells,12+facts+substitutionFacts)
       if(quota == 0) verifyEq(facts,2)
       if(quota == 1000) verifyEq(facts,0)
       output:=run([p],hs,q);evaluation:=EnerCubixMath.maps(output["evaluations"]).first
@@ -77,6 +125,7 @@ class EnerCubixCockpitRulesTest : Test
       verifyEq(observed["detailsTruncated"],quota < 2)
       verify(EnerCubixMath.maps(observed["intervals"]).size <= quota)
       verify(!observed.containsKey("_closedOwnPrimaryHour"))
+      verify(!observed.containsKey("_containsSubstitutedIntervals"))
       verify(!util::JsonOutStream.writeJsonToStr(output).contains("_closedOwnPrimaryHour"))
     }
   }
@@ -96,6 +145,10 @@ class EnerCubixCockpitRulesTest : Test
     data=EnerCubixHistoryData(h).knownUsage(start,finish,finish,true)
     verifyNull(data["_closedOwnPrimaryHour"])
     verifyEq(EnerCubixMath.maps(run([profile],[h])["evaluations"]).first["status"],"unavailable")
+    verifyEq(data["_containsSubstitutedIntervals"],true,"the substitution beyond diagnostic row1000 must remain provable")
+    evaluation:=EnerCubixMath.maps(run([profile],[h])["evaluations"]).first
+    verifyEq(((Map)evaluation["inputs"])["substitutedNonWorkingHours"],1)
+    verifyEq(((Map)evaluation["inputs"])["unknownSubstitutionNonWorkingHours"],0)
   }
 
   Void testNoDiagnosticRowsDoNotProveCrossHourSubstitutedOrNAData()

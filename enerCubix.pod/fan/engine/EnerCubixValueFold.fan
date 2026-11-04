@@ -2,8 +2,8 @@
 ** never substitute a block subtotal. No input value or source array is retained.
 internal class EnerCubixValueFold
 {
-  new strict(EnerCubixPreparedOwner? owner := null) {sources.ordered=true;useOwner(owner)}
-  new known(EnerCubixPreparedOwner? owner := null) {knownMode=true;sources.ordered=true;useOwner(owner)}
+  new strict(EnerCubixPreparedOwner? owner := null) {useOwner(owner)}
+  new known(EnerCubixPreparedOwner? owner := null) {knownMode=true;useOwner(owner)}
 
   private Bool knownMode := false
   private Bool seen := false
@@ -13,15 +13,15 @@ internal class EnerCubixValueFold
   private Float total := 0f
   private Str quality := "ok"
   private Str? invalidReason
-  private Str:Bool sources := [:]
+  private [Str:Bool]? sources
   private Str? lastSource
   private EnerCubixPreparedOwner? owner
   private Bool closed := false
   private Void useOwner(EnerCubixPreparedOwner? owner)
-  {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(13)}
+  {this.owner=owner;owner?.watch |->Void| {close};owner?.hold(12)}
   private Void close()
-  {sources.clear;lastSource=null;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
-  internal Int sourceCount() {if(closed) throw ArgErr("valueFoldClosed");return sources.size}
+  {sources?.clear;sources=null;lastSource=null;invalidReason=null;total=0f;numeric=0;seen=false;missing=false;quality="ok";owner=null;closed=true}
+  internal Int sourceCount() {if(closed) throw ArgErr("valueFoldClosed");return sources?.size ?: (lastSource==null ? 0 : 1)}
 
   Void add(EnerCubixValue value)
   {
@@ -32,6 +32,15 @@ internal class EnerCubixValueFold
     {
       id:=ids[i]
       if(id==lastSource) continue
+      if(sources==null)
+      {
+        if(lastSource==null) {lastSource=id;continue}
+        // Twelve scalar fields already own the singleton reference. A second
+        // distinct source needs one real map header and both ordered entries.
+        owner?.hold(3)
+        promoted:=Str:Bool[:];promoted.ordered=true;promoted[lastSource]=true;promoted[id]=true
+        sources=promoted;lastSource=id;continue
+      }
       if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}
       lastSource=id
     }
@@ -56,7 +65,7 @@ internal class EnerCubixValueFold
   {
     if(closed) throw ArgErr("valueFoldClosed")
     if(!seen) return EnerCubixValue()
-    ids:=sources.keys.dup
+    ids:=sources==null ? (lastSource==null ? Str[,] : Str[lastSource]) : sources.keys.dup
     if(!knownMode) return EnerCubixValue(missing || numeric == 0 ? null : total,quality,ids)
     if(invalidReason != null) return EnerCubixValue(null,invalidReason,ids)
     if(numeric == 0) return EnerCubixValue(null,allNA ? "na" : "missing",ids)

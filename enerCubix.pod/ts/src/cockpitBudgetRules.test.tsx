@@ -13,10 +13,19 @@ import {RuleEvaluationDetails} from './CockpitRuleEvaluation';
 import {CockpitReturnStore,createNavigation,projectCockpitReport,readableNavigation} from './cockpitNavigation';
 import {cockpitIssueNavigation} from './cockpitIssueProjection';
 import {freezeCockpitExport,cockpitWorkbook} from './cockpitExports';
-import {initializeLocale,changeLanguage} from './i18n';
+import {initializeLocale,changeLanguage,t} from './i18n';
 const snapshot=raw.snapshot as unknown as CockpitSnapshot;
 const view={selectedFace:'space' as const,presentationMode:false,scrollY:123,draft:{scope:snapshot.context.reportScope,categoryId:'c',preset:'custom' as const}};
 const catalog:Catalog={project:snapshot.context.project,version:'test',spaceSource:'fin',user:{name:'u',canWrite:true},...raw.catalog,records:[...raw.catalog.records.map(row=>({...row,...(row.kind==='space'?{nativeReadonly:true}:row.kind==='meter'?{nativeTreeParentId:'s'}:{})})),{id:'np-p',kind:'nativePoint',name:'Primary point',nativeSourceId:'p',his:true}]} as Catalog;
+it.each(['zh-CN','en-US'])('shows proven zero substitution and keeps old missing facts unknown in %s',language=>{
+ initializeLocale(language);const evaluation=structuredClone(snapshot.modules.issues!.data!.ruleEvaluations![0]);
+ const before=structuredClone(evaluation),html=renderToStaticMarkup(<RuleEvaluationDetails evaluation={evaluation} name={id=>id} open/>);
+ expect(html).toContain(t('已观察到替代值的小时数'));expect(html).toContain(t('替代情况未完整核实的小时数'));
+ expect(evaluation.inputs.substitutedNonWorkingHours).toBe(0);expect(evaluation.inputs.unknownSubstitutionNonWorkingHours).toBe(0);expect(html).not.toContain(t('此快照未提供'));expect(evaluation).toEqual(before);
+ delete evaluation.inputs.substitutedNonWorkingHours;delete evaluation.inputs.unknownSubstitutionNonWorkingHours;
+ const old=renderToStaticMarkup(<RuleEvaluationDetails evaluation={evaluation} name={id=>id} open/>);
+ expect(old.split(t('此快照未提供')).length-1).toBe(2);
+});
 it('validates exact daily allocation, explicit zero, leap month and API business-field allowlist',()=>{
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{},removeItem:()=>{}});initializeLocale('zh-CN','quality-unit');expect(qualityLabel('currencyUnconfirmed')).toBe('费用币种无法确认');changeLanguage('en-US',{inPlace:true});expect(qualityLabel('currencyUnconfirmed')).toBe('Cost currency cannot be confirmed');changeLanguage('zh-CN',{inPlace:true});vi.unstubAllGlobals();initializeLocale('en-US','budget-test');expect(cockpitReasonText('COST_CURRENCY_MIXED')).toContain('Cost currencies');expect(cockpitReasonText('COST_CURRENCY_MIXED')).not.toContain('budget');const config:BudgetConfig={name:'Explicit daily',scopeKind:'project',scopeRef:'p:test',categoryRef:'c',enabled:true,month:'2026-10',currency:'CNY',amount:310000,distribution:'daily',dailyAmounts:[20000,0,...Array(29).fill(10000)]};
  expect(configValidation(config,'budget')).toBeUndefined();expect(monthDayCount('2024-02')).toBe(29);expect(monthDayCount('2026-02')).toBe(28);

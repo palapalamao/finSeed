@@ -35,6 +35,12 @@ class EnerCubixNonWorkingConsumerTest : Test
         source.close;facts:=consumer.finish;state.close;planning.close
         actual:=EnerCubixCockpitRules.project(q,rs,[Str:Obj?][,],owned,boundary,budgetResult,"snapshot",|Str id,Str:Obj? request->Str:Obj?| {return facts})
         verifyEq(actual,expected,variant.toStr);verifyEq(budget.state.unprepared.val,0)
+        if([0,1,3].contains(variant))
+        {
+          inputs:=(Map)facts["inputs"]
+          verifyEq(inputs["substitutedNonWorkingHours"],variant==3 ? 1 : 0)
+          verifyEq(inputs["unknownSubstitutionNonWorkingHours"],variant==1 ? 2 : 0)
+        }
         peer.hold(budget.state.remaining);held:=peer.entries;output.close;verifyEq(peer.entries,held);verify(facts.isEmpty)
       }
       finally {source.close;state.close;output.close;planning.close;model.close;peer.close}

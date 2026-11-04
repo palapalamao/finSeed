@@ -11,7 +11,7 @@ internal class EnerCubixReportConsumer
     diagnostics?.expect(diagnosticKey,"sourceUsage")
     this.diagnostics=diagnostics;this.diagnosticKey=diagnosticKey
     this.ctx=ctx;this.report=report;this.cursors=cursors.dup;this.to=to;this.at=from;this.output=output
-    state.watch |->Void| {closeState};state.hold(20+5*cursors.size)
+    state.watch |->Void| {closeState};state.hold(22+5*cursors.size)
     definitions:=EnerCubixLine[,]
     output.watch |->Void|
     {
@@ -22,7 +22,7 @@ internal class EnerCubixReportConsumer
     diagnostics?.bind(output)
     if(ctx.sharedCatalog!=null) {ctx.sharedCatalog.bind(output);borrowed=ctx.sharedCatalog.protectedRoots;sharedBorrowed=true}
     shape:=report.freezeFrameMetadata(cursors.map |c->EnerCubixLine| {c.line},output)
-    ledger=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line});state.hold(1+7*ledger.size)
+    meterCount=initializeMeters(report,cursors,state,shape)
     // Only new DTO containers are reserved here. The frozen input catalog is
     // borrowed; protect() admits each additional reference, never a deep clone.
     n:=report.dailyFrames ? 24 : (report.workingFrames ? 2 : 0);bucket:=EnerCubixMath.bucket(from,gran)
@@ -30,7 +30,7 @@ internal class EnerCubixReportConsumer
     // 40 per period covers point+detail maps/links; 32 per membership covers
     // scope/detail rows and variable meter/source/area lists. The per-line/meter
     // envelope includes totals, utility groups and shallow tariff map heads.
-    finalEntries=2048+128*(ledger.size+cursors.size)+40*n*cursors.size+32*(shape["members"]+shape["details"])
+    finalEntries=2048+128*(meterCount+cursors.size)+40*n*cursors.size+32*(shape["members"]+shape["details"])
     classEntries=2048+128*cursors.size
     // Keep cleanup workspace until output expires, so dropGraph can still clear
     // aliased lists/maps when another owner has filled the remaining budget.
@@ -57,11 +57,6 @@ internal class EnerCubixReportConsumer
       points:=report.frameScope(line).map |m->Str| {m["pointId"] as Str ?: ""}.findAll |Str id->Bool| {!id.isEmpty}
       covers.add(EnerCubixCoverageFold(points,from,to,state))
     }
-    ledger.each |item|
-    {
-      key:=item["id"].toStr+"|"+item["category"].toStr
-      meters[key+"|false"]=EnerCubixValueFold.strict(state);meters[key+"|true"]=EnerCubixValueFold.known(state)
-    }
   }
   private EnerCubixContext? ctx
   private EnerCubixReport? report
@@ -70,7 +65,9 @@ internal class EnerCubixReportConsumer
   private EnerCubixCoverageFold[] covers := [,]
   private EnerCubixDailyConsumer[] daily := [,]
   private EnerCubixWorkingConsumer[] working := [,]
-  private [Str:Obj?][] ledger := [,]
+  private EnerCubixMeterReduction[] firstMeters := [,]
+  private EnerCubixMeterReduction[] lastMeters := [,]
+  private Int meterCount := 0
   private Str:EnerCubixValueFold meters := [:]
   private Str:[Str:Obj?] evidence := [:]
   private DateTime at
@@ -95,6 +92,30 @@ internal class EnerCubixReportConsumer
   private Bool stateClosed := false
   private Bool done := false
   private Err? failure
+
+  ** Bind the frozen ledger once. Every hour retains its original phase/order,
+  ** but does not filter maps, format keys or look up the same fold again.
+  private Int initializeMeters(EnerCubixReport report,EnerCubixLineCursor[] cursors,EnerCubixPreparedOwner state,Str:Int shape)
+  {
+    scratch:=state.fork;raw:=[Str:Obj?][,]
+    try
+    {
+      scratch.hold(4+10*(shape["members"]+shape["details"]+cursors.size))
+      raw=report.frameLedger(cursors.map |c->EnerCubixLine| {c.line})
+      // Two list roots, typed object/fields/list link and both meter-map slots.
+      state.hold(3+9*raw.size)
+      raw.each |item|
+      {
+        id:=item["id"].toStr;category:=item["category"].toStr;key:="$id|$category"
+        strict:=EnerCubixValueFold.strict(state);known:=EnerCubixValueFold.known(state)
+        meters[key+"|false"]=strict;meters[key+"|true"]=known
+        plan:=EnerCubixMeterReduction(id,category,(Int)item["order"],strict,known)
+        (item["phase"]==1 ? firstMeters : lastMeters).add(plan)
+      }
+      return raw.size
+    }
+    finally {raw.each |item| {item.clear};raw.clear;scratch.close}
+  }
 
   Void addFrame(Str:EnerCubixHistoryData histories,EnerCubixPreparedOwner frame)
   {addFrames(histories,frame,EnerCubixMath.floorHour(at)+1hr)}
@@ -141,13 +162,14 @@ internal class EnerCubixReportConsumer
   }
   private Void consumeMeters(Int phase,DateTime end)
   {
-    ledger.findAll |item| {item["phase"] == phase}.each |item|
+    items:=phase==1 ? firstMeters : lastMeters
+    for(i:=0;i<items.size;i++)
     {
-      id:=item["id"].toStr;category:=item["category"].toStr;key:="$id|$category"
-      ctx.warningScope(phase,(Int)item["order"],at.ticks)
-      strict:=report.frameMeter(id,category,at,end,false);known:=report.frameMeter(id,category,at,end,true)
+      item:=items[i]
+      ctx.warningScope(phase,item.order,at.ticks)
+      strict:=report.frameMeter(item.id,item.category,at,end,false);known:=report.frameMeter(item.id,item.category,at,end,true)
       if(strict.value!=null || known.value!=null) meterValuesWereNull=false
-      meters[key+"|false"].add(strict);meters[key+"|true"].add(known)
+      item.strict.add(strict);item.known.add(known)
     }
   }
 
@@ -334,11 +356,22 @@ internal class EnerCubixReportConsumer
   private Void check()
   {if(closed) throw ArgErr("reportConsumerClosed");if(failure!=null) throw failure;if(stateClosed && !done) throw ArgErr("reportConsumerClosed")}
   private Void closeState()
-  {ctx=null;report=null;cursors.clear;ledger.clear;meters.clear;covers.clear;daily.clear;working.clear;stateClosed=true}
+  {ctx=null;report=null;cursors.clear;firstMeters.clear;lastMeters.clear;meters.clear;covers.clear;daily.clear;working.clear;stateClosed=true}
   private Void closeOutput()
   {
     dropGraph(result);dropGraph(evidence)
     frozenMeters.each |value| {if(!value.sources.isEmpty) value.sources.clear;value.value=null;value.quality="ownerExpired"}
     frozenMeters.clear;periods.clear;diagnostics=null;diagnosticKey=null;closed=true
   }
+}
+
+internal class EnerCubixMeterReduction
+{
+  new make(Str id,Str category,Int order,EnerCubixValueFold strict,EnerCubixValueFold known)
+  {this.id=id;this.category=category;this.order=order;this.strict=strict;this.known=known}
+  Str id
+  Str category
+  Int order
+  EnerCubixValueFold strict
+  EnerCubixValueFold known
 }

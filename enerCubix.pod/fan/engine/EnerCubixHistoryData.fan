@@ -217,7 +217,7 @@ internal class EnerCubixHistoryData
         preparedBudget?.unprepared?.increment
         return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
       }
-      out:=data.dup; if(!includeRuleFacts) out.remove("_closedOwnPrimaryHour")
+      out:=data.dup; if(!includeRuleFacts) {out.remove("_closedOwnPrimaryHour");out.remove("_containsSubstitutedIntervals")}
       out["value"]=EnerCubixValue(EnerCubixMath.num(data["knownValue"]),data["knownQuality"].toStr,sources)
       return out
     }

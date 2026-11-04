@@ -2040,3 +2040,7 @@ Object.assign(englishMessages,{"本快照为统计计算保留空间，诊断样
 Object.assign(englishMessages,{'当前焦点没有已返回的能流，以下显示统计范围的能流。':'No energy flow was returned for the current focus. The flow for the reporting scope is shown below.'});
 
 Object.assign(englishMessages,{'该关联对象位于当前统计范围之外；请先设为统计范围，再打开专业分析。':'This related object is outside the current reporting scope. Set it as the reporting scope before opening professional analysis.'});
+
+Object.assign(englishMessages,{'受影响模块：{0}。':'Affected modules: {0}.','{0}（{1}）':'{0} ({1})'});
+Object.assign(englishMessages,{'全部可访问站点':'All accessible sites'});
+Object.assign(englishMessages,{'已观察到替代值的小时数':'Hours with observed substituted values','替代情况未完整核实的小时数':'Hours with unverified substitution evidence','此快照未提供':'Not provided by this snapshot','仅使用完整且质量合格的主点小时判断；含替代值的小时不参与触发。替代小时与存在未核实来源的小时可能重叠，不能相加。':'Only complete primary-point hours of eligible quality are assessed. Hours containing substituted values cannot trigger a clue. Hours with observed substitution and hours with unverified sources can overlap and must not be added together.'});

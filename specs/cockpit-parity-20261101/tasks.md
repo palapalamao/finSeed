@@ -201,3 +201,19 @@
 - exact canonical immutable source-owned完整证据header命中，仅knownHeader(key,2)保留本consumer槽/key链接，knownCharges新索引另计1；source已完整hold8+N及原interval/source图。原knownWorkspace完整不降，首次/miss/trim仍全header准入，slot后续2→trim按高水升级后才dup/Uuid，full→hit不退费。新增旧码RED/新码GREEN，先关闭首consumer仍根identity相同、原header不被trim修改、peer失败与清理保护。架构只读审阅4文件无阻断，没有跨owner转移或取消会计。
 - 最终完整122类958方法295347校验通过，daily-scalar-final-fantom-full.log，137.217秒；目标2类23方法2226（最后根identity断言由完整套件覆盖）。daily-scalar-annual/q1-equivalence整份报告/模块/警告/质量/覆盖/生产解码对旧020精确一致。annual27.399秒/峰196304，Q1 12.120秒/峰188659，仅受控：103窗口中82份prepared metadata/history，22captured+60synthetic向量，无Folio配置准入，不能当现场年度通过。关闭temporary/raw0，末尾prepared824描述计费保留。
 - 统一021仅四版本递增，282份TS src/tests与已验014物理相同，431unit/29UI明确复用，类型/Vite实际重建；未变更业务/采集/历史或30s/200000/8MiB。原生打印一次手工请求仍待回复、真实只读用户暂缓；A5/C5及最终49条款需按021现场结果继续收尾。
+
+
+## 0.14.21 实机结果与 0.14.22 最终修正（2026-11-05）
+
+- f4ef5c0c / 021 / B5A3141C2476BBCFB186CC30EDA768354B4641FC64C5ACC821094F4F64851284（4839301B）已安装；正常停16816及父壳，备份A1B1，单noAuth3316/17616，FIN5停止，24HTTP资源匹配。首次cold九查询仍8/9：zeda-site年度504/30.031秒，09-19 05:00，峰188792；daily child29736→18270，真实减少11466条。明确对账后只做一次warm诊断，26.890秒推进Nov1，但月seal处422/200015，所以没有拿warm重试遮盖首次失败。021同PID连续1803.570秒181样本通过，RSS1.31–1.54GB/private最高1.69GB，整FIN进程含其他工程，非隔离基准/无泄漏证明；不替代022观察。
+- ReportConsumer把冻结ledger稳定分成phase1/phase3 typed reductions；id/category/order与原两fold只绑定一次，逐小时仍warningScope→strict→known→strict.add→known.add，coverage/diagnostic冻结仍两phase之间。metersMap保留原构造顺序供finish。state22补净增父字段，rawLedger独立scratch先准入4+10*(members+details+cursors)，清临时Maps/list后close；typed实际3+9N含两个foldMap槽，未降会计/取消memo。4次冷AB噪声较大（旧两次超时、新一次超时一次27.298秒），不能宣称稳定提速。
+- Heatmap仅借同output owner上一完整日末个source vector；完整有序相等才复用，各hour全部cell/值/质量/时刻/来源内容保留，其他vector仍独立准入。state18→19补字段，输出Map/links全计、数组只按真实持有一次。排除日/变序/input清空/peer占满/跨日destructive freeze及IdentityHashMap实际图等额计费测试通过，旧跨日必须独立实现断言已RED，不能把旧内部别名当业务语义。
+- 49条独立设计审计发现两处UI实现遗漏：VA04/35首屏只计模块数、VA33缺显式全部站点。现常驻摘要显示完整双语模块名+状态，原详情仍收起；全部可访问站点只用已有非hidden原生site IDs设space/range草稿，显式Apply前不查询/不重标旧snapshot，默认单site保留。新单位测试旧码RED/新码GREEN；首次31 UI中原29通过，新2因夹具缺nativeReadonly造成原生选项空而失败，已按真实目录属性修夹具，不放宽断言或超时，旧日志/trace保留，最终重验另记。
+- M4C02补齐实际替代事实：KnownUsage在原cutoff/overlap顺序上完整扫描interval，presence true独立诊断截断；false仅完整连续实际1hr/3600秒、无gap/越界、非无效早退时可证。Stream完整details去冗余flag、截断保留，并按实际containsKey给每private slot计费；公共HistoryData读取去两个private字段。ordinary/stream共用helper核实际hour边界，partial/缺测/不可读/无充分证据为unknown；两路径均逐hour计观察到替代及有未核实来源，两数可重叠、UI明确不能相加。state42/output74/frame11补实际持有，不改原触发/阈值/最大值/正式Alarm，无新历史读取。旧快照缺字段显示未提供，合法0显示0。
+- 三类15方法233检查、cap0/1/1000、estimated确证false、subtrue、诊断1000行后替代、未来cutoff、offset跨hour、公共不泄露、多源只计一次及sub+missing独立预期通过。原10variant ordinary/stream整份结果一致。真实Cockpit.execute重新生成两M4 fixture，2方法19检查，新的0/0并非手工改headline；M4C02新双语UI待最后执行。月预算总额仍>0；日/期间合法0另行保留，不混淆设计。
+- 最终239后端文件与套件前物理hash完全相同，完整122类962方法295449检查通过（cockpit-022-final-fantom-full.log，195.127秒，期间并行前端单测，非独立性能基准）；前端60文件437测试及最终type/Vite通过。源输入manifest、旧/新失败与interim日志均保留，不冒充最终套件。UI首轮资源替换与Fan打包相撞导致NullErr的候选构建已中止且从未部署，随后等待资源完成顺序重建；不是现场FIN故障。
+- 四版本统一022；最终控制页面31+M4C02两项、全年/Q1完整golden、候选/原生9查询及最终同PID观察仍需按实际补齐，当前不声称全部验收或已部署022。原生打印一次人工请求未答、认证只读用户暂缓；未写现场业务配置、采集或历史，30s/200000/8MiB不变。
+
+- 最终基础累加器再减少真实图：ValueFold现12个字段，空/单来源不再生成Map，已有lastSource存sole ID；第二distinct先hold3，再生成orderedMap/header+两entries，旧sole→新ID后发布，>=2回到原13+N实际账。数值/质量逐次加法不动，finish仍独立来源数组，close清自己根。两个旧码RED覆盖solo预留与remaining2拒绝promotion，4类49方法22036检查通过。最新完整122类963方法295461检查（candidate-01422-fantom-final.log，130.856秒）和239物理源hash通过，取代旧962结果对应的候选身份。
+- 最终437单测/type/Vite、33个不同受控页面场景通过：同一最终UI资源上R2原29通过，新增2曾误点AntD隐藏辅助option而失败，改可见列表定位后R3新2通过；M4两场景初次negative selector命中两个profile，按configuration.name限定后M4R2两项通过。完整业务/请求数/hidden/单→all→单/四width双语/默认折叠/真实0和unknown/负例不生线索断言保留，未放宽超时/业务条件。原失败日志和trace均保留，不称单次31全绿。root目视320英文质量摘要及390中文完整规则字段可读。
+- 同最终后端，全年和Q1完整业务及productiondecode与冻结021深等价；全年24.097秒/峰194578，Q1 12.636秒/峰191363。仅受控22captured+60synthetic的82源/103窗口，不冒充现场完整历史；temporary/raw关闭0、末prepared824描述费保留。三处审计缺口实现/受控证据闭合，原生年度及最终运行观察、人工打印仍按实际待验。

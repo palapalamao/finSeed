@@ -669,7 +669,7 @@ internal class EnerCubixCockpitStream
         row["intervals"]=keep == 0 ? [Str:Obj?][,] : events[0..<keep]
         row["detailsTruncated"]=(EnerCubixMath.num(row["intervalCount"]) ?: 0f) > keep.toFloat
         if(row["detailsTruncated"] == true) row["intervalsCaptureId"]=Uuid().toStr
-        else row.remove("_closedOwnPrimaryHour") // Complete diagnostics already prove the predicate.
+        else {row.remove("_closedOwnPrimaryHour");row.remove("_containsSubstitutedIntervals")} // Complete diagnostics already prove the predicates.
         budget.detailCount+=keep
         known[qEnd.ticks.toStr]=row
       }
@@ -681,7 +681,8 @@ internal class EnerCubixCockpitStream
     if(qualities.size == 1 && values.vals.all |v| {emptyPair((Map)v)}) emptyUntil(end,qualities.first)
     else values.each |v,k|
     {
-      facts:=((Map)((Map)v)["known"]).vals.findAll |r| {((Map)r)["_closedOwnPrimaryHour"] == true}.size
+      facts:=0
+      ((Map)((Map)v)["known"]).vals.each |r| {row:=(Map)r;if(row.containsKey("_closedOwnPrimaryHour")) facts++;if(row.containsKey("_containsSubstitutedIntervals")) facts++}
       preparedCell(2+queryEnds.size+facts);budget.materializedPairs++;reads[k]=v
     }
     hour=end

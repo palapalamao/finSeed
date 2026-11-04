@@ -13,6 +13,35 @@ const p29=JSON.parse(readFileSync(new URL('../fixtures/cockpit-pressure-24day.js
 const zero=JSON.parse(readFileSync(new URL('../fixtures/cockpit-budget-zero-target.json',import.meta.url),'utf8')) as CockpitSnapshot;
 const fullP27Path=process.env.ENERCUBIX_P27_NINE;const fullP27=fullP27Path?JSON.parse(readFileSync(fullP27Path,'utf8')):undefined;
 const version=JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;
+for(const language of ['zh-CN','en-US'])test('M4C02 non-working clue retains evidence and rejects incomplete hours '+language,async({page},info)=>{
+ const zh=language==='zh-CN',state=await setup(page,language);await state.openCockpit();
+ const clue=page.locator('[data-issue="rule:rule"]'),original=structuredClone(state.snapshot.modules.issues!.data!.ruleEvaluations);
+ await clue.locator('.cockpit-issue-details>summary').click();await clue.locator('.cockpit-rule-evaluation>summary').click();
+ await clue.getByText(zh?'查看事项依据':'View item evidence',{exact:true}).click();
+ await expect(clue).toContainText('10 kWh');await expect(clue).toContainText('5 kWh');
+ await expect(clue).toContainText('1 / r1');await expect(clue).toContainText('2026-10-01T00:00:00Z');await expect(clue).toContainText('2026-10-01T01:00:00Z');
+ await expect(clue.locator('.cockpit-rule-input').filter({hasText:zh?'有效完整小时数':'Valid complete hours'})).toContainText('1');
+ await expect(clue.locator('.cockpit-rule-input').filter({hasText:zh?'不可用小时数':'Unavailable hours'})).toContainText('0');
+ await expect(clue.locator('.cockpit-rule-substitution').filter({hasText:zh?'已观察到替代值的小时数':'Hours with observed substituted values'})).toContainText('0');
+ await expect(clue.locator('.cockpit-rule-substitution').filter({hasText:zh?'替代情况未完整核实的小时数':'Hours with unverified substitution evidence'})).toContainText('0');
+ await expect(clue).toContainText(zh?'不创建、确认或恢复':'do not create, acknowledge or recover');
+ await expect(clue.locator('dd').filter({hasText:/^0\s*(CNY|元)$/})).toHaveCount(0);
+ expect(state.snapshot.modules.issues!.data!.ruleEvaluations).toEqual(original);
+ await page.setViewportSize({width:390,height:844});await clue.screenshot({path:info.outputPath('non-working-'+language+'.png')});
+ const data=state.snapshot.modules.issues!.data!,evaluation=data.ruleEvaluations!.find(row=>row.ruleType==='nonWorkingHighUsage')!;
+ Object.assign(evaluation,{status:'unavailable',actual:null,reasonCodes:['RULE_HOURLY_EVIDENCE_INCOMPLETE'],inputs:{...evaluation.inputs,validNonWorkingHours:0,unavailableNonWorkingHours:1,triggerCount:0,substitutedNonWorkingHours:0,unknownSubstitutionNonWorkingHours:1}});
+ delete evaluation.triggerFrom;delete evaluation.triggerTo;
+ data.items=data.items.filter(item=>item.ruleType!=='nonWorkingHighUsage');data.topIds=data.items.slice(0,3).map(item=>item.id);data.total=data.items.length;state.snapshot.snapshotId+='-incomplete-hour';
+ await page.locator('.cockpit-query-submit').click();await expect.poll(()=>state.queries.length).toBe(2);
+ await expect(clue).toHaveCount(0);await page.locator('.cockpit-rule-evaluations>summary').click();
+ const evaluations=page.locator('.cockpit-rule-evaluations .cockpit-rule-evaluation').filter({hasText:evaluation.configuration.name});await expect(evaluations).toHaveCount(1);await evaluations.locator(':scope>summary').click();
+ await expect(evaluations).toContainText(zh?'无法判定':'Cannot determine');
+ await expect(evaluations).toContainText(zh?'小时':'hour');await expect(evaluations).toContainText('kWh');
+ await expect(evaluations.locator('.cockpit-rule-input').filter({hasText:zh?'不可用小时数':'Unavailable hours'})).toContainText('1');
+ await expect(evaluations.locator('.cockpit-rule-substitution').filter({hasText:zh?'替代情况未完整核实的小时数':'Hours with unverified substitution evidence'})).toContainText('1');
+ expect(state.calls.filter(call=>call.path==='report'||call.path.endsWith('/save'))).toHaveLength(0);
+ writeFileSync(info.outputPath('non-working-evidence.json'),JSON.stringify({classification:'Controlled UI: frozen production positive rule fixture and explicit synthetic incomplete-hour negative variant, not onsite data',original,negative:evaluation,queries:state.queries}));
+});
 for(const language of ['zh-CN','en-US'])test('compact budget large amounts stay on one line '+language,async({page},info)=>{
  const state=await setup(page,language,{variant:'p27'}),b=state.snapshot.modules.kpis!.data!.budget!;
  Object.assign(b,{status:'unavailable',budgetStatus:'ok',comparisonStatus:'unavailable',monthBudget:11000000,periodBudget:1047033.09,periodActualCost:1149016.66,variancePct:null,monthUsagePct:null,referenceVariancePct:9.74,referenceMonthUsagePct:10.45,costQuality:'partial',costValueBasis:'knownSubtotal',reasonCodes:['BUDGET_COST_INCOMPLETE']});
