@@ -192,3 +192,12 @@
 - 下一版统一020，前端282物理源码/测试同已验014，431/29明确复用并重建版本资源。A5/C5及整体验收仍未关闭，待020真实年度、资源、固定数值/导出及同PID观察；未写现场配置/采集/历史，30秒/200000/8MiB上限不变。
 
 说明：020 R1封存源码文档中“关闭prepared/temp/raw归零”是记录表述错误，以上已按实际stats纠正；封存包、日志及哈希不改写。此更正仅文档，239份后端及282份前端源码/测试与020候选相同。
+
+
+## 0.14.20 实机结果与 0.14.21 标量/共享头准入修正（2026-11-05）
+
+- 6e60c81d / 020 / A1B124BF22784FC8544613F509DEE3AE8276AAE89ACA00416E72BD6A6FE68768（4832321B）已安装，旧22372正常退出并备份18EB，唯一noAuth16816/23496、FIN5停止；24HTTP资源一致。九查询仍8/9：zeda-site年度422/PREPARED_READ_LIMIT，24.359秒，09-25 13:00，peak200004；失败栈knownHeader，daily child29736，完整错误证据annual-failure-census.txt。未提升上限；其他8项和固定4816/2799.549228、双语Excel通过。020观察只属于16816，正常切换时如未满30分钟则记中断，不拼接最终版本。
+- 当前四文件后端修正：DailyBin known原LineFold从不启ratio/gauge，直接ValueFold.known逐tick.known?:empty；严格hour仅普通非gauge/nonratio直接ValueFold.strict，COP/加权保留原wrapper；band严格原路径保留。每真实删除LineFold同时不生成其12字段/1清理hook，子fold/source set仍完整计费，不降低仍活图的计数。24bins单表旧1651>1100为RED，精简后通过，原独立energy/gauge/COP/DST序列/质量/来源对照保持。
+- exact canonical immutable source-owned完整证据header命中，仅knownHeader(key,2)保留本consumer槽/key链接，knownCharges新索引另计1；source已完整hold8+N及原interval/source图。原knownWorkspace完整不降，首次/miss/trim仍全header准入，slot后续2→trim按高水升级后才dup/Uuid，full→hit不退费。新增旧码RED/新码GREEN，先关闭首consumer仍根identity相同、原header不被trim修改、peer失败与清理保护。架构只读审阅4文件无阻断，没有跨owner转移或取消会计。
+- 最终完整122类958方法295347校验通过，daily-scalar-final-fantom-full.log，137.217秒；目标2类23方法2226（最后根identity断言由完整套件覆盖）。daily-scalar-annual/q1-equivalence整份报告/模块/警告/质量/覆盖/生产解码对旧020精确一致。annual27.399秒/峰196304，Q1 12.120秒/峰188659，仅受控：103窗口中82份prepared metadata/history，22captured+60synthetic向量，无Folio配置准入，不能当现场年度通过。关闭temporary/raw0，末尾prepared824描述计费保留。
+- 统一021仅四版本递增，282份TS src/tests与已验014物理相同，431unit/29UI明确复用，类型/Vite实际重建；未变更业务/采集/历史或30s/200000/8MiB。原生打印一次手工请求仍待回复、真实只读用户暂缓；A5/C5及最终49条款需按021现场结果继续收尾。
