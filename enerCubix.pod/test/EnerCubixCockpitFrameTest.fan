@@ -4,6 +4,44 @@ using concurrent
 ** Private borrowed-frame lifecycle; not a complete cockpit scheduler.
 class EnerCubixCockpitFrameTest : Test
 {
+  Void testDenseCursorLearnsBoundedReadSpanInsteadOfRepeatingTheSplitTree()
+  {denseReadSpan(false)}
+
+  Void testLearnedReadSpanPreservesCleaningAcrossSparseAndDenseTransitions()
+  {denseReadSpan(true)}
+
+  private Void denseReadSpan(Bool sparseMiddle)
+  {
+    budget:=EnerCubixStreamBudget();(0..<31).each |i| {budget.openCursor("peer$i")}
+    end:=at+30day;p:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    cfg:=sparseMiddle ? Etc.makeDict(["defNull":Marker.val]) : null
+    if(cfg!=null) p=Etc.makeDict(Etc.dictToMap(p).set("hisFunc","enerCubixCleanHis").set("hisFuncConfig",cfg))
+    q:=Str:Obj?["from":at.toIso,"to":end.toIso,"asOf":end.toIso,"tz":"UTC"]
+    EnerCubixCockpitStream? cursor
+    try
+    {
+      cursor=EnerCubixCockpitStream.openCursor(p,cfg,at,end,q,[["id":"m","kind":"meter","categoryId":"c","pointId":"p"]],budget,|Dict point,Span span,|HisItem| sink|
+      {
+        n:=((span.start-at).ticks/10sec.ticks).max(0);ts:=at+Duration(n*10sec.ticks)
+        while(ts<span.end && ts<=end)
+        {
+          keep:=!sparseMiddle || ts<at+2day || ts>=at+4day || n%360==0
+          if(ts>=span.start && keep) sink(HisItem(ts,Number(n)));n++;ts+=10sec
+        }
+      })
+      (0..<720).each |i|
+      {
+        left:=at+1hr*i;right:=left+1hr;cursor.advance(right)
+        cursor.withFrame |h| {verifyEq(h.read(left,right).value,360f);verifyEq(h.knownUsage(left,right,end)["knownValue"],360f)}
+      }
+      echo("DENSE_CURSOR_READS sparseMiddle="+sparseMiddle+" native="+budget.nativeReads+" scanned="+budget.scanned+" peakBlock="+budget.peakBlock+" peakHeld="+budget.peakHeld)
+      if(!sparseMiddle) verify(budget.nativeReads<=320,"a learned dense span must avoid repeatedly rediscovering the same split tree: ${budget.nativeReads}")
+      verify(budget.peakBlock<=2083);verify(budget.peakHeld<=200000);verify(budget.state.peak.val<=200000)
+    }
+    finally {cursor?.close;(0..<31).each |i| {budget.closeCursor("peer$i")}}
+    verifyEq(budget.residentRaw,0);verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testConsumedHoursReleaseOnlyOwnedPreparedEntries()
   {
     budget:=EnerCubixStreamBudget();budget.cell(17)

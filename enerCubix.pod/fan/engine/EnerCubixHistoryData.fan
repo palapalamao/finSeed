@@ -167,18 +167,20 @@ internal class EnerCubixHistoryData
     ownEvidence?.clear;ownEvidence=null;sourceIndex=null
   }
   internal [Str:Obj?]? knownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd)
+  {knownEvidenceSlot(record,from,to,queryEnd)?.evidence}
+  internal EnerCubixOwnEvidence? knownEvidenceSlot(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd)
   {
     frameCheck
-    return ownEvidence?.find |entry| {entry.record===record && entry.from==from && entry.to==to && entry.queryEnd==queryEnd}?.evidence
+    return ownEvidence?.find |entry| {entry.record===record && entry.from==from && entry.to==to && entry.queryEnd==queryEnd}
   }
-  internal Void rememberKnownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence)
+  internal Void rememberKnownEvidence(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence,Str? key := null)
   {
     frameCheck
     if(ownEmptyOwner==null || prepared==null || !record.isImmutable || (record["kind"]!="meter" && record["kind"]!="totalMeter") || evidence["sourceIds"]!==sources) return
     if(knownEvidence(record,from,to,queryEnd)!=null) return
     if(ownEvidence==null) {ownEmptyOwner.hold(1);ownEvidence=EnerCubixOwnEvidence[,]}
-    ownEmptyOwner.hold(8+evidence.size)
-    ownEvidence.add(EnerCubixOwnEvidence(record,from,to,queryEnd,evidence))
+    ownEmptyOwner.hold(9+evidence.size)
+    ownEvidence.add(EnerCubixOwnEvidence(record,from,to,queryEnd,evidence,key))
   }
 
   internal Void expireFrame()
@@ -511,12 +513,13 @@ internal const class EnerCubixSourceBounds
 
 internal class EnerCubixOwnEvidence
 {
-  new make(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence)
-  {this.record=record;this.from=from;this.to=to;this.queryEnd=queryEnd;this.evidence=evidence}
+  new make(Str:Obj? record,DateTime from,DateTime to,DateTime queryEnd,Str:Obj? evidence,Str? key)
+  {this.record=record;this.from=from;this.to=to;this.queryEnd=queryEnd;this.evidence=evidence;this.key=key}
   Str:Obj? record
   DateTime from
   DateTime to
   DateTime queryEnd
   Str:Obj? evidence
+  const Str? key
 }
 

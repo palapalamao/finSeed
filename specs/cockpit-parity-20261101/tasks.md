@@ -239,3 +239,13 @@
 - 最终239源与pre-suite hash一致；candidate-01424-final-fantom-r2.log完整122类968方法295518检查、140.138秒通过。r0两失败不混称最终。最终模型r3同一编译SDK对冻结023：Q1 12.432秒/191370，全年25.418秒/192896，全report/module/warning/quality/coverage/evidence/生产decode等价，仅原声明runtime/opaque身份规范化。22captured+60synthetic，82源103窗口，仍不冒充FIN性能；temporary/raw关闭0，prepared824描述费保留。
 - UI284物理src/tests与022完全一致，明确复用437unit及33个不同受控场景，024 fresh type/Vite20.16秒；四版本024。冻结后待新包原生9查询、实际导出/资源、最终同PID观察。30s/200000/8MiB及FIN主点历史规则不变，无现场业务配置/采集/历史写入。
 - 49项源级复核已区分功能/受控/原生门禁；Linear6个功能45/47/48/49/50/58已Done，7个44/46/51/52/55/56/57实现完成InReview，53/54/59仍InProgress。真实readonly用户暂缓、原生打印人工未答单列，不把现场造预算/素材/报警当待开发任务。
+
+
+### 2026-11-05 0.14.25 learned dense read spans and shared evidence keys
+
+- 024实际仍8/9，冷年50430.047秒推进Oct22T05，3606native reads/635778扫描/peak192422；24资源/fixed4816及2799.549228费用/CNEN40sheet保存回读和其他8项通过，census保全。没有额外warm或JFR，仍不能关闭年度门禁。
+- 已有source-owned证据槽增加const Str?key，先按9+header.size准入再构建；精确record引用/from/to/queryEnd及详情容量不变。首producer传已构造key，后续views借immutable key，不再每访Long.toString/拼接；legacy null key保留旧生成路径。数值仍fresh、trim/绑定/不同cutoff/lookup及顺序不变。knownHeader以单get取旧charge，首次完整hold(1+entries)后publish，升级仍hold(delta)后publish。独立旧码RED命中半slot与不同key文本；新测试覆盖不足2/所需3、重试、旧2升5失败保持/成功只加3与peer守恒。
+- 更直接I/O问题：readBlock已有50000/可用rawRoom除3/active源公平配额硬限制，32源时单块2083；旧nextCursorChunk每次overflow及任何成功均恢复4day，密度高时每块重建整棵二分读树。现在仅复用已有cursorReadStep字段：overflow学习min(实际失败半span,4day)，原左右半开queue顺序/主cursorReadAt/1ms拒绝不变；queued不增长，短empty main恢复4day，其余沿原fixedCadence真实empty扩至64day；小nonempty main仅低fill时double且最大4day，阈值逐字采用readBlock当前有效cap(含peer/raw/previous/fair)，不是固定50000。readBlock/leading/NA容量/逐行append/清洗previous/首次untagged interval原4day推断及cadenceChanged完全未改，无新字段或限额提升。
+- 独立性能RED：31个空peer配额+一块30天10秒累计点，720小时逐一strict/known独立期望360。旧476读/746857扫描，GREEN266读/309217扫描，peakBlock1080/held6610不变；额外清洗开启，第2–4天小时采样再转10秒的跨块过渡253读/289901扫描，全部小时仍360，峰1083/6611。两场景2891断言及关闭peer/owner守恒通过（candidate-01425-span-final-tests.log）。这是受控真实读取算法，非32个现场数据源或FIN性能证明。
+- 最终239物理源hash与pre-suite一致；candidate-01425-final-fantom-r2.log完整122类971方法298424检查、129.349秒通过。此前969/295533及模型是I/O变更前interim，保留不混为最终。最终SDK来自candidate-01425-span-final-build.log，无中途重建；模型r2同一SDK对冻结024完整business及生产decode等价：Q1 12.135秒峰191371，全年25.487秒峰192896。103窗口/82源(22captured+60synthetic)，该模型不充分暴露现场密度，不据模型数宣称年度已解决；temporary/raw关闭0、prepared824描述费仍保留。
+- UI284物理src/tests仍完全等于022，明确复用437单测/33个不同受控场景，fresh025 type/Vite19.87秒。四版本025。接下来冻结后只做新包真实9项与同PID观察；保持主点only、无现场业务/采集/历史写入、30秒/200000 entries/8MiB/50000 block/200000 raw/20000000 scan全不变。人工native打印未答、真实readonly用户暂缓，单列不伪造通过。

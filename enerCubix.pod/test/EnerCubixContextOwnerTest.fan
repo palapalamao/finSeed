@@ -4,6 +4,33 @@ using [java] java.lang::Class as JavaClass
 ** Actual private producer frames; no FIN data or project mutation.
 class EnerCubixContextOwnerTest : Test
 {
+  Void testKnownHeaderAdmitsNewSlotAndFieldsAtomically()
+  {
+    budget:=EnerCubixStreamBudget();persistent:=EnerCubixPreparedOwner(budget.state);frame:=EnerCubixPreparedOwner(budget.state);peer:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(persistent);ctx.beginFrame(frame,Str:EnerCubixHistoryData[:])
+    method:=EnerCubixContext#.method("knownHeader");charges:=(Str:Int)EnerCubixContext#.field("knownCharges").get(ctx);before:=frame.entries
+    try
+    {
+      peer.hold(budget.state.remaining-2);held:=peer.entries
+      verifyErr(EnerCubixHttpErr#) {method.call(ctx,"exact-pair",2)}
+      verify(charges.isEmpty,"rejected field admission must not publish an intermediate empty slot")
+      verifyEq(frame.entries,before);verifyEq(peer.entries,held)
+      peer.close;method.call(ctx,"exact-pair",2);verifyEq(charges["exact-pair"],2);verifyEq(frame.entries,before+3)
+      method.call(ctx,"exact-pair",1);verifyEq(frame.entries,before+3)
+      upgrade:=EnerCubixPreparedOwner(budget.state)
+      try
+      {
+        upgrade.hold(budget.state.remaining-2);upgradeHeld:=upgrade.entries
+        verifyErr(EnerCubixHttpErr#) {method.call(ctx,"exact-pair",5)}
+        verifyEq(charges["exact-pair"],2);verifyEq(frame.entries,before+3);verifyEq(upgrade.entries,upgradeHeld)
+        upgrade.close;method.call(ctx,"exact-pair",5);verifyEq(charges["exact-pair"],5);verifyEq(frame.entries,before+6)
+      }
+      finally {upgrade.close}
+    }
+    finally {frame.close;persistent.close;peer.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   Void testProducerCleanupDoesNotClonePublishedReadonlyIndexAtFullBudget()
   {[false,true].each |reject| {checkPublishedIndex(reject)}}
 
@@ -55,13 +82,14 @@ class EnerCubixContextOwnerTest : Test
           verify(histories.isRO,"producer source maps are read-only for every consumer")
           verifyErr(ReadonlyErr#) {histories.remove("p")}
           verify(a.byPoint===histories,"owned contexts borrow the already-owned source index instead of copying its entries")
-          first:=ka.knownReads.vals.first;before:=first.dup;verifyEq(EnerCubixMath.maps(first["intervals"]).size,1)
+          first:=ka.knownReads.vals.first;firstKey:=ka.knownReads.keys.first;before:=first.dup;verifyEq(EnerCubixMath.maps(first["intervals"]).size,1)
           copy:=first.dup;copy.clear;fa.close;aOwner.close
           b.beginFrame(fb,histories);kb.beginFrame(fb,histories);lookups:=budget.state.lookups.val
           verifyEq(kb.node("m","c",at,at+1hr).value,10f)
           verifyEq(budget.state.lookups.val,lookups+1,"the shared header path keeps the original prepared lookup/deadline cadence")
           verifyEq(EnerCubixContext#.field("knownScratch").get(kb),6,"an already owned complete header needs only two scalar value workspaces, not another copied map or detail vectors")
           verify(kb.knownReads.vals.first===first,"consumer evidence links borrow the same admitted complete header")
+          verify(kb.knownReads.keys.first===firstKey,"an exact shared source header retains its immutable key text after the first consumer expires")
           verify(!kb.emptyEvidenceOmitted);verifyEq(kb.knownReads.size,1)
           sharedCharges:=(Str:Int)EnerCubixContext#.field("knownCharges").get(kb)
           verifyEq(sharedCharges.vals.first,2,"the source owns the complete shared header; this consumer retains only its slot/key links")

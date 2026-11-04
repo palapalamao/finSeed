@@ -279,9 +279,9 @@ internal class EnerCubixContext
   private Void knownHeader(Str key,Int entries)
   {
     if(frameOwner == null) return
-    if(!knownCharges.containsKey(key)) {frameOwner.hold(1);knownCharges[key]=0}
     previous:=knownCharges[key]
-    if(entries>previous) {frameOwner.hold(entries-previous);knownCharges[key]=entries}
+    if(previous==null) {frameOwner.hold(1+entries);knownCharges[key]=entries}
+    else if(entries>previous) {frameOwner.hold(entries-previous);knownCharges[key]=entries}
   }
 
   Str displayName(Str id)
@@ -646,7 +646,8 @@ internal class EnerCubixContext
         // source/hour/cutoff header. Read its scalar facts before constructing
         // another known-usage map. Trimmed, bound and other-cutoff reads retain
         // the original path below. The source owner outlives this consumer.
-        shared:=frameOwner!=null && sharedModel!=null && byId===sharedModel.byId && r.isImmutable ? his.knownEvidence(r,from,to,knownEnd) : null
+        sharedSlot:=frameOwner!=null && sharedModel!=null && byId===sharedModel.byId && r.isImmutable ? his.knownEvidenceSlot(r,from,to,knownEnd) : null
+        shared:=sharedSlot?.evidence
         sharedDetails:=shared?.get("intervals") as [Str:Obj?][]
         if(sharedDetails!=null && sharedDetails.size<=1000-knownDetailCount)
         {
@@ -654,7 +655,8 @@ internal class EnerCubixContext
           // remain fresh; only the already-owned evidence header is borrowed.
           preparedBudget.lookup
           knownWorkspace(6)
-          recordId:=r["id"].toStr;key:="$recordId|$point|${from.ticks}|${to.ticks}"
+          key:=sharedSlot.key
+          if(key==null) {recordId:=r["id"].toStr;key="$recordId|$point|${from.ticks}|${to.ticks}"}
           knownHeader(key,2)
           raw=EnerCubixValue(EnerCubixMath.num(shared["knownValue"]),shared["knownQuality"].toStr,his.sources)
           durationFactor=(EnerCubixMath.num(shared["coveredSeconds"]) ?: 0f)/3600f
@@ -709,7 +711,7 @@ internal class EnerCubixContext
             }
             bounds:=his.exactBounds(from,to)
             evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":bounds?.fromIso ?: from.toIso,"to":bounds?.toIso ?: to.toIso])
-            if(share) his.rememberKnownEvidence(r,from,to,knownEnd,evidence)
+            if(share) his.rememberKnownEvidence(r,from,to,knownEnd,evidence,key)
           }
           knownDetailCount+=details.size.min(remaining)
           if(frameOwner == null && !knownReads.containsKey(key)) retain(2)

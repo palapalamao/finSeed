@@ -329,9 +329,13 @@ internal class EnerCubixCockpitStream
       try {items=readBlock(span.start,span.end,cursorReader)}
       catch(EnerCubixStreamBlockErr e)
       {
-        cursorReadStep=4day
         ticks:=(span.end-span.start).ticks
         if(ticks <= 1ms.ticks) throw EnerCubixHttpErr(422,"HISTORY_DENSITY_LIMIT","cockpitHistoryDensityLimit")
+        // Reuse the smaller span learned under the unchanged block/raw/fair
+        // cap. Resetting to four days repeats the entire split tree on every
+        // dense block. Both queued halves still cover the original span.
+        learned:=Duration(ticks/2);if(learned>4day) learned=4day
+        if(learned<cursorReadStep) cursorReadStep=learned
         mid:=span.start+Duration(ticks/2)
         cursorSpans.insert(0,Span.makeAbs(mid,span.end));cursorSpans.insert(0,Span.makeAbs(span.start,mid));continue
       }
@@ -342,11 +346,26 @@ internal class EnerCubixCockpitStream
         // Untagged interval cadence is inferred from its first nonempty
         // four-day block. Preserve that exact legacy inference window.
         fixedCadence:=cleaned || mode!="interval" || (!inferredInterval && (point.has("hisCollectInterval") || point.has("hisInterval")))
-        if(!queued && fixedCadence && cursorReadStep<64day) cursorReadStep*=2
+        if(!queued)
+        {
+          if(cursorReadStep<4day) cursorReadStep=4day
+          else if(fixedCadence && cursorReadStep<64day) cursorReadStep*=2
+        }
         continue
       }
-      // Any item, including NA/null, returns to the original block cadence.
-      cursorReadStep=4day
+      // Wider empty-domain probes return to four days on any row, including
+      // NA/null. Dense spans retain their learned bound. Sparse successful
+      // main spans may grow back toward four days; inference still uses its
+      // original first nonempty block, and readBlock enforces every hard cap.
+      if(cursorReadStep>4day) cursorReadStep=4day
+      else if(!queued && cursorReadStep<4day)
+      {
+        // Same effective ceiling as readBlock, including other owners' held
+        // buffers and this cursor's retained boundary/cleaning rows.
+        room:=((budget.rawRoom(cursorId)-raw.size-(previous==null ? 0 : 1))/3).max(0)
+        cap:=budget.blockLimit.min(room).min(budget.heldLimit/(budget.activeCursors*3))
+        if(items.size*2<=cap) {nextStep:=cursorReadStep*2;cursorReadStep=nextStep>4day ? 4day : nextStep}
+      }
       // Future rows are charged only as raw samples. Cleaning derives exactly
       // the next consumed row in advance(), never a second future detail graph.
       try
