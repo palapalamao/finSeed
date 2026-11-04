@@ -123,7 +123,7 @@ internal class EnerCubixCockpitStream
           try {consume(histories,owner)} finally {owner.close}
           return
         }
-        streams[i].withFrame |h| {histories[h.id]=h;visit(i+1)}
+        streams[i].withFrame |h| {h.bindOwnEmptyFrame(owner,(DateTime)start,(DateTime)end);histories[h.id]=h;visit(i+1)}
       }
       visit(0)
     }

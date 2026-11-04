@@ -91,12 +91,43 @@ internal class EnerCubixHistoryData
   private EnerCubixKnownUsage? knownReader
   private Bool frameExpired := false
   private EnerCubixPreparedFrame? sourceFrame
+  private EnerCubixPreparedOwner? ownEmptyOwner
+  private EnerCubixOwnEmptyValue[]? ownEmptyValues
 
   internal Bool ownedFrame(EnerCubixPreparedBudget budget)
   {sourceFrame != null && !frameExpired && preparedBudget === budget}
 
+  ** The common source owner outlives all consumer frames. Share only null
+  ** results whose exact pair was already proven empty, within one real hour.
+  ** Canonical record identity and strict/known queryEnd remain part of the key.
+  internal Void bindOwnEmptyFrame(EnerCubixPreparedOwner owner,DateTime from,DateTime to)
+  {
+    frameCheck
+    if(ownEmptyOwner!=null || !ownedFrame(owner.budget)) throw ArgErr("ownEmptyFrameOwner")
+    if(to-from!=1hr) return
+    owner.hold(3);owner.watch |->Void| {clearOwnEmpty};ownEmptyOwner=owner
+  }
+  internal EnerCubixOwnEmptyValue? ownEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd)
+  {
+    frameCheck
+    return ownEmptyValues?.find |entry| {entry.record===record && entry.category==category && entry.from==from && entry.to==to && entry.metric==metric && entry.queryEnd==queryEnd}
+  }
+  internal EnerCubixOwnEmptyValue? rememberOwnEmpty(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value)
+  {
+    frameCheck
+    if(ownEmptyOwner==null || value.value!=null || emptyDomain(from,to,queryEnd)==null) return null
+    existing:=ownEmpty(record,category,from,to,metric,queryEnd);if(existing!=null) return existing
+    if(ownEmptyValues==null) {ownEmptyOwner.hold(1);ownEmptyValues=EnerCubixOwnEmptyValue[,]}
+    // Entry fields/link and the value object now remain under this source
+    // owner after the producing consumer closes; sources remain frame-owned.
+    ownEmptyOwner.hold(14)
+    entry:=EnerCubixOwnEmptyValue(record,category,from,to,metric,queryEnd,value);ownEmptyValues.add(entry);return entry
+  }
+  private Void clearOwnEmpty() {ownEmptyValues?.clear;ownEmptyValues=null;ownEmptyOwner=null}
+
   internal Void expireFrame()
   {
+    clearOwnEmpty
     frameExpired=true;sourceFrame=null;prepared=null;sparse=null;sparseDomains.clear
     sparseContext=null;empty=null;emptyValue=null;emptyKnown.clear;knownReader=null
     cleaning=null;samples.clear;rawSamples.clear;intervals=null
@@ -104,6 +135,21 @@ internal class EnerCubixHistoryData
   private Void frameCheck() {if(frameExpired) throw ArgErr("preparedFrameExpired")}
 
   Str:Obj? knownUsage(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false)
+  {readKnownUsage(start,end,queryEnd,includeRuleFacts,false)}
+
+  ** The owned context reads this view synchronously without retaining or
+  ** changing it. Only the existing proven-empty map is borrowed; other reads
+  ** retain the public method's independent mutable result.
+  internal Str:Obj? borrowedKnownUsage(DateTime start,DateTime end,DateTime queryEnd)
+  {
+    frameCheck
+    if(sourceFrame==null || preparedBudget==null) throw ArgErr("preparedKnownViewNeedsFrame")
+    return readKnownUsage(start,end,queryEnd,false,true)
+  }
+  internal Bool isBorrowedEmptyKnown(Map data)
+  {frameCheck;return sourceFrame!=null && prepared!=null && !emptyKnown.isEmpty && data===emptyKnown}
+
+  private Str:Obj? readKnownUsage(DateTime start,DateTime end,DateTime queryEnd,Bool includeRuleFacts,Bool borrowEmpty)
   {
     frameCheck
     if (prepared != null)
@@ -114,7 +160,7 @@ internal class EnerCubixHistoryData
       if (data == null)
       {
         if(sparsePair(start,end) && ((DateTime[])sparse["queryEnds"]).contains(queryEnd))
-        {preparedBudget?.sparseHits?.increment;return emptyKnown.dup}
+        {preparedBudget?.sparseHits?.increment;return borrowEmpty ? emptyKnown : emptyKnown.dup}
         preparedBudget?.unprepared?.increment
         return ["value":EnerCubixValue(null,"streamingReadNotPrepared",sources)]
       }
@@ -359,5 +405,18 @@ internal class EnerCubixHistoryData
     }
     return out.sort |a,b| { cmp:=a.start <=> b.start; return cmp == 0 ? a.end <=> b.end : cmp }
   }
+}
+
+internal class EnerCubixOwnEmptyValue
+{
+  new make(Str:Obj? record,Str category,DateTime from,DateTime to,Str metric,DateTime? queryEnd,EnerCubixValue value)
+  {this.record=record;this.category=category;this.from=from;this.to=to;this.metric=metric;this.queryEnd=queryEnd;this.value=value}
+  Str:Obj? record
+  Str category
+  DateTime from
+  DateTime to
+  Str metric
+  DateTime? queryEnd
+  EnerCubixValue value
 }
 

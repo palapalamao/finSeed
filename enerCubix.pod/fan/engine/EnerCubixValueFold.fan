@@ -40,7 +40,7 @@ internal class EnerCubixValueFold
     {
       missing=true
       if(value.quality != "na") allNA=false
-      if(invalidReason == null && !["missing","incompleteInterval","filtered","substituted","na","reset","negative","maximum"].contains(value.quality)) invalidReason=value.quality
+      if(invalidReason == null && !knownNullQualities.contains(value.quality)) invalidReason=value.quality
     }
   }
 
@@ -54,4 +54,5 @@ internal class EnerCubixValueFold
     if(numeric == 0) return EnerCubixValue(null,allNA ? "na" : "missing",ids)
     return EnerCubixValue(total,missing ? EnerCubixValue.worse(quality,"filtered") : quality,ids)
   }
+  private static const Str[] knownNullQualities := ["missing","incompleteInterval","filtered","substituted","na","reset","negative","maximum"]
 }

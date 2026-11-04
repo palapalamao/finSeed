@@ -250,11 +250,11 @@ internal class EnerCubixReport
       }
       else
       {
-        value=ctx.node(id,category,cursor,next,metric,Str[,],utility)
+        value=ctx.node(id,category,cursor,next,metric,Str#.emptyList,utility)
         if (directQuality != null) value=EnerCubixValue(null,directQuality,value.sources)
         if (activeKnown != null && !out.gauge)
         {
-          known=activeKnown.node(id,category,cursor,next,metric,Str[,],utility)
+          known=activeKnown.node(id,category,cursor,next,metric,Str#.emptyList,utility)
           if (kind == "utility" && value.value == null && value.quality == "missing" && known.quality == "na") value=EnerCubixValue(null,"na",value.sources)
         }
       }
@@ -272,7 +272,7 @@ internal class EnerCubixReport
           if (denominator != null) denominator=EnerCubixArea.scale(denominator,out.normalizationArea)
         }
       }
-      if (value.value == null) ctx.warn("${out.name}: ${value.quality}")
+      if (value.value == null) ctx.warnLine(out.name,value.quality)
       tick:=EnerCubixTick(cursor,next,value,numerator,denominator); tick.known=known
       tick.baseValue=baseValue;tick.baseKnown=baseKnown;tick.baseNumerator=baseNumerator;tick.baseDenominator=baseDenominator
       return tick

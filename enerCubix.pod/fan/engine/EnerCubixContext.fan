@@ -65,6 +65,12 @@ internal class EnerCubixContext
   [Str:Obj?]? calendar
   Str[] warnings := [,]
   private Str:EnerCubixValue cache := [:]
+  private [Str:EnerCubixOwnFrameValue]? ownFrameValues
+  private DateTime? ownFrameFrom
+  private DateTime? ownFrameTo
+  private Str? ownFrameCategory
+  private Str? ownFrameMetric
+  private Int ownFrameSlots := 0
   private Str:EnerCubixValue tariffBaseline := [:]
   private Str:Obj? defaultTariffs := [:]
   private Str:EnerCubixTariffCursor tariffCursors := [:]
@@ -92,6 +98,7 @@ internal class EnerCubixContext
   private Bool frameConstantEmpty := false
   private Bool? tariffConfigured
   private [Str:Int[]]? warningRanks
+  private [Str:Bool]? warningSeen
   private Int warningPhase := 0
   private Int warningLine := 0
   private Int warningTime := 0
@@ -141,6 +148,8 @@ internal class EnerCubixContext
   private Void dropFrame()
   {
     cache.clear;knownReads.clear;knownCharges.clear;knownScratch=0;byPoint=Str:EnerCubixHistoryData[:]
+    ownFrameValues?.clear;ownFrameValues=null;ownFrameFrom=null;ownFrameTo=null
+    ownFrameCategory=null;ownFrameMetric=null;ownFrameSlots=0
     knownDetailCount=0;omittedEmptyEvidence=false;omittedUnpreparedEvidence=false;frameOwner=null;frameConstantEmpty=false
     if(transientContext)
     {
@@ -196,13 +205,28 @@ internal class EnerCubixContext
     {
       previous:=warningRanks[message]
       if(previous == null)
-      {retain(6,true);warningRanks[message]=[warningPhase,warningLine,warningTime,warningSequence]}
+      {retain(7,true);warningRanks[message]=[warningPhase,warningLine,warningTime,warningSequence];warnings.add(message)}
       else if(warningBefore(previous))
       {previous[0]=warningPhase;previous[1]=warningLine;previous[2]=warningTime;previous[3]=warningSequence}
       warningSequence++
+      return
+    }
+    // Owned known-value contexts keep the same first-occurrence list without
+    // scanning all prior messages on every physical meter/hour visit. Admit
+    // this index before allocating or publishing a new warning.
+    if(persistentOwner != null)
+    {
+      if(warningSeen == null)
+      {retain(3+warnings.size,true);warningSeen=Str:Bool[:];warnings.each |existing| {warningSeen[existing]=true}}
+      if(warningSeen.containsKey(message)) return
+      retain(2,true);warningSeen[message]=true;warnings.add(message);return
     }
     if(!warnings.contains(message)) {if(persistentOwner != null) retain(1,true);warnings.add(message)}
   }
+  private Void warnValue(Str:Obj? record,Str id,Str quality)
+  {label:=(record["name"] ?: id).toStr;warn(sharedModel?.warningText(label,quality,false,7) ?: "$label : $quality")}
+  internal Void warnLine(Str label,Str quality)
+  {warn(sharedModel?.warningText(label,quality,true,7) ?: "$label: $quality")}
 
   internal Void orderWarnings()
   {
@@ -232,7 +256,7 @@ internal class EnerCubixContext
     if(warningTime != previous[2]) return warningTime<previous[2]
     return warningSequence<previous[3]
   }
-  private Void clearWarnings() {warnings.clear;warningRanks?.clear;warningRanks=null}
+  private Void clearWarnings() {warnings.clear;warningRanks?.clear;warningRanks=null;warningSeen?.clear;warningSeen=null}
 
   ** Each active frame keeps one maximum charge per header slot and one reusable
   ** copy workspace. Duplicate visits still replace evidence in the original
@@ -355,13 +379,13 @@ internal class EnerCubixContext
     return EnerCubixValue.sum(values)
   }
 
-  EnerCubixValue node(Str id, Str category, DateTime from, DateTime to, Str metric := "energy", Str[] path := Str[,], Str? utility := null, Bool useMaster := true)
+  EnerCubixValue node(Str id, Str category, DateTime from, DateTime to, Str metric := "energy", Str[] path := Str#.emptyList, Str? utility := null, Bool useMaster := true)
   {
     frameCheck
     if(++nodeCalls % 128 == 0) deadline?.check
     if (path.contains(id)) return EnerCubixValue(null,"cycle")
     key := preparedBudget == null ? "$id|$category|${from.ticks}|${to.ticks}|$metric|$utility|$useMaster" : ""
-    if (path.isEmpty && cache.containsKey(key)) return cache[key]
+    if (preparedBudget == null && path.isEmpty && cache.containsKey(key)) return cache[key]
     r := byId[id]
     if (r == null) return EnerCubixValue(null,"unknownNode")
     if (comparison != null && (r["_comparisonReadable"] == false || r["_comparisonPointReadable"] == false)) return EnerCubixValue(null,"forbidden")
@@ -370,22 +394,51 @@ internal class EnerCubixContext
       warn(r["name"].toStr+"："+r["configurationError"])
       return EnerCubixValue(null,"invalidConfiguration")
     }
+    own:=frameOwner!=null && utility==null && metric!="cost" && (r["kind"]=="meter" || r["kind"]=="totalMeter")
+    if(own)
+    {
+      cached:=ownFrameValue(id,category,from,to,metric)
+      if(cached!=null)
+      {
+        if(cached.repeatWarning && cached.value.value==null) warnValue(r,id,cached.value.quality)
+        return cached.value
+      }
+    }
+    EnerCubixHistoryData? ownSource
+    if(own && sharedModel!=null && byId===sharedModel.byId && r["nativeSourceMissing"]!=true)
+      ownSource=byPoint[r["pointId"] as Str ?: ""]
+    queryEnd:=strictContext==null ? null : knownEnd
     stable:=emptyKey(r,category,from,to,metric)
     if(stable!=null && frameOwner!=null && metric=="cost") stable+="|${from.ticks}|${to.ticks}"
-    if(stable != null && cache.containsKey(stable)) {preparedBudget.contextEmptyHits.increment;return cache[stable]}
+    if(stable != null && cache.containsKey(stable))
+    {
+      preparedBudget.contextEmptyHits.increment;value:=cache[stable]
+      if(own) saveOwnFrameValue(id,category,from,to,metric,value,false)
+      return value
+    }
+    // Consumer domain reuse takes precedence over source exact-pair reuse:
+    // another partial pair must not repeat or reorder an existing warning.
+    sharedEmpty:=stable==null ? null : ownSource?.ownEmpty(r,category,from,to,metric,queryEnd)
+    if(sharedEmpty!=null)
+    {
+      if(strictContext!=null) omittedEmptyEvidence=true
+      retain(2);cache[stable]=sharedEmpty.value
+      warnValue(r,id,sharedEmpty.value.quality)
+      saveOwnFrameValue(id,category,from,to,metric,sharedEmpty.value,false)
+      return sharedEmpty.value
+    }
     // A device always reads its own primary history. Reuse that exact result
     // within this borrowed frame, including recursive scope/detail visits.
     // Pricing retains its independent tariff/baseline execution path.
-    ownKey:=frameOwner!=null && utility==null && metric!="cost" && ["meter","totalMeter"].contains(r["kind"]) ? "own|$id|$category|${from.ticks}|${to.ticks}|$metric" : null
+    Str? ownKey
     if(frameConstantEmpty && timeInvariantEmpty(metric))
     {
-      if(ownKey!=null) ownKey="emptyOwn|$id|$category|$metric"
-      else if(path.isEmpty) ownKey="emptyScope|$id|$category|$metric|$utility|$useMaster"
+      if(!own && path.isEmpty) ownKey="emptyScope|$id|$category|$metric|$utility|$useMaster"
     }
     if(ownKey!=null && cache.containsKey(ownKey))
     {
       cached:=cache[ownKey]
-      if(cached.value==null) {label:=r["name"] ?: id;warn("$label : ${cached.quality}")}
+      if(cached.value==null) warnValue(r,id,cached.quality)
       return cached
     }
     nextPath := path.dup.add(id)
@@ -461,17 +514,50 @@ internal class EnerCubixContext
         result=factor == null ? EnerCubixValue(null,"missingCoefficient",raw.sources) : raw.scale(factor)
       }
     }
-    if (result.value == null) { label:=r["name"] ?: id; warn("$label : ${result.quality}") }
+    if (result.value == null) warnValue(r,id,result.quality)
     if (path.isEmpty && preparedBudget == null) cache[key]=result
+    sharedEmpty=stable==null ? null : ownSource?.rememberOwnEmpty(r,category,from,to,metric,queryEnd,result)
+    if(sharedEmpty!=null)
+    {
+      if(!cache.containsKey(stable)) retain(2);cache[stable]=result
+      saveOwnFrameValue(id,category,from,to,metric,result,false)
+      return result
+    }
     if(stable != null && result.value == null)
-    {if(!cache.containsKey(stable)) retain(2);cache[stable]=result}
+    {
+      if(!cache.containsKey(stable)) retain(2);cache[stable]=result
+      if(own) saveOwnFrameValue(id,category,from,to,metric,result,false)
+    }
+    else if(own) saveOwnFrameValue(id,category,from,to,metric,result,true)
     else if(ownKey!=null) {retain(2);cache[ownKey]=result}
     return result
   }
 
+  ** A consumer frame usually evaluates one physical hour many times. Keep its
+  ** exact range/category/metric as typed fields instead of rebuilding timestamp
+  ** string keys on each recursive or detail visit. A different group discards
+  ** the previous values; only the high-water slot count stays admitted until
+  ** this frame expires. This is never a cross-frame or cross-request cache.
+  private EnerCubixOwnFrameValue? ownFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric)
+  {
+    if(ownFrameValues==null) {retain(7);ownFrameValues=Str:EnerCubixOwnFrameValue[:]}
+    if(ownFrameFrom!=from || ownFrameTo!=to || ownFrameCategory!=category || ownFrameMetric!=metric)
+    {ownFrameValues.clear;ownFrameFrom=from;ownFrameTo=to;ownFrameCategory=category;ownFrameMetric=metric}
+    return ownFrameValues[id]
+  }
+  private Void saveOwnFrameValue(Str id,Str category,DateTime from,DateTime to,Str metric,EnerCubixValue value,Bool repeatWarning)
+  {
+    // A recursive evaluation may have used another range/category/metric.
+    // Restore this result's exact group before publishing its reusable slot.
+    previous:=ownFrameValue(id,category,from,to,metric)
+    if(previous!=null) {previous.value=value;previous.repeatWarning=repeatWarning;return}
+    if(ownFrameValues.size>=ownFrameSlots) {retain(5);ownFrameSlots++}
+    ownFrameValues[id]=EnerCubixOwnFrameValue(value,repeatWarning)
+  }
+
   private Str? emptyKey(Str:Obj? r,Str category,DateTime from,DateTime to,Str metric)
   {
-    if(preparedBudget == null || !["meter","totalMeter"].contains(r["kind"])) return null
+    if(preparedBudget == null || (r["kind"]!="meter" && r["kind"]!="totalMeter")) return null
     if(metric == "cost")
     {
       mode:=tariff(r)?.get("mode")
@@ -483,7 +569,7 @@ internal class EnerCubixContext
     // This source was not captured in this report. Keep the original fixed
     // not-loaded result; it is not evidence that FIN history was read and empty.
     if(h == null) return "notLoaded|"+r["id"]+"|"+category+"|"+metric
-    if(!["ok","cleaned","estimated","derived","corrected"].contains(h.quality)) return null
+    if(!emptyCacheQualities.contains(h.quality)) return null
     domain:=h.emptyDomain(from,to,knownEnd)
     if(domain == null && !h.unpreparedPair(from,to,knownEnd)) return null
     return "constant|"+r["id"]+"|"+category+"|"+metric+"|"+(domain?.toStr ?: "notPrepared")
@@ -502,14 +588,14 @@ internal class EnerCubixContext
   {
     frameCheck
     r:=byId[id]
-    if(r == null || preparedBudget == null || !["meter","totalMeter"].contains(r["kind"])) return null
+    if(r == null || preparedBudget == null || (r["kind"]!="meter" && r["kind"]!="totalMeter")) return null
     mode:=metric == "cost" ? tariff(r)?.get("mode") : null
     if(mode == "monthlyBlock" || mode == "yearlyBlock") return null
     h:=byPoint[r["pointId"] as Str ?: ""]
     return h == null ? to : h.constantEnd(from,to,knownEnd)
   }
 
-  EnerCubixValue nodeTotal(Str id, DateTime from, DateTime to, Str[] path := Str[,])
+  EnerCubixValue nodeTotal(Str id, DateTime from, DateTime to, Str[] path := Str#.emptyList)
   {
     frameCheck
     cats := categories(id)
@@ -526,13 +612,19 @@ internal class EnerCubixContext
     point := r["pointId"]?.toStr ?: ""
       his := byPoint[point]
       if (his == null) return EnerCubixValue(null,"missing",point.isEmpty ? Str[,] : [point])
-      if (!["ok","estimated","derived","cleaned","corrected","filtered","substituted","na"].contains(his.quality)) return EnerCubixValue(null,his.quality,[point])
+      if (!readableQualities.contains(his.quality)) return EnerCubixValue(null,his.quality,[point])
       if (r["kind"] != "sensor" && his.mode != "interval" && his.mode != "cumulative") return EnerCubixValue(null,"notEnergyHistory",[point])
       if (strictContext == null) raw=his.read(from,to)
       else
       {
-        data:=his.knownUsage(from,to,knownEnd); raw=(EnerCubixValue)data["value"]
+        data:=frameOwner==null ? his.knownUsage(from,to,knownEnd) : his.borrowedKnownUsage(from,to,knownEnd); raw=(EnerCubixValue)data["value"]
         durationFactor=(EnerCubixMath.num(data["coveredSeconds"]) ?: 0f)/3600f
+        // This is the source's already-proven empty domain. Reading it adds no
+        // intervals or diagnostic header, so do not allocate filtered/mapped
+        // empty lists or copy its map for each report/meter/hour visit.
+        if(his.isBorrowedEmptyKnown(data)) omittedEmptyEvidence=true
+        else
+        {
         detailBound:=(data["intervals"] as List)?.size ?: 0
         // maps() may simultaneously hold its filtered and mapped reference lists.
         knownWorkspace(2+2*detailBound)
@@ -565,6 +657,7 @@ internal class EnerCubixContext
           if(frameOwner == null && !knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }
+        }
       }
     max := EnerCubixMath.num(r["maximum"])
     if (raw.value != null && max != null && raw.value > max*durationFactor) return EnerCubixValue(null,"maximum",raw.sources)
@@ -580,6 +673,9 @@ internal class EnerCubixContext
     }
     return raw
   }
+
+  private static const Str[] emptyCacheQualities := ["ok","cleaned","estimated","derived","corrected"]
+  private static const Str[] readableQualities := ["ok","estimated","derived","cleaned","corrected","filtered","substituted","na"]
 
   private EnerCubixValue cost(Str:Obj? r, EnerCubixValue raw, DateTime from, DateTime to, Str[] path)
   {
@@ -804,6 +900,14 @@ internal class EnerCubixContext
     first:=byId.vals.find |r| { r["categoryId"]?.toStr == category && r["kind"] != "sensor" && r["unit"] != null }
     return first?.get("unit")?.toStr ?: ""
   }
+}
+
+** One admitted physical-result slot in the current consumer frame.
+internal class EnerCubixOwnFrameValue
+{
+  new make(EnerCubixValue value,Bool repeatWarning) {this.value=value;this.repeatWarning=repeatWarning}
+  EnerCubixValue value
+  Bool repeatWarning
 }
 
 

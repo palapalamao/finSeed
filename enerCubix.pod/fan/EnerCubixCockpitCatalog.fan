@@ -13,6 +13,8 @@ internal class EnerCubixCockpitCatalog
       if(bindings.any |binding| {binding.entries!=0}) throw ArgErr("catalogStillBorrowed")
       views.clear;children.each |rows| {rows.clear};children.clear
       protectedRoots.clear;area?.clear;originalIndex?.clear;originalIndex=null;originalRecords=null;bindings.clear;pointUnits.clear;calendar=null;closed=true
+      nodeWarningTexts?.each |values| {values.clear};nodeWarningTexts?.clear;nodeWarningTexts=null
+      lineWarningTexts?.each |values| {values.clear};lineWarningTexts?.clear;lineWarningTexts=null
     }
     owner.hold(18)
     owner.hold(1+units.size);pointUnits=units.dup
@@ -45,6 +47,25 @@ internal class EnerCubixCockpitCatalog
   private EnerCubixPreparedOwner[] bindings := [,]
   private Bool closed := false
   private Bool unitsPrepared := false
+  private [Str:[Str:Str]]? nodeWarningTexts
+  private [Str:[Str:Str]]? lineWarningTexts
+
+  ** Reuse the exact business label/quality text across request-local views.
+  ** This optional index never reclaims diagnostic or peer capacity.
+  internal Str warningText(Str label,Str quality,Bool compact,Int reserve := 0)
+  {
+    check
+    messages:=compact ? lineWarningTexts : nodeWarningTexts
+    values:=messages?.get(label)
+    text:=values?.get(quality);if(text!=null) return text
+    need:=(messages==null ? 3 : 0)+(values==null ? 3 : 0)+2
+    if(owner.budget.remaining<need+reserve) return compact ? "$label: $quality" : "$label : $quality"
+    owner.hold(need)
+    if(messages==null)
+    {messages=Str:[Str:Str][:];if(compact) lineWarningTexts=messages;else nodeWarningTexts=messages}
+    if(values==null) {values=Str:Str[:];messages[label]=values}
+    text=compact ? "$label: $quality" : "$label : $quality";values[quality]=text;return text
+  }
 
   internal Void prepareUnits(Str:Str units)
   {

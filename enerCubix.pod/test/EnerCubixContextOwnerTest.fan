@@ -143,6 +143,191 @@ class EnerCubixContextOwnerTest : Test
     verifyErr(ArgErr#) {ctx.warningScope(0,0,at.ticks)}
   }
 
+  Void testOwnedWarningMembershipIsAdmittedBeforePublishing()
+  {
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    known:=EnerCubixContext.known(ctx,at+1hr)
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-1)
+    verifyErr(EnerCubixHttpErr#) {known.warn("主表 : missing")}
+    verify(known.warnings.isEmpty,"failed admission must not publish a partial warning")
+    owner.close;verify(known.warnings.isEmpty)
+    verifyEq(budget.state.temporary.val,peer.entries)
+    peer.close;verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testOwnedKnownWarningsKeepFirstOccurrenceAndRetireWithOwner()
+  {
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    known:=EnerCubixContext.known(ctx,at+1hr)
+    expected:=Str[,]
+    for(i:=0;i<256;i++) {message:="Meter $i : missing";expected.add(message);known.warn(message)}
+    retained:=owner.entries
+    for(hour:=0;hour<24;hour++) for(i:=255;i>=0;i--) known.warn(expected[i])
+    verifyEq(known.warnings,expected);verifyEq(owner.entries,retained)
+    owner.close;verify(known.warnings.isEmpty);verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testOwnFrameMemoReusesSlotsAcrossHourAndMetricChanges()
+  {
+    rs:=records;rs[1]["subcategoryId"]="s";rs.add(["id":"s","kind":"subcategory","coalFactor":2f])
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(rs,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    q:=Str:Obj?["from":at.toIso,"to":(at+24hr).toIso,"asOf":(at+24hr).toIso,"tz":"UTC"]
+    point:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisMode":"consumption","hisCollectInterval":Number.makeDuration(1hr),"unit":"kWh","tz":"UTC"])
+    stream:=EnerCubixCockpitStream.openCursor(point,null,at,at+24hr,q,rs,budget,|Dict p,Span span,|HisItem| sink|
+    // Native consumption readings are end stamped; include the left context.
+    // 01:00 carries hour 00's 1, while the 00:00 row belongs before the range.
+    {(0..24).each |i| {ts:=at+Duration(i*1hr.ticks);if(ts>=span.start && ts<span.end) sink(HisItem(ts,Number(i)))}})
+    try
+    {
+      stream.advance(at+24hr)
+      EnerCubixCockpitStream.withFrames([stream],budget.state) |histories,frame|
+      {
+        ctx.beginFrame(frame,histories)
+        firstEntries:=0
+        for(i:=0;i<24;i++)
+        {
+          start:=at+Duration(i*1hr.ticks);end:=start+1hr
+          value:=ctx.node("m","c",start,end);verifyEq(value.value,(i+1).toFloat)
+          verify(ctx.node("m","c",start,end,"energy",["scope"])===value)
+          verifyEq(ctx.node("m","c",start,end,"coal").value,2f*(i+1).toFloat)
+          if(i==0) firstEntries=frame.entries
+          else verifyEq(frame.entries,firstEntries,"completed hour/metric results must not accumulate in the frame memo")
+        }
+      }
+    }
+    finally {stream.close;owner.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testBorrowedEmptyKnownViewIsReadOnlyInContextAndLeaseBound()
+  {
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    ctx:=EnerCubixContext(records,[Str:Obj?][,],TimeZone.utc);ctx.useOwner(owner)
+    known:=EnerCubixContext.known(ctx,at+4hr);cursor:=source(budget,HisItem[,])
+    EnerCubixHistoryData? expired
+    try
+    {
+      cursor.advance(at+4hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,frame|
+      {
+        h:=histories["p"];expired=h;ctx.beginFrame(frame,histories);known.beginFrame(frame,histories)
+        borrowed:=(Str:Obj?)h->borrowedKnownUsage(at,at+1hr,at+4hr)
+        verify(h->borrowedKnownUsage(at,at+1hr,at+4hr)===borrowed)
+        ordinary:=h.knownUsage(at,at+1hr,at+4hr)
+        verify(ordinary!==borrowed);ordinary["knownQuality"]="caller edit"
+        verifyEq(borrowed["knownQuality"],"missing");verifyEq(borrowed["coveredSeconds"],0f)
+        verifyEq(borrowed["intervalCount"],0);verifyEq(((EnerCubixValue)borrowed["value"]).value,null)
+        before:=borrowed.dup
+        verifyEq(known.node("m","c",at,at+1hr).quality,"missing")
+        verify(known.knownReads.isEmpty);verify(known.emptyEvidenceOmitted)
+        verifyEq(borrowed,before,"context must not mutate the borrowed source view")
+      }
+      verifyErr(ArgErr#) {expired->borrowedKnownUsage(at,at+1hr,at+4hr)}
+    }
+    finally {cursor.close;owner.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testCanonicalContextsShareOnlyProvenEmptyOwnResultsWithinSourceFrame()
+  {
+    rs:=records;rs[1]["subcategoryId"]="s";rs.add(["id":"s","kind":"subcategory"])
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(rs.toImmutable,TimeZone.utc,model)
+    first:=EnerCubixPreparedOwner(budget.state);second:=EnerCubixPreparedOwner(budget.state)
+    a:=EnerCubixContext.shared(catalog,"space",false,first);a.orderWarnings
+    b:=EnerCubixContext.shared(catalog,"metering",false,second);b.orderWarnings
+    bound:=EnerCubixContext.bound(a,"s",["id":"s","kind":"subcategory","coalFactor":2f]);bound.orderWarnings
+    cursor:=source(budget,HisItem[,])
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,frame|
+      {
+        a.beginFrame(frame,histories);b.beginFrame(frame,histories);bound.beginFrame(frame,histories)
+        a.warningScope(3,0,at.ticks);av:=a.node("m","c",at,at+1hr,"coal")
+        a.warningScope(0,0,at.ticks);a.warn("first logical phase");a.node("m","c",at,at+1hr,"coal")
+        b.warningScope(0,0,at.ticks);bv:=b.node("m","c",at,at+1hr,"coal")
+        verifyEq(av.value,null);verifyEq(av.quality,"missingCoefficient");verifyEq(av.sources,["p"])
+        verify(av===bv,"canonical views should reuse the admitted empty result")
+        verifyEq(a.orderedWarnings,["first logical phase","m : missingCoefficient"])
+        verifyEq(b.orderedWarnings,["m : missingCoefficient"])
+        bound.warningScope(0,0,at.ticks)
+        verifyEq(bound.node("m","c",at,at+1hr,"coal").quality,"missing","bound coefficient must not borrow the canonical result")
+      }
+    }
+    finally {cursor.close;second.close;first.close;model.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testSharedEmptySubpairsKeepConsumerDomainWarningPrecedence()
+  {
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model)
+    first:=EnerCubixPreparedOwner(budget.state);second:=EnerCubixPreparedOwner(budget.state)
+    a:=EnerCubixContext.shared(catalog,"space",false,first);a.orderWarnings
+    b:=EnerCubixContext.shared(catalog,"space",false,second);b.orderWarnings
+    mid:=at+30min
+    q:=Str:Obj?["from":at.toIso,"to":(at+1hr).toIso,"asOf":(at+1hr).toIso,"tz":"UTC",
+      "_cockpitReadRanges":[["from":at.toIso,"to":mid.toIso],["from":mid.toIso,"to":(at+1hr).toIso]]]
+    point:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC"])
+    cursor:=EnerCubixCockpitStream.openCursor(point,null,at,at+1hr,q,records,budget,|Dict p,Span s,|HisItem| sink| {})
+    try
+    {
+      cursor.advance(at+1hr)
+      EnerCubixCockpitStream.withFrames([cursor],budget.state) |histories,frame|
+      {
+        a.beginFrame(frame,histories);b.beginFrame(frame,histories)
+        b.warningScope(0,0,at.ticks);b.node("m","c",at,mid);b.node("m","c",mid,at+1hr)
+        a.warningScope(3,0,at.ticks);a.node("m","c",at,mid)
+        a.warningScope(1,0,at.ticks);a.warn("middle phase")
+        a.warningScope(0,0,at.ticks);a.node("m","c",mid,at+1hr)
+        verifyEq(a.orderedWarnings,["middle phase","m : missing"])
+      }
+    }
+    finally {cursor.close;second.close;first.close;model.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
+  Void testWarningTextReusesExactMessagesAndFallsBackWithoutTakingPeerBudget()
+  {
+    budget:=EnerCubixStreamBudget();owner:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,owner)
+    message:=(Str)catalog->warningText("主表 A","missing",false)
+    verifyEq(message,"主表 A : missing")
+    retained:=owner.entries
+    verify(catalog->warningText("主表 A","missing",false)===message)
+    verifyEq(owner.entries,retained)
+    verifyEq(catalog->warningText("主表 A","missing",true),"主表 A: missing")
+    verifyEq(catalog->warningText("主表 A","na",false),"主表 A : na")
+    retained=owner.entries
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-1)
+    verifyEq(catalog->warningText("uncached label","missing",false),"uncached label : missing")
+    verifyEq(owner.entries,retained,"optional text reuse must not reclaim peer or diagnostic capacity")
+    owner.close;verifyEq(budget.state.temporary.val,peer.entries);peer.close
+    verifyEq(budget.state.temporary.val,0)
+    verifyErr(ArgErr#) {catalog->warningText("closed","missing",false)}
+  }
+
+  Void testOptionalWarningTextLeavesCurrentWarningAdmissionAvailable()
+  {
+    budget:=EnerCubixStreamBudget();model:=EnerCubixPreparedOwner(budget.state)
+    catalog:=EnerCubixCockpitCatalog(records.toImmutable,TimeZone.utc,model)
+    state:=EnerCubixPreparedOwner(budget.state);ctx:=EnerCubixContext.shared(catalog,"space",false,state);ctx.orderWarnings
+    peer:=EnerCubixPreparedOwner(budget.state);peer.hold(budget.state.remaining-8)
+    retained:=model.entries
+    try
+    {
+      ctx.warnLine("主表边界","missing")
+      verifyEq(ctx.orderedWarnings,["主表边界: missing"])
+      verifyEq(model.entries,retained,"optional text caching must leave the current mandatory warning available")
+    }
+    finally {state.close;model.close;peer.close}
+    verifyEq(budget.state.temporary.val,0)
+  }
+
   private EnerCubixCockpitStream source(EnerCubixStreamBudget budget,HisItem[] raw)
   {
     cfg:=Etc.makeDict(["defNull":Marker.val]);p:=Etc.makeDict(["id":Ref("p"),"his":Marker.val,"hisTotalized":Marker.val,"unit":"kWh","tz":"UTC","hisFunc":"enerCubixCleanHis","hisFuncConfig":cfg])
