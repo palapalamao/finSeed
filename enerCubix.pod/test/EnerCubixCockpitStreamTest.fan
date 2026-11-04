@@ -29,14 +29,45 @@ class EnerCubixCockpitStreamTest : Test
   }
   Void testParsedPairPlanPreservesLegacyTierPrefixAndFirstSeenSequence()
   {
-    full:=Str:Obj?["from":at.toIso,"to":(at+1hr).toIso];part:=Str:Obj?["from":(at+15min).toIso,"to":(at+45min).toIso]
-    queries:=[full,part,part.dup,full.dup]
-    tariff:=Str:Obj?["id":"t","kind":"tariff","mode":"monthlyBlock","rules":[["from":(at+20min).toIso,"to":(at+35min).toIso]]]
-    ctx:=EnerCubixContext([tariff],[Str:Obj?][,],TimeZone.utc)
-    expected:=EnerCubixCockpitStream.pairs(at,queries,[tariff,tariff],ctx)
-    parsed:=queries.map |q->DateTime[]| {[DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr)]}
-    actual:=EnerCubixCockpitStream#.method("pairs").callList([at,queries,[tariff,tariff],ctx,parsed])
-    verifyEq(actual,expected,"preserve all original duplicate/prefix/exception order too")
+    [at,DateTime.fromIso("2026-11-01T01:00:00-04:00").toTimeZone(TimeZone("New_York")),DateTime.fromIso("2026-03-08T01:00:00-05:00").toTimeZone(TimeZone("New_York"))].each |hour|
+    {
+      full:=Str:Obj?["from":hour.toIso,"to":(hour+1hr).toIso];part:=Str:Obj?["from":(hour+15min).toIso,"to":(hour+45min).toIso]
+      queries:=[full,part,part.dup,full.dup]
+      [Str:Obj?["id":"t","kind":"tariff","mode":"flat"],Str:Obj?["id":"t","kind":"tariff","mode":"monthlyBlock","rules":[["from":(hour+20min).toIso,"to":(hour+35min).toIso]]],Str:Obj?["id":"t","kind":"tariff","mode":"yearlyBlock","exceptions":[["startHour":0.5f,"endHour":1.5f]]]].each |tariff|
+      {
+        ctx:=EnerCubixContext([tariff],[Str:Obj?][,],hour.tz)
+        expected:=legacyPairs(hour,queries,[tariff,tariff],ctx)
+        parsed:=queries.map |q->DateTime[]| {[DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr)]}
+        verifyEq(EnerCubixCockpitStream.pairs(hour,queries,[tariff,tariff],ctx,parsed),expected)
+        verifyEq(EnerCubixCockpitStream.pairs(hour,queries,[tariff,tariff],ctx),expected)
+      }
+    }
+  }
+  // Frozen pre-optimization015 algorithm; intentionally retain its callbacks,
+  // duplicate visits and final unique behavior as an independent sequence oracle.
+  private [Str:Obj?][] legacyPairs(DateTime hour,[Str:Obj?][] queries,[Str:Obj?]?[] tariffs,EnerCubixContext ctx)
+  {
+    end:=hour+1hr;pairs:=[Str:Obj?][["from":hour,"to":end]]
+    queries.each |q|
+    {
+      a:=DateTime.fromIso(q["from"].toStr);b:=DateTime.fromIso(q["to"].toStr)
+      if(a<hour) a=hour;if(b>end) b=end
+      if(b>a)
+      {
+        pairs.add(["from":a,"to":b])
+        if(a>hour && tariffs.any |t| {["monthlyBlock","yearlyBlock"].contains(t?.get("mode") as Str ?: "")}) pairs.add(["from":hour,"to":a])
+      }
+    }
+    pairs.dup.each |pair|
+    {
+      a:=(DateTime)pair["from"];b:=(DateTime)pair["to"]
+      tariffs.each |t|
+      {
+        bounds:=ctx.tariffBounds(t,a,b)
+        for(i:=0;i<bounds.size-1;i++) pairs.add(["from":bounds[i],"to":bounds[i+1]])
+      }
+    }
+    return pairs.unique
   }
 
   Void testCursorRetainsRawLookaheadWithoutFutureDerivedCleaningDetails()

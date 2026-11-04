@@ -676,28 +676,38 @@ internal class EnerCubixCockpitStream
   {
     end:=hour+1hr
     pairs:=[Str:Obj?][["from":hour,"to":end]]
-    addQuery:=|DateTime left,DateTime right|
+    for(qi:=0;qi<queries.size;qi++)
     {
-      a:=left;b:=right
+      q:=queries[qi]
+      a:=parsed==null ? DateTime.fromIso(q["from"].toStr) : parsed[qi][0]
+      b:=parsed==null ? DateTime.fromIso(q["to"].toStr) : parsed[qi][1]
       if (a < hour) a=hour;if (b > end) b=end
       if (b > a)
       {
         pairs.add(["from":a,"to":b])
-        // Tier pricing also consumes the preceding part of this first hour.
-        // The native cycle range already includes it; prepare its exact pair.
-        if(a > hour && tariffs.any |t| {["monthlyBlock","yearlyBlock"].contains(t?.get("mode") as Str ?: "")})
-          pairs.add(["from":hour,"to":a])
+        // Keep the original tier prefix and every duplicate visit in order.
+        if(a > hour)
+        {
+          tiered:=false
+          for(ti:=0;ti<tariffs.size;ti++) {if(["monthlyBlock","yearlyBlock"].contains(tariffs[ti]?.get("mode") as Str ?: "")) {tiered=true;break}}
+          if(tiered) pairs.add(["from":hour,"to":a])
+        }
       }
     }
-    if(parsed==null) queries.each |q| {addQuery(DateTime.fromIso(q["from"].toStr),DateTime.fromIso(q["to"].toStr))}
-    else parsed.each |q| {addQuery(q[0],q[1])}
-    pairs.dup.each |pair|
+    base:=pairs.dup
+    for(pi:=0;pi<base.size;pi++)
     {
-      a:=(DateTime)pair["from"]; b:=(DateTime)pair["to"]
-      tariffs.each |t|
+      pair:=base[pi];a:=(DateTime)pair["from"];b:=(DateTime)pair["to"]
+      for(ti:=0;ti<tariffs.size;ti++)
       {
-        bounds:=ctx.tariffBounds(t,a,b)
-        for (i:=0;i<bounds.size-1;i++) pairs.add(["from":bounds[i],"to":bounds[i+1]])
+        tariff:=tariffs[ti];rules:=tariff?.get("rules") as List;exceptions:=tariff?.get("exceptions") as List
+        if(tariff!=null && (rules==null || rules.isEmpty) && (exceptions==null || exceptions.isEmpty))
+          pairs.add(["from":a,"to":b])
+        else
+        {
+          bounds:=ctx.tariffBounds(tariff,a,b)
+          for(i:=0;i<bounds.size-1;i++) pairs.add(["from":bounds[i],"to":bounds[i+1]])
+        }
       }
     }
     return pairs.unique

@@ -26,7 +26,9 @@ internal class EnerCubixValueFold
   {
     if(closed) throw ArgErr("valueFoldClosed")
     seen=true
-    value.sources.each |id| {if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}}
+    ids:=value.sources
+    for(i:=0;i<ids.size;i++)
+    {id:=ids[i];if(!sources.containsKey(id)) {owner?.hold(1);sources[id]=true}}
     if(!knownMode)
     {
       if(value.value == null && value.quality != "filtered") missing=true
