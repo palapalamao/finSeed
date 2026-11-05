@@ -3,6 +3,60 @@ using util
 ** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
 class EnerCubixCockpitRequestScopeTest : Test
 {
+  Void testCompletedProtectedFactsStaySharedAcrossReportsWithinTheSameQuota()
+  {
+    scope:=EnerCubixCockpitRequestScope("shared-completed-borrows","a");budget:=scope.stream.state
+    pool:=EnerCubixPreparedOwner(budget);first:=EnerCubixPreparedOwner(budget);second:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    rows:=[Str:Obj?][,];(0..<300).each |i| {rows.add(Str:Obj?["index":i,"values":Obj?[0f,null,3f]])}
+    expected:=rows.toImmutable
+    // The original pool keeps its own complete mutable graph and fee.
+    pool.hold(1+rows.size+rows.size*7);pool.watch |->Void| {rows.each |row| {((List)row["values"]).clear;row.clear};rows.clear}
+    a:=Str:Obj?["rows":rows];b:=Str:Obj?[:];b.ordered=true
+    b["direct"]=rows[42];b["rows"]=rows;b["equal"]=rows[42].dup
+    first.hold(64);first.watch |->Void| {a.clear}
+    second.hold(64);second.watch |->Void| {b.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],[rows]);one:=scope.freezeOwnedReport("one",a,first);first.close
+      verifyEq(one["rows"],expected);verifyEq(rows,expected)
+      // Another report references the exact already-finalized pool, not a
+      // second pool copy. Only its small private wrapper needs new storage.
+      peer.hold(budget.remaining-500);held:=peer.entries
+      scope.prepareReportFacts(b,second)
+      verify(b["rows"].isImmutable);verify(b["direct"].isImmutable)
+      two:=scope.freezeOwnedReport("two",b,second)
+      verify(one["rows"]===two["rows"])
+      verify(((List)one["rows"])[42]===two["direct"])
+      verify(two["equal"]!==two["direct"])
+      verifyEq(((Map)two["equal"])["values"],((Map)two["direct"])["values"])
+      verify(((Map)two["equal"])["values"]===((Map)two["direct"])["values"])
+      verifyEq(rows,expected);verify(!rows.isImmutable);verifyEq(peer.entries,held)
+      second.close;scope.releaseReportBorrows;pool.close
+      verifyEq(one["rows"],expected);verifyEq(two["rows"],expected)
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {first.close;second.close;scope.close;pool.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testEqualProtectedFactsRemainDistinctAcrossReports()
+  {
+    scope:=EnerCubixCockpitRequestScope("distinct-protected-facts","a");budget:=scope.stream.state
+    a:=Str:Obj?["values":Obj?[0f,null,3f]];b:=Str:Obj?["values":Obj?[0f,null,3f]]
+    first:=EnerCubixPreparedOwner(budget);second:=EnerCubixPreparedOwner(budget)
+    x:=Str:Obj?["fact":a];y:=Str:Obj?["fact":b]
+    first.hold(32);first.watch |->Void| {x.clear};second.hold(32);second.watch |->Void| {y.clear}
+    try
+    {
+      scope.prepareReportBorrows([a,b],Obj[,]);one:=scope.freezeOwnedReport("a",x,first);two:=scope.freezeOwnedReport("b",y,second)
+      verifyEq(one["fact"],two["fact"]);verify(one["fact"]!==two["fact"])
+      verify(((Map)one["fact"])["values"]!==((Map)two["fact"])["values"])
+      verifyEq(a,Str:Obj?["values":Obj?[0f,null,3f]]);verifyEq(b,a)
+    }
+    finally {first.close;second.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testCleaningFactChargesImmutableDescendantsThroughFinalScopeLifetime()
   {
     [false,true].each |immutableRoot|

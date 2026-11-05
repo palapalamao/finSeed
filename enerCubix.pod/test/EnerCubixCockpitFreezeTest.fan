@@ -4,6 +4,36 @@ using concurrent
 ** Copy ownership over already supplied fixture inputs, not complete request heap.
 class EnerCubixCockpitFreezeTest : Test
 {
+  Void testCompletedCopiesNotifyOnceAndBorrowHitsDoNotNotifyAgain()
+  {
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget)
+    child:=Str:Obj?["value":0f];source:=Str:Obj?["first":child,"alias":child];calls:=0
+    try
+    {
+      frozen:=(Map)EnerCubixCockpitFreeze.value(source,output,null,null,false,|Obj original,Obj copy|
+      {verify(copy.isImmutable);verifyEq(original.typeof,copy.typeof);calls++})
+      verifyEq(calls,2);verify(frozen["first"]===frozen["alias"])
+      calls=0
+      again:=(Map)EnerCubixCockpitFreeze.value(source,output,|Obj value->Obj?| {value===child ? frozen["first"] : null},null,false,|Obj original,Obj copy| {calls++})
+      verifyEq(calls,1);verify(again["first"]===frozen["first"]);verifyEq(again,frozen)
+    }
+    finally {output.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testCompletedCallbackFailurePreservesSourceAndReleasesOnlyOwnedFees()
+  {
+    budget:=EnerCubixStreamBudget().state;output:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget);peer.hold(43);held:=peer.entries
+    child:=Str:Obj?["values":Obj?[0f,null,3f]];source:=Str:Obj?["child":child];expected:=source.toImmutable
+    try
+    {
+      verifyErr(ArgErr#) {EnerCubixCockpitFreeze.value(source,output,null,null,false,|Obj original,Obj copy| {throw ArgErr("completedCallbackRejected")})}
+      verifyEq(source,expected);verifyEq(peer.entries,held);verifyEq(budget.temporary.val,output.entries+held)
+      output.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {output.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testDefaultConsumeRemainsPostorderAndEarlyRetirementRequiresExplicitOptIn()
   {
     [false,true].each |early|

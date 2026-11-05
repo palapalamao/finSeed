@@ -1,6 +1,37 @@
 ** Diagnostic samples only; this pool is never a numeric report data source.
 class EnerCubixCockpitCaptureTest : Test
 {
+  Void testFinalizedEnvelopeTargetsRetireBeforeCompletedReportFactsAreConsumed()
+  {
+    scope:=EnerCubixCockpitRequestScope("retired-envelope-targets","a");budget:=scope.stream.state
+    owner:=EnerCubixPreparedOwner(budget);pool:=EnerCubixCockpitCapture(plan,owner)
+    first:=EnerCubixPreparedOwner(budget);second:=EnerCubixPreparedOwner(budget)
+    a:=Str:Obj?[:];ar:=Str:Obj?[:];b:=Str:Obj?[:];br:=Str:Obj?[:]
+    sourceA:=Str:Obj?["known":a,"row":ar];sourceB:=Str:Obj?["known":b,"row":br]
+    first.hold(96);second.hold(96)
+    first.watch |->Void| {EnerCubixReportConsumer.clearPublic(sourceA,Obj[,],pool.protectedRoots)}
+    second.watch |->Void| {EnerCubixReportConsumer.clearPublic(sourceB,Obj[,],pool.protectedRoots)}
+    try
+    {
+      pool.put("reads",row(1));pool.put("flow",row(1))
+      pool.knownEnvelope("reads",a,first,1);pool.periodEnvelope("flow",ar,first,1)
+      pool.knownEnvelope("reads",b,second,1);pool.periodEnvelope("flow",br,second,1)
+      ["clean","reads","flow"].each |key| {pool.seal(key)};pool.freeze
+      // These envelopes must no longer retain aliases to report-owned heads.
+      verify(((List)pool->envelopes).isEmpty);verify(((List)pool->periodEnvelopes).isEmpty)
+      verify(a["sourceUsage"]===pool.rows("reads"));verify(br["periods"]===pool.rows("flow"))
+      expected:=sourceB.toImmutable;scope.prepareReportBorrows(Obj[,],pool.protectedRoots)
+      one:=scope.freezeOwnedReport("first",sourceA,first);scope.prepareReportFacts(sourceB,second)
+      verify(b.isEmpty);verify(br.isEmpty)
+      two:=scope.freezeOwnedReport("second",sourceB,second);verifyEq(two,expected)
+      verify(((Map)one["known"])["sourceUsage"]===((Map)two["known"])["sourceUsage"])
+      verifyEq(pool.rows("reads").first["value"],1f);verifyEq(pool.rows("flow").first["value"],1f)
+      first.close;second.close;scope.releaseReportBorrows;owner.close;verifyEq(two,expected)
+    }
+    finally {first.close;second.close;scope.close;owner.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
   Void testBusinessOwnerAdmitsItsHeaderAndForkBeforeReclaimingOnlyMutableSamples()
   {
     budget:=EnerCubixPreparedBudget(EnerCubixCockpitDeadline());owner:=EnerCubixPreparedOwner(budget);pool:=EnerCubixCockpitCapture(plan,owner)

@@ -241,7 +241,22 @@ internal class EnerCubixCockpitRequestScope
     cached:=frozenReports?.get(key);if(cached!=null) return cached
     if(reportOwner==null)
     {reportOwner=EnerCubixPreparedOwner(stream.state);reportOwner.hold(1);frozenReports=[:]}
-    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner,null,consume,consumeParentBeforeChildren)
+    value:=(Str:Obj?)EnerCubixCockpitFreeze.value(source,reportOwner,
+      |Obj original->Obj?|
+      {
+        fact:=reportBorrows?.get(original)
+        return fact is Map || fact is List ? fact : null
+      },consume,consumeParentBeforeChildren,
+      |Obj original,Obj frozen|
+      {
+        // Protected catalog/diagnostic facts are finalized before this phase.
+        // Preserve their mutable source and fee; cache only a completed exact
+        // identity copy, never an equal but distinct container or pending node.
+        if(reportBorrows?.containsKey(original)!=true) return
+        // The protection index already owns this exact key/value slot. Its
+        // immutable value is owned by reportOwner, not the diagnostic pool.
+        reportBorrows.put(original,frozen)
+      })
     reportOwner.hold(1);frozenReports[key]=value;return value
   }
   ** Only a completed registry work may consume its exclusive mutable result.
@@ -261,7 +276,12 @@ internal class EnerCubixCockpitRequestScope
     }
     catch(Err e) {releaseReportBorrows;throw e}
   }
-  Void releaseReportBorrows() {reportBorrowOwner?.close;reportBorrowOwner=null}
+  Void releaseReportBorrows()
+  {
+    // Drop mutable keys before their pool/catalog can close, and cached copy
+    // references before reportOwner releases the immutable copies' charge.
+    reportBorrowOwner?.close;reportBorrowOwner=null
+  }
   Str:Obj? freezeOwnedReport(Str key,Str:Obj? source,EnerCubixPreparedOwner producer)
   {
     checkContext(project,user)
@@ -357,7 +377,12 @@ internal class EnerCubixCockpitRequestScope
   }
   private Obj? replaceReportFacts(Obj? value,IdentityHashMap vectors,Obj[] path,EnerCubixPreparedOwner work,EnerCubixPreparedOwner producer)
   {
-    if(value==null || value.isImmutable || reportBorrows.containsKey(value) || (value isnot Map && value isnot List)) return value
+    if(value==null || value.isImmutable || (value isnot Map && value isnot List)) return value
+    // Rewire only this private DTO's edges to an already-paid exact immutable
+    // borrow. Its original pool graph remains untouched and independently paid.
+    fact:=reportBorrows.get(value)
+    if(fact is Map || fact is List) return fact
+    if(reportBorrows.containsKey(value)) return value
     cached:=vectors.get(value)
     if(cached!=null)
     {
@@ -467,10 +492,10 @@ internal class EnerCubixCockpitRequestScope
     Err? failure
     try {owner?.close} catch(Err e) {failure=e}
     try {payloadOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit payload cleanup also failed",e)}
+    try {releaseReportBorrows} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit borrowed report index cleanup also failed",e)}
     try {finishPlanning} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit planning cleanup also failed",e)}
     try {snapshotOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit snapshot cleanup also failed",e)}
     try {reportOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit report cleanup also failed",e)}
-    try {releaseReportBorrows} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit borrowed report index cleanup also failed",e)}
     try {finishMetadata;historyOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit history metadata cleanup also failed",e)}
     try {configurationOwner?.close} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit configuration cleanup also failed",e)}
     try {finishPreparation} catch(Err e) {if(failure==null) failure=e;else Log.get("enerCubix").err("Cockpit preparation cleanup also failed",e)}

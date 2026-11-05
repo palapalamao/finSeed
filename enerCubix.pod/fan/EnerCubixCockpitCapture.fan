@@ -238,9 +238,19 @@ internal class EnerCubixCockpitCapture
       }
       snapshot=Str:Obj?["schemaVersion":1,"rowBudget":1000,"returnedCount":kept,"returnedByKind":byKind,"truncated":list.any |m| {m["truncated"]==true},"entries":list]
       if(preparedEntryLimited) snapshot["preparedEntryLimited"]=true
-      protectedRoots.add(snapshot);frozen=true;return snapshot
+      protectedRoots.add(snapshot);frozen=true
+      // All final counters are installed. Drop the pool's private references
+      // to report-owned target heads before those reports can be consumed.
+      retired:=retireEnvelopeTargets;owner.release(retired)
+      return snapshot
     }
     catch(Err e) {failure=e;throw e}
+  }
+  private Int retireEnvelopeTargets()
+  {
+    n:=8*envelopes.size+6*periodEnvelopes.size
+    envelopes.clear;periodEnvelopes.clear
+    return n
   }
   private Str:Obj? metadata(EnerCubixCockpitCaptureGroup g,Str kind,Str grain,Int? total,Int returned,Bool limited,Bool upstream,[Str:Obj?]? range)
   {

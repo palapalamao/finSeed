@@ -4,14 +4,14 @@ using [java] java.util::IdentityHashMap
 ** before allocation; existing immutable values remain borrowed from their owner.
 internal const class EnerCubixCockpitFreeze
 {
-  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null,|Obj|? consume := null,Bool consumeParentBeforeChildren := false)
+  static Obj? value(Obj? source,EnerCubixPreparedOwner output,|Obj->Obj?|? borrow := null,|Obj|? consume := null,Bool consumeParentBeforeChildren := false,|Obj,Obj|? completed := null)
   {
     if(consumeParentBeforeChildren && consume==null) throw ArgErr("cockpitSnapshotConsumeRequired")
     if(source==null || source.isImmutable) return source
     work:=EnerCubixPreparedOwner(output.budget);EnerCubixCockpitFreezer? freezer
     try
     {
-      work.hold(17);freezer=EnerCubixCockpitFreezer(output,work,borrow,consume,consumeParentBeforeChildren)
+      work.hold(18);freezer=EnerCubixCockpitFreezer(output,work,borrow,consume,consumeParentBeforeChildren,completed)
       result:=freezer.copy(source)
       output.hold(2);roots:=Obj?[result]
       output.watch |->Void| {roots.clear}
@@ -23,13 +23,14 @@ internal const class EnerCubixCockpitFreeze
 
 internal class EnerCubixCockpitFreezer
 {
-  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow,|Obj|? consume,Bool consumeParentBeforeChildren)
-  {this.output=output;this.work=work;this.borrow=borrow;this.consume=consume;this.consumeParentBeforeChildren=consumeParentBeforeChildren}
+  new make(EnerCubixPreparedOwner output,EnerCubixPreparedOwner work,|Obj->Obj?|? borrow,|Obj|? consume,Bool consumeParentBeforeChildren,|Obj,Obj|? completed)
+  {this.output=output;this.work=work;this.borrow=borrow;this.consume=consume;this.consumeParentBeforeChildren=consumeParentBeforeChildren;this.completed=completed}
   private EnerCubixPreparedOwner output
   private EnerCubixPreparedOwner work
   private |Obj|? consume
   private |Obj->Obj?|? borrow
   private Bool consumeParentBeforeChildren
+  private |Obj,Obj|? completed
   private IdentityHashMap memo := IdentityHashMap()
   Obj? copy(Obj? source)
   {
@@ -73,7 +74,8 @@ internal class EnerCubixCockpitFreezer
       // All children are now immutable. This final shallow copy preserves the
       // input's map/list types and ordering without recopying shared children.
       output.hold(1+size);result:=builder.toImmutable
-      memo.put(source,result);if(!consumeParentBeforeChildren) consume?.call(source);return result
+      memo.put(source,result);completed?.call(source,result)
+      if(!consumeParentBeforeChildren) consume?.call(source);return result
     }
     finally {node.close}
   }
