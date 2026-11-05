@@ -58,8 +58,9 @@ for(const language of ['zh-CN','en-US'])for(const variant of ['standard','long-a
     await expect(item.locator('.cockpit-share-value')).toHaveText(amount);
     await expect(item.locator('.cockpit-share-percentage')).toHaveText(percentage);
     await expect(item).toContainText('kWh');
-    const valueBox=await item.locator('.cockpit-share-value').boundingBox(),shareBox=await item.locator('.cockpit-share-percentage').boundingBox();
-    expect(Math.abs(valueBox!.y-shareBox!.y),'amount and share should remain paired in one row').toBeLessThanOrEqual(2);
+    // Read both rectangles in one layout frame; sequential browser calls can straddle a resize.
+    const rowOffset=await item.evaluate(element=>Math.abs(element.querySelector('.cockpit-share-value')!.getBoundingClientRect().y-element.querySelector('.cockpit-share-percentage')!.getBoundingClientRect().y));
+    expect(rowOffset,'amount and share should remain paired in one row').toBeLessThanOrEqual(2);
    }
    const layout=await legend.evaluate(element=>[...element.querySelectorAll<HTMLElement>('.cockpit-share-name,.cockpit-share-value,.cockpit-share-percentage')].map(field=>{
     const box=field.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(field);
