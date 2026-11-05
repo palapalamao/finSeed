@@ -225,10 +225,73 @@ class EnerCubixCockpitRequestScopeTest : Test
       verify(frozenRow===list[0]);verify(frozenRow!==list[1]);verify(frozenRow["sourceIds"]===((Map)list[1])["sourceIds"])
       verifyEq(source,expected);verifyEq(JsonOutStream.writeJsonToStr(source),JsonOutStream.writeJsonToStr(expected))
       verify(row.isEmpty);verify(equal.isEmpty);verify(ids.isEmpty)
-      verifyEq(producer.entries,p-11);verifyEq(history.entries,h+11);verifyEq(scope.stream.state.temporary.val,before)
+      verifyEq(producer.entries,p-14);verifyEq(history.entries,h+14);verifyEq(scope.stream.state.temporary.val,before)
     }
     finally {producer.close;scope.close}
     verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testOwnedLeafListsKeepTheirGenericTypeAliasesAndExactCharges()
+  {
+    scope:=EnerCubixCockpitRequestScope("owned-leaf-lists","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);history:=scope.historyOutput;peer:=EnerCubixPreparedOwner(budget)
+    rows:=Obj?[0f,null,"NA",2f];equal:=rows.dup;borrowed:=[7f];borrowedEmpty:=Obj?[,]
+    source:=Str:Obj?[:];source.ordered=true;source["aliasBefore"]=rows;source["rows"]=rows
+    source["nested"]=Str:Obj?["values":Obj?[rows]];source["equal"]=equal;source["borrowed"]=borrowed;source["borrowedEmpty"]=borrowedEmpty
+    expected:=source.toImmutable;producer.hold(128);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,[borrowed,borrowedEmpty],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows([borrowed,borrowedEmpty],Obj[,]);peer.hold(budget.remaining-1500)
+      before:=budget.temporary.val;p:=producer.entries;h:=history.entries;held:=peer.entries
+      scope.prepareReportFacts(source,producer);list:=(List)source["rows"]
+      verify(list.isImmutable);verifyEq(list.typeof,rows.typeof);verifyEq(list.of,Obj?#)
+      verifyEq(list,Obj?[0f,null,"NA",2f]);verify(source["aliasBefore"]===list);verify(((List)((Map)source["nested"])["values"])[0]===list)
+      verify(source["equal"]!==list);verifyEq(source["equal"],list);verify(rows.isEmpty);verify(equal.isEmpty)
+      verify(!borrowed.isImmutable);verifyEq(borrowed,[7f]);verify(source["borrowedEmpty"]===borrowedEmpty);verify(!borrowedEmpty.isImmutable)
+      // Two five-slot lists, a two-slot wrapper and two nested-map slots move,
+      // without reducing total
+      // live charges or changing the unrelated peer's reservation.
+      verifyEq(producer.entries,p-14);verifyEq(history.entries,h+14);verifyEq(budget.temporary.val,before);verifyEq(peer.entries,held)
+      frozen:=scope.freezeOwnedReport("lists",source,producer);verifyEq(frozen,expected)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testLeafListBatchesPreserveFiveHundredSharedPayloadsUnderTightQuota()
+  {
+    scope:=EnerCubixCockpitRequestScope("leaf-list-batches","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    points:=[Str:Obj?][,];rows:=[Str:Obj?][,]
+    500.times |i| {payload:=Obj?[i.toFloat,0f,null];points.add(["value":i.toFloat,"payload":payload]);rows.add(["value":i.toFloat,"payload":payload])}
+    source:=Str:Obj?[:];source.ordered=true;source["before"]=points.first["payload"];source["points"]=points;source["rows"]=rows
+    expected:=source.toImmutable;producer.hold(64+6006);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-2400);held:=peer.entries
+      scope.prepareReportFacts(source,producer);frozen:=scope.freezeOwnedReport("batch",source,producer);verifyEq(frozen,expected)
+      500.times |i| {verify(((Map)((List)frozen["points"])[i])["payload"]===((Map)((List)frozen["rows"])[i])["payload"])}
+      verify(frozen["before"]===((Map)((List)frozen["rows"])[0])["payload"]);verifyEq(peer.entries,held);verify(budget.peak.val<=200000)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testLeafListPartialAdmissionFailurePreservesPeerAndPublishesNothing()
+  {
+    scope:=EnerCubixCockpitRequestScope("leaf-list-failure","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    first:=Obj?[0f,null];second:=(0..<100).map |i->Obj?| {i.toFloat};source:=Str:Obj?[:];source.ordered=true;source["first"]=first;source["second"]=second
+    producer.hold(512);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-100);held:=peer.entries
+      verifyErr(EnerCubixHttpErr#) {scope.prepareReportFacts(source,producer)}
+      verify(first.isEmpty);verify(source["first"].isImmutable);verifyEq(second.size,100);verifyEq(peer.entries,held)
+      verifyNull(scope.frozenReport("unpublished"));verify(!scope.responseStarted);verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
   }
   Void testSourceVectorPreparationRejectsCyclesAndBalancesPartialQuotaFailure()
   {
@@ -261,7 +324,8 @@ class EnerCubixCockpitRequestScopeTest : Test
     try
     {
       scope.prepareReportBorrows(Obj[,],Obj[,]);before:=scope.stream.state.temporary.val
-      invalid:=Obj?[Str:Obj?["sourceIds":ids].ro,Int:Obj?[1:"badKey"],StrBuf().add("opaque")]
+      loop:=Obj?[,];loop.add(loop)
+      invalid:=Obj?[Str:Obj?["sourceIds":ids].ro,Obj?[0f].ro,loop,Int:Obj?[1:"badKey"],StrBuf().add("opaque")]
       invalid.each |value|
       {
         source["invalid"]=value
@@ -271,7 +335,7 @@ class EnerCubixCockpitRequestScopeTest : Test
       }
       source.remove("invalid");empty:=Obj?[,];source["empty"]=Str:Obj?["sourceIds":empty]
       scope.prepareReportFacts(source,producer)
-      verify(((Map)source["empty"])["sourceIds"]===empty);verify(!empty.isImmutable)
+      generic:=(List)((Map)source["empty"])["sourceIds"];verify(generic.isImmutable);verifyEq(generic.typeof,empty.typeof);verifyEq(generic.of,Obj?#);verify(empty.isEmpty)
     }
     finally {producer.close;scope.close}
     verifyEq(scope.stream.state.temporary.val,0)

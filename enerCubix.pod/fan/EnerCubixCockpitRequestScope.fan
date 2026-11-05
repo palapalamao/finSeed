@@ -293,25 +293,25 @@ internal class EnerCubixCockpitRequestScope
       if(retiredHeaders==0) break
     }
   }
-  private Int transferReportFacts(Str:Obj? source,EnerCubixPreparedOwner producer,Bool leafMaps)
+  private Int transferReportFacts(Str:Obj? source,EnerCubixPreparedOwner producer,Bool leafContainers)
   {
     work:=EnerCubixPreparedOwner(stream.state);IdentityHashMap? vectors;Obj[]? path
     try
     {
       work.hold(13);vectors=IdentityHashMap();path=Obj[,]
-      // Independent vector/leaf-map phases keep their identity indices apart.
+      // Independent vector/leaf-container phases keep their identity indices apart.
       // An alias may precede the field where the owned fact was classified.
-      collectReportFacts(source,vectors,path,work,leafMaps)
+      collectReportFacts(source,vectors,path,work,leafContainers)
       replaceReportFacts(source,vectors,path,work,producer)
       return vectors.size
     }
     finally {vectors?.clear;path?.clear;vectors=null;path=null;work.close}
   }
-  private Void collectReportFacts(Obj? value,IdentityHashMap vectors,Obj[] path,EnerCubixPreparedOwner work,Bool leafMaps)
+  private Void collectReportFacts(Obj? value,IdentityHashMap vectors,Obj[] path,EnerCubixPreparedOwner work,Bool leafContainers)
   {
     // The complete vector pass already validated this exclusive DTO before
-    // any conversion. Later leaf-map batches can stop collecting early.
-    if(leafMaps && vectors.size>=128) return
+    // any conversion. Later leaf-container batches can stop collecting early.
+    if(leafContainers && vectors.size>=128) return
     if(value==null || value.isImmutable || reportBorrows.containsKey(value) || vectors.containsKey(value)) return
     if(value isnot Map && value isnot List) throw NotImmutableErr("cockpitSnapshotMutableValue")
     deadline.check;work.hold(11);pushed:=false
@@ -323,26 +323,34 @@ internal class EnerCubixCockpitRequestScope
       if(value is Map)
       {
         row:=(Map)value
-        if(!leafMaps)
+        if(!leafContainers)
         {
           ids:=row["sourceIds"] as List
           if(ids!=null && ids.of==Str# && !ids.isRO && !ids.isImmutable && !reportBorrows.containsKey(ids) && !vectors.containsKey(ids) && ids.all |id| {id is Str})
           {work.hold(3);vectors.put(ids,true)}
         }
-        leaf:=leafMaps && path.size>1
+        leaf:=leafContainers && path.size>1
         row.each |child,key|
         {
           if(key isnot Str) throw NotImmutableErr("cockpitSnapshotMutableKey")
-          if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafMaps)
+          if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafContainers)
           else if(child!=null && !child.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue")
           if(child!=null && !child.isImmutable) leaf=false
         }
         if(leaf) {work.hold(3);vectors.put(row,true)}
       }
-      else ((List)value).each |child|
+      else
       {
-        if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafMaps)
-        else if(child!=null && !child.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue")
+        rows:=(List)value;leaf:=leafContainers && path.size>1
+        rows.each |child|
+        {
+          if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafContainers)
+          else if(child!=null && !child.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue")
+          if(child!=null && !child.isImmutable) leaf=false
+        }
+        // This is shallow: every element is already immutable. Preserve the
+        // original list type and order, including empty nullable Obj lists.
+        if(leaf) {work.hold(3);vectors.put(rows,true)}
       }
     }
     finally {if(pushed) path.pop;work.release(11)}
