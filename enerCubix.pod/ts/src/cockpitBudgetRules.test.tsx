@@ -65,5 +65,8 @@ it('freezes budget, calendar and rule inputs into numeric workbook sheets and ol
  initializeLocale('en-US','budget-test');const s=structuredClone(pressure) as CockpitSnapshot,packet=freezeCockpitExport(s,'en-US',{}),old=JSON.stringify(packet);
  s.modules.kpis!.data!.budget!.periodActualCost=9999;s.modules.issues!.data!.ruleEvaluations![0].threshold=9999;expect(JSON.stringify(packet)).toBe(old);
  const book=await cockpitWorkbook(packet);expect(book.getWorksheet('Budget operating reference')?.getRow(4).getCell(2).value).toBe(10);expect(book.getWorksheet('Rule evaluations')?.rowCount).toBe(3);
+ expect.soft(book.getWorksheet('Budget curve')?.getRow(1).values).toEqual([undefined,'Time','Local day length (seconds)','Cumulative period budget','Cumulative period cost']);
+ expect.soft(book.getWorksheet('预算曲线')).toBeUndefined();
+ expect.soft(book.getWorksheet('R01')?.getCell('A1').value).toBe('Report ID');expect.soft(book.getWorksheet('R01-Calculation evidence')?.getCell('A2').value).toBe('Report ID');
  const html=renderToStaticMarkup(<RuleEvaluationDetails evaluation={packet.snapshot.modules.issues!.data!.ruleEvaluations![1]} name={id=>id} open/>);expect(html).toContain('FIN alarms');expect(html).toContain('Greater than');expect(html).toContain('periodBudget');
 },20000);
