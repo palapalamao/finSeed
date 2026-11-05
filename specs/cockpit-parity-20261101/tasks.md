@@ -320,3 +320,15 @@
 - 宽daily形状2000 distinct rows＋peer仅剩11000条空间：旧031在同copy66真实资源RED，032成功、峰199045，producer仍保留2039条空header/control费到close。补全ordered/unordered碰撞键、typed list、distinct-equal与alias、循环、protected RO/direct descendant、默认postorder及必须显式early参数。原错误和未采用热力图RED独立保留，后者不宣称为此次修复因果证据。
 - 最终全量122类989方法298842检查通过（`candidate-01432-final-fantom-r1.log`，140.825秒）；239个后端文件与测试前清单一致。Q1/年度完整报告、模块、质量、覆盖、警告、source数组顺序和生产TS解码与冻结031等价；11.269秒/24.752秒、峰191545/188670，临时/root raw关闭归零；不是现场性能证明。独立原bulk32组/7520明细JSON继续同SHA EE241D1B...1802D。前端284文件与022相同，437单测/33不同受控UI按身份明确复用；032新type/Vite20.40秒，未作新原生浏览器声明。
 - 架构师只读复核收费/失败生命周期、Map.dup独立底层、alias/cycle/默认路径，无阻断。032尚待冻结部署及最终九查询、同PID30分钟、49条款和Linear收尾；30秒/200000条/8MiB等保护及每设备自身主点历史规则不变。只读账号依用户暂缓，原生打印人工检查仍待；未写现场业务配置、设备点位或历史。
+
+
+## 0.14.32 实机与 0.14.33 最终报告事实交接（2026-11-05 08:42）
+
+- 032 / c29447df / Pod AE93DD24...343611 已实际部署，原生九组仍8/9；zeda年度27.313秒422准确仍在face-daily，Freezer.copy53 builder准入。8个成功响应由本版生产TS解码、固定4816/2799.549228和中英Excel回读、24个HTTP资源一致。Java13300同PID观察1803.130秒/181样本已通过，属于032；不得拼接替代下一候选最终观察。日志/响应在 `live-0.14.32-20261105/`。
+- 新修正先定量：原Q1普通report publicCap均等held，未通过删预算余量解决；protected mutable借用每当前report仅80条，未新增缓存协议。受控年度模型热图仅2102条，对比旧native21777，故独立追加post-load peer压力（非现场账、不与load峰叠加）。19675压力的手动daily复制成功195852后主动GenericErr导致time局部错误、继而endUse失败，不作daily RED；25000压力准确复现daily copy53，pending为17字段明细Map、memo1144/work3453、peak200001，均是copy node finally后/value wrapper前的受控观测，不是native失败瞬间内存。
+- 033将已完成、私有状态与旧清理闭包已退休的报告DTO中的自有事实转为不可变表示：先来源Str向量，两pass identity保证早于sourceIds字段的其它键/List别名也一致重接；再只处理all-values-null/immutable的非root叶Map，每批最多128。两阶段索引不并存，批次全别名重接且private遍历frame/index/path退出后才退旧header。每个新事实先由现有historyOwner支付真实1+size、再原对象clear退size；稳态同费用交接，不虚减live图。historyOwner活到报告/快照发送结束，未持久化或另建历史事实库。generic Freeze接口、实测历史、统计/质量/来源/顺序/类型保持。
+- 第一次完整vector-only 122/994/299397及Q1/年度等价虽过，额外25k压力仍daily失败；未据此发布。leafMap完整索引把失败推进到endUse，128分批再推进到最后energy-flow；这些失败均保留。Flow retainPublic已关state、consumer=null、numbers费用并入graph且旧drop/expire回调退休后，复用同helper；热图也在state关闭、retirePrivateLinks清重复根和原可选public compaction后复用，不修改日资格/源向量共享/热力图生成算法。`clearPublic`在递归前跳过不可变事实，避免短owner回收长owner图。
+- 修改前完整验证RW父/Str键/无环/无mutable opaque，protected递归子图不动，空Obj?[]不升格Str[]，任意深图不在固定浅DTO合同内（深度64拒绝）。部分转换失败整查询作废、不fallback或重试已改图；peer及剩余额度保留到原close。独立旧码RED包括eager来源向量、2400条余量的500point/row别名整包、不可变清理、ordered leafMap，以及scoped Flow长owner归属。专项最终3类40方法1644检查通过；不把前轮专项冒充最后热图hook验证。
+- 最终r2全量122类995方法299415检查通过（`candidate-01433-final-fantom-r2.log`，133.963秒），239个后端文件与测试前清单及结束核对一致。Q1/年度完整业务快照、所有报告、质量、覆盖、警告、来源数组顺序及生产TS解码与冻结032等价，11.576/26.920秒、峰191545/188670。原始独立bulk32组/7520明细JSON仍同SHA EE241D1B...1802D。
+- 最终额外25000 peer压力整包（peer含owner为25004）完成所有模块到energy-flow、发送时gate仍持有；24.928秒、峰199706，temp/raw关闭0，prepared824按原描述符口径保留。完整业务与生产解码亦等价冻结032（`cockpit-033-pressure25k-r2-equivalence.json`），不是native性能或P95保证。所有中间失败、模型和最终压力分层保留。
+- 前端284文件与022一致，437单测/33个不同受控浏览器用例按身份明确复用；033r1新tsc/Vite20.19秒，最终r2复核24个相同页面资源未变化，不重复构建或声称新浏览器执行。架构师只读核对普通/Flow/热图私有根、hidden pool envelope不被误冻、long owner费用和分批别名，未见阻断。统一0.14.33尚待冻结部署及真实九查询、最终同PID30分钟、49条款与Linear收尾；只读用户暂缓，原生打印人工项仍待。没有提高任何生产上限，未写现场业务配置、设备点位或历史。

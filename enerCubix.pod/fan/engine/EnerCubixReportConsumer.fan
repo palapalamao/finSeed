@@ -308,6 +308,7 @@ internal class EnerCubixReportConsumer
   ** remain owned by their original owners and must never be cleared here.
   internal static Void clearPublic(Obj? value,Obj[] catalog,Obj[] samples)
   {
+    if(value==null || value.isImmutable) return
     if(value isnot Map && value isnot List && value isnot EnerCubixValue) return
     if(catalog.any |root| {root===value} || samples.any |root| {root===value}) return
     if(value is EnerCubixValue)

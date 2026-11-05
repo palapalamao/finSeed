@@ -107,6 +107,7 @@ internal class EnerCubixCockpitFlowWork
   Str:Obj? freezeReport(EnerCubixCockpitRequestScope scope)
   {
     retainPublic(scope)
+    scope.prepareReportFacts(result,graph)
     return scope.freezeOwnedReport("energy-flow",result,graph)
   }
   Bool released() {done && (state?.entries ?: 0)==0 && (graph?.entries ?: 0)==0 && (numbers?.entries ?: 0)==0}

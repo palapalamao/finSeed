@@ -555,6 +555,7 @@ internal class EnerCubixCockpitReportWork
         output.retainPublic(retained) |->Void| {EnerCubixReportConsumer.clearPublic(publicResult,catalogRoots,sampleRoots)}
       }
     }
+    if(transferReady) scope.prepareReportFacts(result,output)
     return transferReady ? scope.freezeOwnedReport(key,result,output) : scope.freezeReport(key,result)
   }
   Bool released() {done && (state?.entries ?: 0)==0 && (output?.entries ?: 0)==0}

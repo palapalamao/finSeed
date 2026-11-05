@@ -158,6 +158,124 @@ class EnerCubixCockpitRequestScopeTest : Test
     finally {producer.close;scope.close;peer.close}
     verifyEq(budget.temporary.val,0)
   }
+  Void testOwnedSourceVectorsShareAliasesAndTransferTheirRealCharge()
+  {
+    scope:=EnerCubixCockpitRequestScope("owned-source-vectors","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);history:=scope.historyOutput;ids:=["p","q"];borrowed:=["protected"]
+    catalog:=Str:Obj?["sourceIds":borrowed];source:=Str:Obj?[:];source.ordered=true
+    source["aliasBefore"]=ids;source["row"]=Str:Obj?["sourceIds":ids,"value":12f];source["protected"]=catalog
+    expected:=source.toImmutable;producer.hold(64);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,[catalog],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows([catalog],Obj[,]);before:=budget.temporary.val;p:=producer.entries;h:=history.entries
+      scope.prepareReportFacts(source,producer)
+      vector:=(List)((Map)source["row"])["sourceIds"]
+      verify(vector.isImmutable);verifyEq(vector,Str["p","q"]);verify(vector===source["aliasBefore"])
+      verifyEq(vector.typeof,ids.typeof);verify(ids.isEmpty);verify(!borrowed.isImmutable);verifyEq(borrowed,["protected"])
+      verifyEq(producer.entries,p-6);verifyEq(history.entries,h+6);verifyEq(budget.temporary.val,before)
+      scope.prepareReportFacts(source,producer);verifyEq(budget.temporary.val,before);verify(vector===((Map)source["row"])["sourceIds"])
+      frozen:=scope.freezeOwnedReport("vectors",source,producer);producer.close;scope.releaseReportBorrows
+      verifyEq(frozen,expected);verify(((Map)frozen["row"])["sourceIds"]===frozen["aliasBefore"])
+      snapshot:=scope.freezeSnapshot(["report":frozen]);verifyEq(snapshot["report"],expected)
+      verifyEq(vector,Str["p","q"]);verify(history.entries>0)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testSourceVectorPreparationMakesACompleteTightReportTransferPossible()
+  {
+    scope:=EnerCubixCockpitRequestScope("source-vector-capacity","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    points:=[Str:Obj?][,];rows:=[Str:Obj?][,]
+    500.times |i| {ids:=["p$i","q$i"];points.add(["value":i.toFloat,"sourceIds":ids]);rows.add(["value":i.toFloat,"sourceIds":ids])}
+    source:=Str:Obj?["points":points,"rows":rows];expected:=source.toImmutable
+    producer.hold(64+5505);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-2400);held:=peer.entries
+      scope.prepareReportFacts(source,producer);frozen:=scope.freezeOwnedReport("daily",source,producer)
+      verifyEq(frozen,expected);verifyEq(((List)frozen["rows"]).size,500)
+      500.times |i| {verify(((Map)((List)frozen["rows"])[i])["sourceIds"]===((Map)((List)frozen["points"])[i])["sourceIds"])}
+      verify(budget.peak.val<=200000);verifyEq(peer.entries,held);producer.close
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testPublicCleanupDropsLinksWithoutClearingImmutableOwnedFacts()
+  {
+    vector:=Str["p","q"].toImmutable;row:=Str:Obj?["sourceIds":vector,"value":0f];source:=Str:Obj?["rows":[row]]
+    EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])
+    verify(source.isEmpty);verify(row.isEmpty);verifyEq(vector,Str["p","q"])
+  }
+  Void testOwnedLeafFactsRetainOrderedMapsAndAllDistinctAndSharedAliases()
+  {
+    scope:=EnerCubixCockpitRequestScope("owned-leaf-facts","a");producer:=EnerCubixPreparedOwner(scope.stream.state);history:=scope.historyOutput
+    ids:=["p","q"];row:=Str:Obj?[:];row.ordered=true;row["sourceIds"]=ids;row["value"]=12f;row["quality"]="ok"
+    equal:=row.dup;source:=Str:Obj?[:];source.ordered=true;source["before"]=row;source["rows"]=[row,equal]
+    expected:=source.toImmutable;producer.hold(128);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=scope.stream.state.temporary.val;p:=producer.entries;h:=history.entries
+      scope.prepareReportFacts(source,producer)
+      frozenRow:=(Map)source["before"];list:=(List)source["rows"]
+      verify(frozenRow.isImmutable);verify(frozenRow.ordered);verify(!source.isImmutable)
+      verify(frozenRow===list[0]);verify(frozenRow!==list[1]);verify(frozenRow["sourceIds"]===((Map)list[1])["sourceIds"])
+      verifyEq(source,expected);verifyEq(JsonOutStream.writeJsonToStr(source),JsonOutStream.writeJsonToStr(expected))
+      verify(row.isEmpty);verify(equal.isEmpty);verify(ids.isEmpty)
+      verifyEq(producer.entries,p-11);verifyEq(history.entries,h+11);verifyEq(scope.stream.state.temporary.val,before)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testSourceVectorPreparationRejectsCyclesAndBalancesPartialQuotaFailure()
+  {
+    scope:=EnerCubixCockpitRequestScope("source-vector-errors","a");budget:=scope.stream.state
+    producer:=EnerCubixPreparedOwner(budget);peer:=EnerCubixPreparedOwner(budget)
+    cycle:=Str:Obj?[:];cycle["self"]=cycle
+    first:=["p","q"];second:=(0..<100).map |i->Str| {"p$i"};source:=Str:Obj?[:];source.ordered=true
+    source["first"]=Str:Obj?["sourceIds":first];source["second"]=Str:Obj?["sourceIds":second]
+    producer.hold(256);producer.watch |->Void| {EnerCubixReportConsumer.clearPublic(source,Obj[,],Obj[,]);cycle.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=budget.temporary.val
+      verifyErr(NotImmutableErr#) {scope.prepareReportFacts(cycle,producer)}
+      verify(cycle["self"]===cycle);verifyEq(budget.temporary.val,before)
+      peer.hold(budget.remaining-100);held:=peer.entries
+      verifyErr(EnerCubixHttpErr#) {scope.prepareReportFacts(source,producer)}
+      verify(first.isEmpty);verify(((Map)source["first"])["sourceIds"].isImmutable);verifyEq(second.size,100)
+      verifyEq(peer.entries,held);verifyNull(scope.frozenReport("unpublished"));verify(!scope.responseStarted)
+      verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testVectorPreparationValidatesTheWholePrivateGraphBeforeChangingAnyAlias()
+  {
+    scope:=EnerCubixCockpitRequestScope("source-vector-validation","a");producer:=EnerCubixPreparedOwner(scope.stream.state)
+    ids:=["p","q"];source:=Str:Obj?[:];source.ordered=true;source["first"]=Str:Obj?["sourceIds":ids]
+    producer.hold(128);producer.watch |->Void| {source.clear;ids.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=scope.stream.state.temporary.val
+      invalid:=Obj?[Str:Obj?["sourceIds":ids].ro,Int:Obj?[1:"badKey"],StrBuf().add("opaque")]
+      invalid.each |value|
+      {
+        source["invalid"]=value
+        verifyErr(NotImmutableErr#) {scope.prepareReportFacts(source,producer)}
+        verifyEq(ids,Str["p","q"]);verify(((Map)source["first"])["sourceIds"]===ids)
+        verifyEq(scope.stream.state.temporary.val,before)
+      }
+      source.remove("invalid");empty:=Obj?[,];source["empty"]=Str:Obj?["sourceIds":empty]
+      scope.prepareReportFacts(source,producer)
+      verify(((Map)source["empty"])["sourceIds"]===empty);verify(!empty.isImmutable)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
   Void testOwnedReportTransferFailurePublishesNothingAndPreservesPeerAndBorrowedInputs()
   {
     scope:=EnerCubixCockpitRequestScope("transfer-failure","a");budget:=scope.stream.state

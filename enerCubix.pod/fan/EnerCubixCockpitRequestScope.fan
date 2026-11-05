@@ -277,6 +277,108 @@ internal class EnerCubixCockpitRequestScope
       producer.release(count)
     },true)
   }
+  internal Void prepareReportFacts(Str:Obj? source,EnerCubixPreparedOwner producer)
+  {
+    checkContext(project,user)
+    if(producer.budget!==stream.state || producer.entries==0 || source.isImmutable || reportBorrows==null) throw ArgErr("cockpitReportTransferOwner")
+    retiredHeaders:=transferReportFacts(source,producer,false)
+    // The traversal frame and its index/path/closure references have expired.
+    producer.release(retiredHeaders)
+    while(true)
+    {
+      // Completed rows need only a small identity batch; never retain the
+      // whole report's conversion index beside all its emptied old headers.
+      retiredHeaders=transferReportFacts(source,producer,true)
+      producer.release(retiredHeaders)
+      if(retiredHeaders==0) break
+    }
+  }
+  private Int transferReportFacts(Str:Obj? source,EnerCubixPreparedOwner producer,Bool leafMaps)
+  {
+    work:=EnerCubixPreparedOwner(stream.state);IdentityHashMap? vectors;Obj[]? path
+    try
+    {
+      work.hold(13);vectors=IdentityHashMap();path=Obj[,]
+      // Independent vector/leaf-map phases keep their identity indices apart.
+      // An alias may precede the field where the owned fact was classified.
+      collectReportFacts(source,vectors,path,work,leafMaps)
+      replaceReportFacts(source,vectors,path,work,producer)
+      return vectors.size
+    }
+    finally {vectors?.clear;path?.clear;vectors=null;path=null;work.close}
+  }
+  private Void collectReportFacts(Obj? value,IdentityHashMap vectors,Obj[] path,EnerCubixPreparedOwner work,Bool leafMaps)
+  {
+    // The complete vector pass already validated this exclusive DTO before
+    // any conversion. Later leaf-map batches can stop collecting early.
+    if(leafMaps && vectors.size>=128) return
+    if(value==null || value.isImmutable || reportBorrows.containsKey(value) || vectors.containsKey(value)) return
+    if(value isnot Map && value isnot List) throw NotImmutableErr("cockpitSnapshotMutableValue")
+    deadline.check;work.hold(11);pushed:=false
+    try
+    {
+      if(path.size>=64 || path.any |ancestor| {ancestor===value}) throw NotImmutableErr("cockpitSnapshotCycle")
+      if(value is Map ? ((Map)value).isRO : ((List)value).isRO) throw NotImmutableErr("cockpitSnapshotOwnedReadonly")
+      path.add(value);pushed=true
+      if(value is Map)
+      {
+        row:=(Map)value
+        if(!leafMaps)
+        {
+          ids:=row["sourceIds"] as List
+          if(ids!=null && ids.of==Str# && !ids.isRO && !ids.isImmutable && !reportBorrows.containsKey(ids) && !vectors.containsKey(ids) && ids.all |id| {id is Str})
+          {work.hold(3);vectors.put(ids,true)}
+        }
+        leaf:=leafMaps && path.size>1
+        row.each |child,key|
+        {
+          if(key isnot Str) throw NotImmutableErr("cockpitSnapshotMutableKey")
+          if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafMaps)
+          else if(child!=null && !child.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue")
+          if(child!=null && !child.isImmutable) leaf=false
+        }
+        if(leaf) {work.hold(3);vectors.put(row,true)}
+      }
+      else ((List)value).each |child|
+      {
+        if(child is Map || child is List) collectReportFacts(child,vectors,path,work,leafMaps)
+        else if(child!=null && !child.isImmutable) throw NotImmutableErr("cockpitSnapshotMutableValue")
+      }
+    }
+    finally {if(pushed) path.pop;work.release(11)}
+  }
+  private Obj? replaceReportFacts(Obj? value,IdentityHashMap vectors,Obj[] path,EnerCubixPreparedOwner work,EnerCubixPreparedOwner producer)
+  {
+    if(value==null || value.isImmutable || reportBorrows.containsKey(value) || (value isnot Map && value isnot List)) return value
+    cached:=vectors.get(value)
+    if(cached!=null)
+    {
+      if(cached is Map || cached is List) return cached
+      n:=value is Map ? ((Map)value).size : ((List)value).size;historyOutput.hold(1+n)
+      frozen:=value.toImmutable;vectors.put(value,frozen)
+      if(value is Map) ((Map)value).clear;else ((List)value).clear
+      producer.release(n)
+      return frozen
+    }
+    deadline.check;work.hold(11);pushed:=false
+    try
+    {
+      if(path.size>=64 || path.any |ancestor| {ancestor===value}) throw NotImmutableErr("cockpitSnapshotCycle")
+      path.add(value);pushed=true
+      if(value is Map)
+      {
+        row:=(Map)value
+        row.each |child,key| {if(child isnot Map && child isnot List) return;replacement:=replaceReportFacts(child,vectors,path,work,producer);if(replacement!==child) row[key]=replacement}
+      }
+      else
+      {
+        rows:=(List)value
+        rows.each |child,index| {if(child isnot Map && child isnot List) return;replacement:=replaceReportFacts(child,vectors,path,work,producer);if(replacement!==child) rows[index]=replacement}
+      }
+      return value
+    }
+    finally {if(pushed) path.pop;work.release(11)}
+  }
   private Void protectReportBorrow(Obj? value,IdentityHashMap borrowedGraph,EnerCubixPreparedOwner scratch)
   {
     if(value==null || value.isImmutable || (value isnot Map && value isnot List) || borrowedGraph.containsKey(value)) return

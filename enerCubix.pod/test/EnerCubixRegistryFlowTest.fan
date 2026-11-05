@@ -40,6 +40,7 @@ class EnerCubixRegistryFlowTest : Test
       {(0..2).each |i| {at:=a+1hr*i;if(at>=span.start && at<span.end) sink(HisItem(at,Number(point.id.id=="pt" ? 10 : 4)))}}
       expected:=EnerCubixHistory.report(flowQuery,([Str:Obj?][])flowPlan["records"],EnerCubixCockpitStream.prepare(flowQuery,([Str:Obj?][])flowPlan["records"],points,[:],read,EnerCubixStreamBudget()))
       budget:=EnerCubixStreamBudget()
+      scope:=EnerCubixCockpitRequestScope("registry-owned-flow-"+variant,"a",budget)
       registry:=EnerCubixCockpitRegistry(q.toImmutable,rs.toImmutable,Str:Obj?["id":"boundary","meterIds":["t"],"sourcePointIds":["pt"]].toImmutable,["trend","balance"],["mode":"none"],null,[:],budget,["pt":"kWh","pm":"kWh"],points.keys,[:],flowPlan.toImmutable)
       sources:=EnerCubixCockpitStream[,]
       try
@@ -50,6 +51,13 @@ class EnerCubixRegistryFlowTest : Test
         (0..<2).each |i| {start:=a+1hr*i;end:=start+1hr;sources.each |s| {s.advance(end)};EnerCubixCockpitStream.withFrames(sources,budget.state) |h,frame| {registry.addFrame(start,end,h,frame)}}
         sources.each |s| {s.close};registry.finish
         result:=registry.read("energy-flow",flowQuery)
+        if(variant==2)
+        {
+          registry.prepareReportBorrows(scope);result=registry.freezeReport("energy-flow",flowQuery,scope)
+          verify(result.isImmutable)
+          history:=(EnerCubixPreparedOwner?)EnerCubixCockpitRequestScope#.field("historyOwner").get(scope)
+          verify(history!=null && history.entries>4,"completed flow facts must remain paid after their numeric/graph producer closes")
+        }
         verifyEq(business(result),business(expected))
         rows:=EnerCubixMath.maps(((Map)((Map)result["extra"])["energyFlowOverview"])["rows"])
         verifyEq(rows.size,2)
@@ -60,9 +68,11 @@ class EnerCubixRegistryFlowTest : Test
         }
         verifyErr(ArgErr#) {registry.read("energy-flow",flowQuery.dup.set("metric","cost"))}
         verifyEq(budget.state.unprepared.val,0);verify((Int)registry.diagnostics["returnedCount"]<=1000)
-        registry.close;verify(result.isEmpty)
+        scope.releaseReportBorrows;registry.close
+        if(variant==2) {verifyEq(business(result),business(expected));verify(scope.frozenReport("energy-flow")===result)}
+        else verify(result.isEmpty)
       }
-      finally {sources.each |s| {s.close};registry.close}
+      finally {sources.each |s| {s.close};scope.releaseReportBorrows;registry.close;scope.close}
       verifyEq(budget.state.temporary.val,0);verifyEq(budget.residentRaw,0)
     }
   }
