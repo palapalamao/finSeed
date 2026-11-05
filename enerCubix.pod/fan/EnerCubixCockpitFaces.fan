@@ -86,7 +86,7 @@ internal class EnerCubixCockpitFaces
 
   private static Str:Obj? endUse(Str:Obj? q, [Str:Obj?][] records, [Str:Obj?][] histories, Str:Obj? reports, Str:Obj? boundary, |Str,Str:Obj?->Str:Obj?|? preparedReport := null)
   {
-    report:=EnerCubixCockpitReports.read("face-endUse",q.dup.set("kind","utility"),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
+    report:=EnerCubixCockpitReports.read("face-endUse",EnerCubixCockpitReports.faceQuery(q,boundary,"face-endUse"),records,EnerCubixCockpitMetrics.histories(q,histories),preparedReport)
     shares:=EnerCubixMath.maps(((Map)report["extra"])["utilityShares"])
     additive:=boundary["aggregateAllowed"] == true && shares.all |s| {!["overlappingScopes","areaNormalized","negativeConsumption"].contains(s["percentageBasis"])}
     complete:=shares.all |s| {s["value"] != null && ["ok","good","estimated","derived","cleaned","corrected"].contains(s["quality"])}

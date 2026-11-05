@@ -496,6 +496,7 @@ class EnerCubixRepo
     mustRead
     request := input.dup
     request.remove("_cockpitDiagnosticCapture")
+    if(!cockpit) request.remove("_cockpitExactMeterSet")
     now:=DateTime.now
     cutoff:=input["asOf"] == null ? now : EnerCubixKnownUsage.cutoff(input)
     request["asOf"]=(cutoff < now ? cutoff : now.toTimeZone(cutoff.tz)).toIso

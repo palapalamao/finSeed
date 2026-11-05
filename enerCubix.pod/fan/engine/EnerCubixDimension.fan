@@ -227,7 +227,7 @@ class EnerCubixDimension
     category:=cockpitRangeCategory(req)
     if (req["kind"] == "utility")
     {
-      selected:=EnerCubixEndUse.resolve(EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim),EnerCubixMath.strings(req["nodeIds"]),category)
+      selected:=EnerCubixEndUse.resolveReport(EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim),req)
       points:=selected.map |r->Str| {r["pointId"] as Str ?: ""}
       return ["points":points.findAll |Str id->Bool| {!id.isEmpty}.unique.sort,"nodes":selected.map |r->Str| {r["id"].toStr}]
     }

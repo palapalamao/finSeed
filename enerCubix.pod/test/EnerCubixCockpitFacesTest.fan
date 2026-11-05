@@ -2,6 +2,55 @@ using util
 
 class EnerCubixCockpitFacesTest : Test
 {
+  Void testEndUseRetainsTheCanonicalMasterOwnReadingRatherThanExpandingLeaves()
+  {
+    rs:=records;rs.findAll |r| {["a","b"].contains(r["id"])}.each |r| {r["meterParentId"]="t"}
+    rs.add(["id":"t","kind":"totalMeter","name":"Master","pointId":"pt","categoryId":"c","utilityId":"masterUse"])
+    rs.add(["id":"masterUse","kind":"utility","name":"Master use","categoryId":"c"])
+    hs:=["pt","pa","pb"].map |id,Int i->[Str:Obj?]| {return ["pointId":id,"mode":"cumulative","unit":"kWh","intervalSeconds":3600f,"samples":[["ts":start.toIso,"value":0f],["ts":(start+1hr).toIso,"value":[100f,40f,50f][i]]]]}
+    q:=request;q["reportScope"]=["dimension":"metering","nodeIds":["t"],"selectionIntent":"range"];q["time"]=["preset":"custom","period":"hour","from":start.toIso,"to":(start+1hr).toIso];q["asOf"]=(start+1hr).toIso
+    result:=EnerCubixCockpit.execute(q,rs,|Str:Obj? x,[Str:Obj?][] saved->[Str:Obj?][]| {hs},"test",TimeZone.utc,start+1hr)
+    boundary:=(Map)result["boundary"];verifyEq(boundary["meterIds"],["t"])
+    kpis:=EnerCubixMath.maps(((Map)((Map)((Map)result["modules"])["kpis"])["data"])["values"])
+    verifyEq(kpis.find |m| {m["id"]=="energy"}["value"],100f)
+    uses:=(Map)((Map)((Map)result["modules"])["endUse"])["data"]
+    verifyEq(uses["meterIds"],["t"])
+    report:=(Map)((Map)result["reports"])[uses["reportRef"]];extra:=(Map)report["extra"]
+    verifyEq(EnerCubixMath.maps(extra["utilityMembers"]).map |m->Str| {m["nodeId"].toStr},["t"])
+    shares:=EnerCubixMath.maps(extra["utilityShares"]);verifyEq(shares.size,1);verifyEq(shares.first["utilityId"],"masterUse");verifyEq(shares.first["knownValue"],100f)
+    ordinary:=EnerCubixHistory.report(["kind":"utility","dimension":"metering","nodeIds":["t"],"from":start.toIso,"to":(start+1hr).toIso,"asOf":(start+1hr).toIso,"period":"hour","metric":"energy"],rs,hs)
+    verifyEq(EnerCubixMath.maps(((Map)ordinary["extra"])["utilityMembers"]).map |m->Str| {m["nodeId"].toStr},["a","b"])
+    verifyEq(EnerCubixMath.maps(((Map)ordinary["extra"])["utilityShares"]).reduce(0f) |Float total,m->Float| {total+(Float)m["knownValue"]},90f)
+  }
+
+  Void testExactEndUsePlannerAndConsumerHaveTheSameCanonicalOwnPointSet()
+  {
+    rs:=records;rs.add(["id":"t","kind":"totalMeter","name":"Master","pointId":"pt","categoryId":"c","includeInTotals":false])
+    rs.add(["id":"alias","kind":"meter","name":"Alias","pointId":"pt","categoryId":"c","canonicalId":"t"])
+    rs.find |r| {r["id"]=="a"}["meterParentId"]="t"
+    dim:=EnerCubixDimension("metering",rs);ctx:=EnerCubixContext(dim.records,[Str:Obj?][,],TimeZone.utc,dim)
+    q:=EnerCubixCockpitReports.faceQuery(["_cockpitCategoryId":"c","categoryIds":["c"]],["meterIds":["alias","t","a"]],"face-endUse")
+    picked:=EnerCubixEndUse.resolveReport(ctx,q)
+    verifyEq(picked.map |m->Str| {m["id"].toStr},["a","t"])
+    deps:=EnerCubixDimension.dependencies(q,rs)
+    verifyEq(deps["nodes"],["a","t"]);verifyEq(deps["points"],["pa","pt"])
+    // Excluded explicit meters remain analyzable; parents are not pruned when
+    // the boundary includes both objects. Existing overlap logic limits sums.
+    verifyEq(EnerCubixEndUse.overlap(ctx,picked),true)
+    bad:=q.dup.set("nodeIds",["outside-unreadable"])
+    verifyErr(ArgErr#) {EnerCubixEndUse.resolveReport(ctx,bad)}
+    ["kind","dimension","metric","categoryIds","_cockpitExactMeterSet"].each |key|
+    {
+      invalid:=q.dup;invalid[key]=key=="categoryIds" ? ["other"] : "invalid"
+      verifyErr(ArgErr#) {EnerCubixEndUse.resolveReport(ctx,invalid)}
+    }
+    hidden:=rs.find |r| {r["id"]=="b"};hidden["nativeHidden"]=true
+    blocked:=EnerCubixContext(rs,[Str:Obj?][,],TimeZone.utc)
+    verifyErr(ArgErr#) {EnerCubixEndUse.resolveReport(blocked,q.dup.set("nodeIds",["b"]))}
+    // A readable source in another energy category must never enter the set.
+    verifyErr(ArgErr#) {EnerCubixEndUse.resolveReport(ctx,q.dup.setAll(["categoryIds":["water"],"_cockpitCategoryId":"water"]))}
+  }
+
   Void testThreeFacesShareOnePreparedLoadAndExactMeterBoundary()
   {
     calls:=0
@@ -43,7 +92,7 @@ class EnerCubixCockpitFacesTest : Test
     verifyEq(((List)time["excludedDays"]).size,2)
   }
 
-  Void testOverlappingScopeKeepsOtherModulesSafeAndEndUseLeavesIndependent()
+  Void testOverlappingScopeKeepsOtherModulesSafeAndEndUseBoundaryIndependent()
   {
     rs:=records
     rs.findAll |r| {["a","b"].contains(r["id"])}.each |r| {r["meterParentId"]="t"}
@@ -56,9 +105,9 @@ class EnerCubixCockpitFacesTest : Test
     modules:=(Map)r["modules"];uses:=(Map)((Map)modules["endUse"])["data"]
     verifyEq(uses["additive"],false)
     report:=(Map)((Map)r["reports"])[uses["reportRef"]]
-    verifyEq(((List)((Map)report["extra"])["utilityMembers"]).size,2)
-    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).find |s| {s["utilityId"]=="lighting"}["knownPercentage"],40f)
-    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).find |s| {s["utilityId"]=="motive"}["knownPercentage"],60f)
+    verifyEq(((List)((Map)report["extra"])["utilityMembers"]).size,3)
+    verifyEq(EnerCubixMath.maps(((Map)report["extra"])["utilityMembers"]).map |m->Str| {m["nodeId"].toStr},["a","b","t"])
+    verify(EnerCubixMath.maps(((Map)report["extra"])["utilityShares"]).all |s| {s["knownPercentage"]==null})
     verify(EnerCubixMath.maps(((Map)((Map)modules["organization"])["data"])["nodes"]).all |n| {n["value"] == null})
   }
 

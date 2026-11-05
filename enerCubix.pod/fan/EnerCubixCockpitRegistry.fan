@@ -466,7 +466,7 @@ internal class EnerCubixCockpitReportWork
     report=EnerCubixReport(ctx,request,from,to,kind,period,metric,state,key=="space-summary")
     created:=report;output.watch |->Void| {created.clearFrames}
     selected:=EnerCubixMath.strings(request["nodeIds"]).unique
-    if(kind=="utility") EnerCubixEndUse.resolve(ctx,selected,EnerCubixDimension.cockpitRangeCategory(request)).each |meter| {state.hold(1);cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
+    if(kind=="utility") EnerCubixEndUse.resolveReport(ctx,request).each |meter| {state.hold(1);cursors.add(report.openLine(meter["id"].toStr,meter["categoryId"] as Str ?: ""))}
     else selected.each |id|
     {
       record:=ctx.byId[id]

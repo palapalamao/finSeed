@@ -759,7 +759,7 @@ class EnerCubixHistory
     selected:=EnerCubixMath.strings(request["nodeIds"])
     if (request["kind"] == "utility")
     {
-      meters:=EnerCubixEndUse.resolve(ctx,selected)
+      meters:=EnerCubixEndUse.resolveReport(ctx,request)
       points:=meters.map |r->Str| {r["pointId"] as Str ?: ""}
       return ["points":points.findAll |Str id->Bool| {!id.isEmpty}.unique,"nodes":meters.map |r->Str| {r["id"].toStr}]
     }

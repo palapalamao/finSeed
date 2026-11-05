@@ -1,6 +1,29 @@
 ** Report-local selection and overlap checks. Every meter reads its own primary.
 internal class EnerCubixEndUse
 {
+  ** Cockpit distribution groups its already-resolved own-meter boundary.
+  ** Ordinary utility reports retain their independent leaf-expansion policy.
+  static [Str:Obj?][] resolveReport(EnerCubixContext ctx,Str:Obj? request)
+  {
+    selected:=EnerCubixMath.strings(request["nodeIds"])
+    if(!request.containsKey("_cockpitExactMeterSet")) return resolve(ctx,selected,EnerCubixDimension.cockpitRangeCategory(request))
+    category:=request["_cockpitCategoryId"] as Str
+    categories:=EnerCubixMath.strings(request["categoryIds"])
+    if(request["_cockpitExactMeterSet"]!=true || request["kind"]!="utility" || request["dimension"]!="metering" || request["metric"]!="energy" || request["perArea"]!=false || category==null || categories.size!=1 || categories.first!=category) throw ArgErr("cockpitField")
+    found:=Str:[Str:Obj?][:]
+    selected.each |id|
+    {
+      ctx.deadline?.check
+      canonical:=ctx.dimension?.canonical(id) ?: id
+      record:=ctx.byId[canonical]
+      if(record==null || !meter(record) || !readable(record) || record["categoryId"]!=category) throw ArgErr("cockpitScopeForbidden")
+      // Preserve explicit excluded/overlapping objects. The existing overlap
+      // gate decides whether their values may be added or made percentages.
+      found[canonical]=record
+    }
+    return found.vals.sort |a,b| {a["id"].toStr <=> b["id"].toStr}
+  }
+
   static [Str:Obj?][] resolve(EnerCubixContext ctx,Str[] selected,Str? category := null)
   {
     found:=Str:[Str:Obj?][:]

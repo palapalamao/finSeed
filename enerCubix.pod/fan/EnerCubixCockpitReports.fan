@@ -18,7 +18,7 @@ internal class EnerCubixCockpitReports
     base:=q.dup.setAll(["nodeIds":boundary["meterIds"],"dimension":"metering","metric":"energy","perArea":false])
     base.remove("spaceSource")
     if(key == "face-meter-profile") return base.set("kind","profile")
-    if(key == "face-endUse") return base.set("kind","utility")
+    if(key == "face-endUse") return base.setAll(["kind":"utility","_cockpitExactMeterSet":true])
     if(key == "face-daily") return base.setAll(["kind":"daily","period":"hour"])
     if(key == "face-workingHours" || key == "face-workingDays") return base.setAll(["kind":key[5..-1],"period":"hour"])
     throw ArgErr("cockpitFacePlan")
