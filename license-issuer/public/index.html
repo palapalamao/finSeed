@@ -47,7 +47,11 @@
             <label><span data-text="customer"></span><input name="customer" maxlength="120"></label>
             <div id="host-fields" class="wide fields">
               <label><span data-text="hostId"></span><input name="hostId" maxlength="512" spellcheck="false" autocomplete="off" required></label>
-              <label><span data-text="requestFile"></span><input id="request-file" type="file" accept=".json,.enercubix-request,application/json"></label>
+              <label class="file-field">
+                <span id="request-file-label" data-text="requestFile"></span>
+                <input id="request-file" class="sr-only" aria-labelledby="request-file-label" type="file" accept=".json,.enercubix-request,application/json">
+                <span class="file-picker" data-text="chooseRequestFile" aria-hidden="true"></span>
+              </label>
             </div>
             <p id="training-info" class="wide hint" data-text="trainingInfo" hidden></p>
             <p id="time-zone" class="wide hint"></p>

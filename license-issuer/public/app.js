@@ -14,6 +14,7 @@ const labels = {
   customer: ['客户名称（选填）', 'Customer (optional)'],
   hostId: ['FIN 机器码', 'FIN Host ID'],
   requestFile: ['导入授权申请（选填）', 'Import activation request (optional)'],
+  chooseRequestFile: ['选择申请文件', 'Choose request file'],
   notBefore: ['生效时间', 'Starts at'],
   expiresAt: ['到期时间', 'Expires at'],
   note: ['备注（选填）', 'Notes (optional)'],

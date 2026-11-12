@@ -20,7 +20,7 @@ body { margin: 0; }
 .brand span { font-size: .95rem; }
 .top-actions { flex-wrap: wrap; justify-content: flex-end; }
 .language { display: flex; align-items: center; gap: .5rem; }
-.language select { width: auto; }
+.language select { width: auto; color: #152937; }
 
 main { padding-top: 1.5rem; padding-bottom: 3rem; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 1.5rem; margin-bottom: 1.25rem; }
@@ -43,7 +43,10 @@ input, select, textarea, button, .download {
 }
 input, select, textarea { color: inherit; background: #fff; width: 100%; }
 textarea { resize: vertical; }
-input[type="file"] { overflow: hidden; }
+.file-field { justify-items: start; }
+.file-picker { cursor: pointer; background: #fff; border: 1px solid #aabfc9; border-radius: 7px; padding: .56rem .7rem; }
+.file-picker:hover { background: #e7eff2; }
+.file-field:focus-within .file-picker { outline: 3px solid #328b7d; outline-offset: 2px; }
 button, .download { cursor: pointer; font-weight: 650; background: var(--accent); color: #fff; border-color: var(--accent); }
 button:hover, .download:hover { background: #09483f; }
 button.secondary { background: #fff; color: #143747; border-color: var(--line); }
