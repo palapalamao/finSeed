@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EnerCubix</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand"><b>EnerCubix</b><span data-text="title"></span></div>
+      <div class="top-actions">
+        <span id="username" hidden></span>
+        <label class="language"><span data-text="language"></span>
+          <select id="language"><option value="zh">中文</option><option value="en">English</option></select>
+        </label>
+        <button id="logout" class="secondary" data-text="logout" hidden></button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <noscript>JavaScript is required. / 请启用 JavaScript。</noscript>
+    <section id="login-panel" class="panel login-panel" aria-labelledby="login-title" hidden>
+      <h1 id="login-title" data-text="loginTitle"></h1>
+      <form id="login" method="post">
+        <label><span data-text="account"></span><input name="username" autocomplete="username" maxlength="64" required></label>
+        <label><span data-text="password"></span><input name="password" type="password" autocomplete="current-password" maxlength="256" required></label>
+        <p id="login-message" class="message" role="alert" hidden></p>
+        <button type="submit" data-text="login"></button>
+      </form>
+    </section>
+    <div id="issuer" hidden>
+      <section class="panel" aria-labelledby="issue-title">
+        <div class="panel-heading">
+          <h1 id="issue-title" data-text="issueTitle"></h1>
+          <button id="reset" class="secondary" type="button" data-text="reset"></button>
+        </div>
+        <p id="linked" class="notice" hidden></p>
+        <form id="issue">
+          <div class="fields">
+            <label><span data-text="licenseType"></span><select name="type">
+              <option value="host" data-text="host"></option>
+              <option value="training" data-text="training"></option>
+            </select></label>
+            <label><span data-text="customer"></span><input name="customer" maxlength="120"></label>
+            <div id="host-fields" class="wide fields">
+              <label><span data-text="hostId"></span><input name="hostId" maxlength="512" spellcheck="false" autocomplete="off" required></label>
+              <label><span data-text="requestFile"></span><input id="request-file" type="file" accept=".json,.enercubix-request,application/json"></label>
+            </div>
+            <p id="training-info" class="wide hint" data-text="trainingInfo" hidden></p>
+            <p id="time-zone" class="wide hint"></p>
+            <label><span data-text="notBefore"></span><input name="notBefore" type="datetime-local" required></label>
+            <label><span data-text="expiresAt"></span><input name="expiresAt" type="datetime-local" required></label>
+            <label class="wide"><span data-text="note"></span><textarea name="note" maxlength="500" rows="2"></textarea></label>
+          </div>
+          <p id="issue-message" class="message" role="status" hidden></p>
+          <div class="actions">
+            <button type="submit" data-text="review"></button>
+            <a id="latest-download" class="download" data-text="downloadIssued" hidden></a>
+          </div>
+        </form>
+      </section>
+      <section class="panel" aria-labelledby="history-title">
+        <div class="panel-heading">
+          <h2 id="history-title" data-text="history"></h2>
+          <form id="search" class="search">
+            <label><span class="sr-only" data-text="searchLabel"></span><input name="q" maxlength="120" data-placeholder="searchLabel"></label>
+            <button type="submit" class="secondary" data-text="search"></button>
+          </form>
+        </div>
+        <p id="history-message" class="message" role="status" hidden></p>
+        <div id="records" class="records"></div>
+        <nav id="pages" class="pages" data-label="historyPages" hidden>
+          <button id="previous" class="secondary" type="button" data-text="previous"></button>
+          <span id="page-count"></span>
+          <button id="next" class="secondary" type="button" data-text="next"></button>
+        </nav>
+      </section>
+    </div>
+  </main>
+  <dialog id="confirmation" aria-labelledby="confirmation-title">
+    <h2 id="confirmation-title" data-text="reviewTitle"></h2>
+    <dl id="confirmation-fields" class="details"></dl>
+    <p id="confirm-message" class="message" role="alert" hidden></p>
+    <div class="actions">
+      <button id="confirm" type="button" data-text="confirm"></button>
+      <button id="cancel" type="button" class="secondary" data-text="cancel"></button>
+    </div>
+  </dialog>
+</body>
+</html>
