@@ -16,7 +16,7 @@ const class EnerCubixExt : Ext, Weblet
     if (!isRunning) return
     now:=Duration.nowTicks
     if (!EnerCubixMeterRollup.isDue(lastRollup.val,now,EnerCubixMeterRollup.configuredInterval(rt.db))) return
-    EnerCubixMeterRollup.update(rt.db)
+    if (EnerCubixLicenseQuota.allowed(proj.sys,rt.db)) EnerCubixMeterRollup.update(rt.db)
     lastRollup.val=now
   }
 

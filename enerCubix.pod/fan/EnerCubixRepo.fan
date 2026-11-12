@@ -26,17 +26,44 @@ class EnerCubixRepo
     if (!cx.user.isAdmin) throw EnerCubixHttpErr(403, "PERMISSION", "当前 FIN 用户没有配置写入权限")
   }
 
+  internal Bool licenseAllowsCalculation()
+  { EnerCubixLicenseQuota.allowed(cx.sys,cx.db) }
+
+  internal Void requireLicensedCalculation()
+  {
+    if (!licenseAllowsCalculation) throw EnerCubixHttpErr(409,"LICENSE_REQUIRED","licenseProjectOverLimit")
+  }
+
+  internal [Str:Obj?] licenseStatus()
+  {
+    mustRead
+    return EnerCubixLicenseStore.forSys(cx.sys).status(EnerCubixLicenseStore.hostId(cx.sys),
+      EnerCubixLicenseQuota.used(cx.db),cx.user.isAdmin || cx.user.isSu,cx.user.isSu)
+  }
+
+  internal [Str:Obj?] licenseImport(Obj? raw)
+  {
+    mustRead
+    if (!cx.user.isSu) throw EnerCubixHttpErr(403,"PERMISSION","licenseImportForbidden")
+    EnerCubixLicenseStore.forSys(cx.sys).install(raw as Str ?: throw EnerCubixLicenseGrant.invalid,
+      EnerCubixLicenseStore.hostId(cx.sys))
+    return licenseStatus
+  }
+
+  private Void readRevision()
+  {
+    if (revisionRead) return
+    revision = cx.db.read(Filter.has("enerCubixRevision"),false)
+    revisionRead = true
+  }
+
   [Str:Obj?][] records()
   { EnerCubixNativeEquipRepo(this).records(rawRecords) }
 
   [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false)
   {
     mustRead
-    if (!revisionRead)
-    {
-      revision = cx.db.read(Filter.has("enerCubixRevision"),false)
-      revisionRead = true
-    }
+    readRevision
     rows:=cx.db.readAllList(Filter.has("enerCubixKind").and(Filter.has("enerCubix").or(Filter.has("equip"))))
     cockpitPreparation?.hold(1);out:=[Str:Obj?][,]
     cockpitPreparation?.watch |->Void| {out.clear}
@@ -174,7 +201,8 @@ class EnerCubixRepo
     if (["assign","move","totals","copy"].contains(action))
     {
       equipStore:=EnerCubixNativeEquipRepo(this)
-      items=equipStore.prepareWrite(items)
+      copyTarget:=action=="copy" && (input["dimension"] ?: "legacy")!="legacy" ? (input["targetId"] as Str) : null
+      items=equipStore.prepareWrite(items,copyTarget)
       input=EnerCubixNativeEquip.rewrite(input,equipStore.mapping)
       if (input["patch"] is Map) input["patch"]=EnerCubixNativeEquip.rewrite((Str:Obj?)input["patch"],equipStore.mapping)
     }
@@ -494,6 +522,7 @@ class EnerCubixRepo
   private [Str:Obj?] prepareReport([Str:Obj?] input, Bool cockpit := false)
   {
     mustRead
+    requireLicensedCalculation
     request := input.dup
     request.remove("_cockpitDiagnosticCapture")
     if(!cockpit) request.remove("_cockpitExactMeterSet")
@@ -814,6 +843,8 @@ class EnerCubixRepo
     EnerCubixHistorySafety.metadata(cx.db,changes)
     if (!event)
     {
+      readRevision
+      EnerCubixLicenseQuota.checkWrite(cx.sys,cx.db,changes)
       EnerCubixCleaningRepo(this).validateSaves(changes)
       changes.addAll(EnerCubixMeterTimeline.capture(cx.db,changes,DateTime.now,cx.user.username))
       // A shared optimistic revision serializes uniqueness/cycle checks across requests.

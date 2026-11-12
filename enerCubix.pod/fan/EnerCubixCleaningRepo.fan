@@ -228,6 +228,7 @@ class EnerCubixCleaningRepo
   [Str:Obj?] preview([Str:Obj?] request)
   {
     repo.mustRead
+    repo.requireLicensedCalculation
     nodeId:=request["nodeId"] as Str
     node:=nodeId == null ? null : cx.db.readById(Ref(nodeId),false)
     if (node != null) readable(node)

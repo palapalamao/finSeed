@@ -28,6 +28,7 @@ class EnerCubixJobs
       ensureSchedule(repo.cx.db)
       return repo.save(config,true)
     }
+    repo.requireLicensedCalculation
     tz:=TimeZone.fromStr(repo.cx.proj.meta["tz"]?.toStr ?: "Shanghai")
     now:=DateTime.now.toTimeZone(tz); end:=EnerCubixMath.floorHour(now)
     from:=DateTime.fromIso(request["from"] as Str ?: (end-1hr).toIso).toTimeZone(tz)
@@ -66,6 +67,7 @@ class EnerCubixJobs
   [Str:Obj?] scheduled()
   {
     repo.mustWrite
+    if (!repo.licenseAllowsCalculation) return Str:Obj?[:]
     all:=repo.records; result:=Str:Obj?[:]
     ["setAlarmEnabled":"scanAlarms"].each |action,setting|
     {

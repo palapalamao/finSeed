@@ -31,7 +31,7 @@ class EnerCubixNativeEquipRepo
 
   ** Repair old application-owned archives when they are first edited. Normal
   ** enrollment needs no model record; every subsequent write uses equipment.
-  [Str:Obj?][] prepareWrite([Str:Obj?][] input)
+  [Str:Obj?][] prepareWrite([Str:Obj?][] input, Str? copyTarget := null)
   {
     if (active) return input
     legacy:=input.findAll |r|
@@ -43,6 +43,13 @@ class EnerCubixNativeEquipRepo
     if (legacy.isEmpty) return input
     legacy.each |r| { EnerCubixRepo.checkMod(repo.stored(r["id"].toStr),r["mod"]) }
     plan:=migrate(["action":"preview"])
+    pending:=input
+    if (copyTarget!=null && input.size==1)
+    {
+      kind:=repo.stored(legacy.first["id"].toStr)["enerCubixKind"]
+      pending=input.dup.add(["id":copyTarget,"kind":kind])
+    }
+    EnerCubixLicenseQuota.checkMigration(cx.sys,cx.db,pending,plan)
     migrate(["action":"apply","revision":plan["revision"],"sourceRevision":plan["sourceRevision"]])
     aliases:=mapping
     return input.map |r->[Str:Obj?]|

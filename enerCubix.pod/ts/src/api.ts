@@ -7,6 +7,7 @@ import type {ChangeMessagePage} from './changeMessages';
 import type {CockpitAsset,CockpitAssetCatalog,CockpitHotspot} from './cockpitAssets';
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import {decodeCockpitPayload} from './cockpitPayload';
+import type {LicenseStatus} from './license';
 export class ApiError extends Error {constructor(public code:string,message:string,public sourceMessage?:string){super(message);this.name='ApiError';}}
 export function unwrap<T>(value:unknown,status=200):T {
  if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"),"FIN 返回了无效的响应。请检查项目和服务状态。");
@@ -32,6 +33,8 @@ export class EnerCubixApi {
  deleteCockpitConfig=(type:'budget'|'rule',record:{id?:string;mod?:string})=>this.request<{deleted:string}>('cockpit/'+(type==='budget'?'budgets':'rule-profiles')+'/delete',{id:record.id,mod:record.mod});
  cockpitConfigAudit=(targetId:string)=>this.request<CockpitConfigAudit>('cockpit/config-audit?targetId='+encodeURIComponent(targetId));
  catalog=()=>this.request<Catalog>('catalog');
+ licenseStatus=(signal?:AbortSignal)=>this.request<LicenseStatus>('license/status',undefined,signal);
+ importLicense=(license:string)=>this.request<LicenseStatus>('license/import',{license});
  assets=(signal?:AbortSignal)=>this.request<CockpitAssetCatalog>('cockpit/assets',undefined,signal);
  uploadAsset=(body:{id?:string;mod?:string;manifestMod:string|null;scopeId:string;name:string;base64:string;clearHotspots?:boolean})=>this.request<CockpitAssetCatalog>('cockpit/assets/upload',body);
  saveAsset=(body:{id:string;mod:string;manifestMod:string|null;scopeId:string;name:string;hotspots:CockpitHotspot[]})=>this.request<CockpitAssetCatalog>('cockpit/assets/save',body);

@@ -15,9 +15,10 @@ import {NativeEquipEnrollDrawer} from './NativeEquipEnrollDrawer';
 import {MeterManager} from './MeterManager';
 import {OtherSettings} from './OtherSettings';
 import {SpaceAssets} from './SpaceAssets';
+import {LicenseSettings} from './LicenseSettings';
 import {manageTitles,type ManageView} from './managementNavigation';
 export {manageTitles,type ManageView} from './managementNavigation';
-export const manageKinds:Record<ManageView,Kind[]>= {budgets:[],ruleProfiles:[],spaceAssets:[],tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
+export const manageKinds:Record<ManageView,Kind[]>= {license:[],budgets:[],ruleProfiles:[],spaceAssets:[],tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
 export function treeData(records:EnerCubixRecord[],query=''):DataNode[]{
  const nodes=records.filter(record=>nodeKinds.includes(record.kind));
  const build=(parentId:string|undefined,path:Set<string>):DataNode[]=>nodes.filter(record=>(record.parentId||undefined)===parentId).filter(record=>!path.has(record.id!)).map(record=>{const children=build(record.id,new Set([...path,record.id!]));return {key:record.id!,title:<span><span>{record.name}</span><span className="tree-kind">{names[record.kind]}</span></span>,children,isLeaf:!children.length};});
@@ -26,7 +27,10 @@ export function treeData(records:EnerCubixRecord[],query=''):DataNode[]{
  const filter=(items:DataNode[]):DataNode[]=>items.flatMap(node=>{const record=nodes.find(record=>record.id===node.key);const children=filter(node.children||[]);return record?.name.toLowerCase().includes(query.toLowerCase())||children.length?[{...node,children}]:[];});return query?filter([...roots,...orphans]):[...roots,...orphans];
 }
 interface Props {onOpenTemplate?:(record:EnerCubixRecord)=>void;view:ManageView;api:EnerCubixApi;catalog:Catalog;reload:()=>Promise<void>}
-export function Management(props:Props){return props.view==='budgets'||props.view==='ruleProfiles'?<CockpitConfiguration type={props.view==='budgets'?'budget':'rule'} api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='spaceAssets'?<SpaceAssets api={props.api} catalog={props.catalog}/>:props.view==='tree'?<MeterManager api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='otherSettings'?<OtherSettings api={props.api} catalog={props.catalog} reload={props.reload}/>:<ConfigurationManagement {...props}/>;}
+export function Management(props:Props){
+ if(props.view==='license')return <LicenseSettings key={props.catalog.project} api={props.api}/>;
+ return props.view==='budgets'||props.view==='ruleProfiles'?<CockpitConfiguration type={props.view==='budgets'?'budget':'rule'} api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='spaceAssets'?<SpaceAssets api={props.api} catalog={props.catalog}/>:props.view==='tree'?<MeterManager api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='otherSettings'?<OtherSettings api={props.api} catalog={props.catalog} reload={props.reload}/>:<ConfigurationManagement {...props}/>;
+}
 function ConfigurationManagement({view,api,catalog,reload,onOpenTemplate}:Props){
  const[editing,setEditing]=useState<Partial<EnerCubixRecord>|null>(null);const[saving,setSaving]=useState(false);const[selected,setSelected]=useState<string>();const[search,setSearch]=useState('');const[pointsOpen,setPointsOpen]=useState(false);const[transfer,setTransfer]=useState<{action:'copy'|'move';record:EnerCubixRecord}|null>(null);const[parentId,setParentId]=useState<string>();const[taskRange,setTaskRange]=useState<[Dayjs,Dayjs]>(presetRange('thisMonth'));const[taskBusy,setTaskBusy]=useState(false);
  const[nativeEnrollId,setNativeEnrollId]=useState<string>();const records=catalog.records;const canWrite=catalog.user.canWrite;const current=records.find(record=>record.id===selected);const[bulkKeys,setBulkKeys]=useState<string[]>([]);const[bulkBusy,setBulkBusy]=useState(false);

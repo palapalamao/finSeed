@@ -1,10 +1,20 @@
-param([string]$SdkPath, [switch]$SkipUi)
+param([string]$SdkPath, [switch]$SkipUi, [string]$LicenseKeyring)
 . "$PSScriptRoot\sdk.ps1"
 $enerCubixRoot = Get-EnerCubixRoot
 $enerCubixSdk = Get-EnerCubixSdk -SdkPath $SdkPath
 $enerCubixPreviousHome = $env:FAN_HOME
 $enerCubixPreviousUi = $env:ENERCUBIX_UI_BUILT
+$enerCubixKeyringPath = Join-Path $enerCubixRoot 'enerCubix.pod\res\license-keys.json'
+$enerCubixPreparedKeyring = $false
 try {
+    if (Test-Path -LiteralPath $enerCubixKeyringPath) {
+        throw 'A build keyring is already present in the Pod source. Use -LicenseKeyring to select a keyring for this build.'
+    }
+    if ($LicenseKeyring) {
+        $enerCubixKeyringSource = (Resolve-Path -LiteralPath $LicenseKeyring -ErrorAction Stop).Path
+        Invoke-EnerCubixCommand 'node' @((Join-Path $PSScriptRoot 'prepare-license-keyring.mjs'), $enerCubixKeyringSource, $enerCubixKeyringPath)
+        $enerCubixPreparedKeyring = $true
+    }
     $env:FAN_HOME = $enerCubixSdk
     Push-Location $enerCubixRoot
     try {
@@ -30,6 +40,7 @@ try {
     finally { Pop-Location }
 }
 finally {
+    if ($enerCubixPreparedKeyring) { Remove-Item -LiteralPath $enerCubixKeyringPath }
     $env:FAN_HOME = $enerCubixPreviousHome
     $env:ENERCUBIX_UI_BUILT = $enerCubixPreviousUi
 }

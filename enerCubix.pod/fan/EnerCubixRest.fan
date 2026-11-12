@@ -15,12 +15,12 @@ const class EnerCubixRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit"].contains(route)
+      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
       if (req.method != (readOnly ? "GET" : "POST")) throw EnerCubixHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
       {
-        if (!readPost(route)) repo.mustWrite
+        if (!readPost(route) && route!="license/import") repo.mustWrite
         if (!req.headers.get("Content-Type","").lower.startsWith("application/json")) throw ArgErr("请求必须使用 application/json")
         raw := readBody(req.in,bodyLimit(route),route == "cockpit/assets/upload")
         parsed := JsonInStream(raw.in).readJson
@@ -46,6 +46,8 @@ const class EnerCubixRest : WebMod
           image:=EnerCubixCockpitAssets(repo).image(req.uri.query["id"] ?: "",req.uri.query["hash"] ?: "")
           sendImage(image); return
         case "session": data=["locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
+        case "license/status": data=repo.licenseStatus
+        case "license/import": data=repo.licenseImport(body["license"])
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
@@ -120,7 +122,11 @@ const class EnerCubixRest : WebMod
     res.out.writeBuf(bytes); res.out.flush; res.done
   }
 
-  internal static Int bodyLimit(Str route) {route == "cockpit/assets/upload" ? 3145728 : 2097152}
+  internal static Int bodyLimit(Str route)
+  {
+    if (route=="license/import") return 32768
+    return route=="cockpit/assets/upload" ? 3145728 : 2097152
+  }
 
   private Void send(Int status, [Str:Obj?] body)
   {
