@@ -1,6 +1,6 @@
 import {afterEach,expect,it} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {initializeLocale} from './i18n';
+import {initializeLocale,serverMessage} from './i18n';
 import {createLicenseRequest,type LicenseStatus} from './license';
 import {LicenseDetails} from './LicenseSettings';
 
@@ -27,9 +27,16 @@ it('distinguishes an active training license from a host license and shows the c
  initializeLocale('en-US');
  const html=renderToStaticMarkup(<LicenseDetails status={{
   status:'active',used:42,limit:null,overLimit:false,canImport:true,hostId:'HID-example',
-  licenseType:'training',expiresAt:'2027-11-13T00:00:00Z'
+  licenseType:'training',expiresAt:'2106-01-13T15:59:00Z'
  }}/>);
  expect(html).toContain('Training license');
  expect(html).toContain('HID-example');
  expect(html).toContain('Unlimited');
+ expect(html).toContain('2106');
 });
+
+it.each([['zh-CN','授权文件中的有效期有误。'],['en-US','The license contains an invalid validity period.']])(
+ 'reports a signed license with invalid dates in %s', (language,prefix)=>{
+  initializeLocale(language);
+  expect(serverMessage('licenseInvalidPeriod')).toContain(prefix);
+ });

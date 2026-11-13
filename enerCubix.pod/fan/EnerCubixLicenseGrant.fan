@@ -3,6 +3,9 @@ using [java] java.security::KeyFactory
 using [java] java.security::Signature
 using [java] java.security.interfaces::RSAPublicKey
 using [java] java.security.spec::X509EncodedKeySpec
+using [java] java.time::Instant
+using [java] java.time::LocalDateTime
+using [java] java.time::ZoneOffset
 using [java] fanx.interop::Interop
 
 ** A signed grant. Its time window is checked against the FIN clock on each use.
@@ -15,8 +18,12 @@ internal const class EnerCubixLicenseGrant
   const Str licenseType
   const Str licenseId
   const Str? hostId
-  const DateTime notBefore
-  const DateTime expiresAt
+  const Str notBefore
+  const Str expiresAt
+  private const Int startSecond
+  private const Int startNano
+  private const Int endSecond
+  private const Int endNano
 
   private new make(Str:Obj? payload)
   {
@@ -31,9 +38,15 @@ internal const class EnerCubixLicenseGrant
     }
     else if (licenseType != "training" || payload.containsKey("hostId")) throw invalid
     timestamp(payload["issuedAt"])
-    notBefore = timestamp(payload["notBefore"])
-    expiresAt = timestamp(payload["expiresAt"])
-    if (notBefore >= expiresAt) throw invalid
+    start := timestamp(payload["notBefore"])
+    end := timestamp(payload["expiresAt"])
+    if (!start.isBefore(end)) throw invalidPeriod
+    notBefore = start.toString
+    expiresAt = end.toString
+    startSecond = start.getEpochSecond
+    startNano = start.getNano
+    endSecond = end.getEpochSecond
+    endNano = end.getNano
   }
 
   static EnerCubixLicenseGrant verify(Str raw, Str:Str keyring)
@@ -55,26 +68,35 @@ internal const class EnerCubixLicenseGrant
       if (!verifier.verify(Interop.toJava(signature.trim).array)) throw invalid
       return make((Str:Obj?) JsonInStream(payload.in).readJson)
     }
+    catch (EnerCubixHttpErr e) { throw e }
     catch (Err ignored) { throw invalid }
   }
 
-  Str state(Str? currentHost, DateTime now)
+  Str state(Str? currentHost, Instant now)
   {
     if (licenseType == "host")
     {
       if (currentHost == null) return "hostUnavailable"
       if (hostId != currentHost) return "invalid"
     }
-    if (now < notBefore) return "notYetValid"
-    if (now >= expiresAt) return "expired"
+    if (compareTo(now,startSecond,startNano) < 0) return "notYetValid"
+    if (compareTo(now,endSecond,endNano) >= 0) return "expired"
     return "active"
   }
 
-  private static DateTime timestamp(Obj? value)
+  private static Int compareTo(Instant now, Int second, Int nano)
   {
-    raw := value as Str ?: throw invalid
-    if (!utc.matches(raw)) throw invalid
-    return DateTime.fromIso(raw)
+    seconds := now.getEpochSecond <=> second
+    return seconds == 0 ? now.getNano <=> nano : seconds
+  }
+
+  private static Instant timestamp(Obj? value)
+  {
+    raw := value as Str ?: throw invalidPeriod
+    if (!utc.matches(raw)) throw invalidPeriod
+    // FIN's Fantom DateTime stops at 2099. Parse UTC strictly without accepting leap-second or 24:00 normalization.
+    try { return LocalDateTime.parse(raw[0..<-1]).toInstant(ZoneOffset.UTC) }
+    catch (Err ignored) { throw invalidPeriod }
   }
 
   private static Buf decode(Obj? value)
@@ -87,4 +109,7 @@ internal const class EnerCubixLicenseGrant
 
   internal static EnerCubixHttpErr invalid()
   { EnerCubixHttpErr(400,"LICENSE_INVALID","licenseInvalid") }
+
+  private static EnerCubixHttpErr invalidPeriod()
+  { EnerCubixHttpErr(400,"LICENSE_INVALID_PERIOD","licenseInvalidPeriod") }
 }

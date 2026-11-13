@@ -6,6 +6,7 @@ using [java] java.nio.file::CopyOption
 using [java] java.nio.file::Files
 using [java] java.nio.file::StandardCopyOption
 using [java] java.security::MessageDigest
+using [java] java.time::Instant
 using [java] java.util.concurrent.locks::ReentrantLock
 using [java] fanx.interop::ByteArray
 using [java] fanx.interop::Interop
@@ -36,10 +37,10 @@ internal class EnerCubixLicenseStore
     catch (Err ignored) { return null }
   }
 
-  Bool active(Str? host, DateTime now := DateTime.now)
+  Bool active(Str? host, Instant now := Instant.now)
   { read.grant?.state(host,now) == "active" }
 
-  [Str:Obj?] status(Str? host, Int used, Bool canViewHost, Bool canImport, DateTime now := DateTime.now)
+  [Str:Obj?] status(Str? host, Int used, Bool canViewHost, Bool canImport, Instant now := Instant.now)
   {
     saved := read(canImport)
     grant := saved.grant
@@ -55,13 +56,13 @@ internal class EnerCubixLicenseStore
     {
       out["licenseType"]=grant.licenseType
       out["licenseId"]=grant.licenseId
-      out["notBefore"]=grant.notBefore.toUtc.toIso
-      out["expiresAt"]=grant.expiresAt.toUtc.toIso
+      out["notBefore"]=grant.notBefore
+      out["expiresAt"]=grant.expiresAt
     }
     return out
   }
 
-  EnerCubixLicenseGrant install(Str raw, Str? host, DateTime now := DateTime.now)
+  EnerCubixLicenseGrant install(Str raw, Str? host, Instant now := Instant.now)
   {
     lock := (ReentrantLock)fileLock.val
     lock.lock
