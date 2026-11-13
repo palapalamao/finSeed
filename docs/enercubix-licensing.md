@@ -6,7 +6,8 @@
 
 1. 项目管理员打开 **设置 → 授权管理**，复制 FIN 机器码或下载 `enercubix-request.json`。机器码可在 FIN 的 **Host → Licenses → Host Info** 核对。申请文件包含产品、格式版本、机器码和申请时间。
 2. 签发人员登录[独立签发后台](../license-issuer/README.md)，选择授权类型。机器绑定授权需要上传申请或粘贴机器码。培训授权只需填写有效期。确认时区和时间后签发，并下载已保存的授权文件。续期或换机均签发新文件，后台保留原签发记录。
-3. FIN 超级用户在 **授权管理** 选择并导入文件。授权即时生效，覆盖同一 FIN 实例的全部项目。页面显示授权类型、有效期和当前项目表计数。到期时间按 FIN 服务器时钟判断。
+3. FIN 超级用户在 **授权管理 → 添加授权** 选择并导入文件。有效文件会替换当前授权并即时生效，覆盖同一 FIN 实例的全部项目。页面显示授权类型、有效期和当前项目表计数。到期时间按 FIN 服务器时钟判断。
+4. FIN 超级用户可选择 **删除授权** 并确认。删除后，各项目立即恢复各自的免费额度。可从签发后台重新下载原文件，并在有效期内重新导入。
 
 两种授权有效期间均无表计、点位或设备数量上限。机器绑定授权还会检查本机机器码。培训授权可在不同机器上导入，适合期限明确的培训环境。两种文件都需使用受信任的签发密钥签名，FIN 可离线校验。
 
@@ -32,7 +33,8 @@
 
 1. A project administrator opens **Settings → License management**, copies the FIN machine code, or downloads `enercubix-request.json`. Compare the code with **Host → Licenses → Host Info** in FIN. The request contains the product, format version, machine code, and request time.
 2. An issuer signs in to the [standalone issuance service](../license-issuer/README.md) and selects a license type. For a machine-bound license, upload the request or paste the machine code. For a training license, enter a validity period. Verify the time zone and dates, issue the license, and download the saved file. Renewal and machine replacement create new signed files and preserve the previous records.
-3. A FIN superuser selects and imports the file in **License management**. It takes effect immediately for all projects on that FIN instance. The page displays its type and validity period alongside the current project's meter count. FIN uses the server clock to determine expiry.
+3. A FIN superuser selects and imports the file in **License management → Add license**. A valid file replaces the current license and takes effect immediately for all projects on that FIN instance. The page displays its type and validity period alongside the current project's meter count. FIN uses the server clock to determine expiry.
+4. A FIN superuser can select **Delete license** and confirm. Each project immediately returns to its free allowance. The issuer can download the original file again for reimport during its validity period.
 
 Both license types allow unlimited meters, points, and equipment during their validity period. A machine-bound license also checks the local machine code. A training license can be imported on different machines for a time-limited training session. Both types require a signature from a trusted issuer and can be verified offline.
 

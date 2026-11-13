@@ -86,6 +86,48 @@ class EnerCubixLicenseTest : Test
     verifyErr(EnerCubixHttpErr#) { EnerCubixLicenseQuota.check(rows,false,[extra]) }
   }
 
+  Void testDeleteRequiresCurrentInstalledFile()
+  {
+    keys := keyPair
+    directory := Env.cur.tempDir + ("enerCubix-license-delete-"+Uuid().toStr+"/").toUri
+    try
+    {
+      store := EnerCubixLicenseStore(directory,keyring(keys),true)
+      original := file(keys,"host","HID-example")
+      store.install(original,"HID-example",now)
+      verify(store.active("HID-example",now))
+      administrator := store.status("HID-example",11,true,false,now)
+      verifyEq(administrator["canDelete"],false)
+      verifyEq(administrator["deleteToken"],null)
+      first := store.status("HID-example",11,true,true,now)
+      verifyEq(first["canDelete"],true)
+      replacement := file(keys,"training")
+      store.install(replacement,"HID-example",now)
+      verifyErr(EnerCubixHttpErr#) { store.remove(first["deleteToken"] as Str) }
+      verifyEq(store.path.readAllStr,replacement)
+
+      expired := store.status("HID-example",11,true,true,now+1day)
+      verifyEq(expired["status"],"expired")
+      store.remove(expired["deleteToken"] as Str)
+      verifyFalse(store.path.exists)
+      verifyFalse(store.active("HID-example",now))
+      trial := store.status("HID-example",11,true,true,now)
+      verifyEq(trial["status"],"trial")
+      verifyEq(trial["limit"],10)
+      verifyEq(trial["overLimit"],true)
+      verifyEq(trial["canDelete"],false)
+      verifyErr(EnerCubixHttpErr#) { store.remove(expired["deleteToken"] as Str) }
+
+      store.path.out.writeChars("invalid license").close
+      invalid := store.status("HID-example",11,true,true,now)
+      verifyEq(invalid["status"],"invalid")
+      verifyEq(invalid["canDelete"],true)
+      store.remove(invalid["deleteToken"] as Str)
+      verifyFalse(store.path.exists)
+    }
+    finally { if(directory.exists) directory.delete }
+  }
+
   private static Dict meter(Str id, Str kind:="meter", Str? alias:=null, Str? point:=null)
   {
     tags:=Str:Obj?["id":Ref(id),"mod":DateTime.now,"equip":Marker.val,"enerCubix":Marker.val,"enerCubixKind":kind,

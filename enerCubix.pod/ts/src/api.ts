@@ -35,6 +35,7 @@ export class EnerCubixApi {
  catalog=()=>this.request<Catalog>('catalog');
  licenseStatus=(signal?:AbortSignal)=>this.request<LicenseStatus>('license/status',undefined,signal);
  importLicense=(license:string)=>this.request<LicenseStatus>('license/import',{license});
+ deleteLicense=(token:string)=>this.request<LicenseStatus>('license/delete',{token});
  assets=(signal?:AbortSignal)=>this.request<CockpitAssetCatalog>('cockpit/assets',undefined,signal);
  uploadAsset=(body:{id?:string;mod?:string;manifestMod:string|null;scopeId:string;name:string;base64:string;clearHotspots?:boolean})=>this.request<CockpitAssetCatalog>('cockpit/assets/upload',body);
  saveAsset=(body:{id:string;mod:string;manifestMod:string|null;scopeId:string;name:string;hotspots:CockpitHotspot[]})=>this.request<CockpitAssetCatalog>('cockpit/assets/save',body);

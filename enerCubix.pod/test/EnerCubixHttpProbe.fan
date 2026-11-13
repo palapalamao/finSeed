@@ -17,7 +17,7 @@ const class EnerCubixHttpProbe : WebMod
   {
     guard
     route := path.split('?').first
-    if (!["catalog","points","tree","migration/preview","migration","records","records/delete","tree/copy","tree/move","tree/toggle","tree/manage","report","cleaning/preview","tasks","alarms","alarms/ack","license/status","license/import"].contains(route) || path.size > 4096 || path.contains("#")) throw ArgErr("Acceptance bridge route is not permitted")
+    if (!["catalog","points","tree","migration/preview","migration","records","records/delete","tree/copy","tree/move","tree/toggle","tree/manage","report","cleaning/preview","tasks","alarms","alarms/ack","license/status","license/import","license/delete"].contains(route) || path.size > 4096 || path.contains("#")) throw ArgErr("Acceptance bridge route is not permitted")
     if (payload != null && payload.size > 2097152) throw ArgErr("Acceptance request too large")
     Map? body := payload == null ? null : (Map)JsonInStream(payload.in).readJson
     response := call(path,body)

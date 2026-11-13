@@ -50,6 +50,14 @@ class EnerCubixRepo
     return licenseStatus
   }
 
+  internal [Str:Obj?] licenseDelete(Obj? token)
+  {
+    mustRead
+    if (!cx.user.isSu) throw EnerCubixHttpErr(403,"PERMISSION","licenseDeleteForbidden")
+    EnerCubixLicenseStore.forSys(cx.sys).remove(token as Str)
+    return licenseStatus
+  }
+
   private Void readRevision()
   {
     if (revisionRead) return

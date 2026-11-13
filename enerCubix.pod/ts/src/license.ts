@@ -7,6 +7,8 @@ export interface LicenseStatus {
  limit:number|null;
  overLimit:boolean;
  canImport:boolean;
+ canDelete?:boolean;
+ deleteToken?:string;
  hostId?:string|null;
  licenseType?:LicenseKind|null;
  licenseId?:string|null;

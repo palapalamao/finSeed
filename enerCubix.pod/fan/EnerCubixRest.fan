@@ -20,7 +20,7 @@ const class EnerCubixRest : WebMod
       body := Str:Obj?[:]
       if (req.method == "POST")
       {
-        if (!readPost(route) && route!="license/import") repo.mustWrite
+        if (!readPost(route) && route!="license/import" && route!="license/delete") repo.mustWrite
         if (!req.headers.get("Content-Type","").lower.startsWith("application/json")) throw ArgErr("请求必须使用 application/json")
         raw := readBody(req.in,bodyLimit(route),route == "cockpit/assets/upload")
         parsed := JsonInStream(raw.in).readJson
@@ -48,6 +48,7 @@ const class EnerCubixRest : WebMod
         case "session": data=["locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
         case "license/status": data=repo.licenseStatus
         case "license/import": data=repo.licenseImport(body["license"])
+        case "license/delete": data=repo.licenseDelete(body["token"])
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
@@ -125,6 +126,7 @@ const class EnerCubixRest : WebMod
   internal static Int bodyLimit(Str route)
   {
     if (route=="license/import") return 32768
+    if (route=="license/delete") return 1024
     return route=="cockpit/assets/upload" ? 3145728 : 2097152
   }
 
