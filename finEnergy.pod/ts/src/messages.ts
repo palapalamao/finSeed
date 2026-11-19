@@ -260,7 +260,7 @@ export const englishMessages:Record<string,string> = {
  "参与时段分表合计质量":"Participation-based child total quality",
  "参与关系状态":"Participation relationship status",
  "对照总表":"Compared master",
- "物理总表":"pTotal Meter",
+ "物理总表":"Physical main meter",
  "设备":"Device",
  "虚拟总表":"vTotal Meter",
  "来源待确认":"Source unconfirmed",
