@@ -54,7 +54,7 @@ class FinEnergyNativeAlarms
       repo.save(child,true)
       if (prior != null) AlarmFuncs.alarmsRemove([prior.id])
       source:=repo.stored(member.toStr)
-      if (source.has("inAlarm")) AlarmFuncs.toNormalNew([source.id],"FinEnergy | merged",null,Etc.makeDict(["ackRequired":false]))
+      if (source.has("inAlarm")) AlarmFuncs.toNormalNew([source.id],"FIN Energy | merged",null,Etc.makeDict(["ackRequired":false]))
     }
     if (root["recoveredAt"] != null && root["nativeAlarmId"] != null)
     {
@@ -73,7 +73,7 @@ class FinEnergyNativeAlarms
           tracker.enabledStates["offNormal"]=true
           meta:=metadata(root)
           if (root["recoveryValue"] != null) meta=Etc.dictSet(meta,"sourceValue",Number(FinEnergyConfig.number(root["recoveryValue"]),Unit.fromStr(root["unit"].toStr,false)))
-          tracker.transition("offNormal",false,DateTime.fromIso(root["recoveredAt"].toStr),"FinEnergy | normal",null,null,meta).get(30sec)
+          tracker.transition("offNormal",false,DateTime.fromIso(root["recoveredAt"].toStr),"FIN Energy | normal",null,null,meta).get(30sec)
         }
       }
       root=FinEnergyRepo.decode(repo.stored(root["id"].toStr))
@@ -112,7 +112,7 @@ class FinEnergyNativeAlarms
       name:=event["name"].toStr
       symbol:=event["unit"]?.toStr ?: ""
       // Symbols, original object names and units keep persisted event text neutral.
-      message:="FinEnergy | $name | $value > $limit $symbol"
+      message:="FIN Energy | $name | $value > $limit $symbol"
       alarm=AlarmFuncs.toAlarmNew([source.id],"offNormal",message,DateTime.fromIso(event["ts"].toStr),null,metadata(event)).first
       if (alarm == null) throw Err("FIN 原生报警创建失败")
     }

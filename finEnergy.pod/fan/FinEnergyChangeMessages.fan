@@ -8,7 +8,7 @@ internal class FinEnergyChangeMessages
   static [Str:Obj?] page(Folio db, |Dict->Bool| canRead, Bool admin, Int offset:=0, Int limit:=30)
   {
     if (offset < 0 || limit < 1 || limit > 200) throw ArgErr("offset >= 0; 1 <= limit <= 200")
-    meta:=db.readById(FinEnergyMeterTimeline.key,false)
+    meta:=FinEnergyNamespace.singleton(db,"finEnergyMeterTimeline")
     start:=meta?.get("finEnergyTimelineStart") as DateTime
     epochs:=db.readAllList(Filter.has("finEnergyMeterEpoch"))
     valid:=Dict[,]

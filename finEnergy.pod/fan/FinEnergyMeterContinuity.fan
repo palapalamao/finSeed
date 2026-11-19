@@ -7,6 +7,13 @@ internal class FinEnergyMeterContinuity
 {
   static Ref key(Ref point) { Ref("finEnergy-continuity-"+point.id.toBuf.toDigest("SHA-256").toHex[0..<24]) }
 
+  static Dict? stored(Folio db,Ref point)
+  {
+    matches:=db.readAllList(Filter.has("finEnergyMeterContinuity")).findAll |r| { r["finEnergyMainRef"] == point }
+    if (matches.size > 1) throw ArgErr("Duplicate FIN Energy continuity owner")
+    return matches.first
+  }
+
   static Dict advance(Dict point, Dict? previous, [Str:Obj?][] inputs, DateTime at)
   {
     state:=previous == null ? Str:Obj?[:] : (Str:Obj?)JsonInStream(previous["finEnergyContinuity"].toStr.in).readJson
@@ -42,16 +49,16 @@ internal class FinEnergyMeterContinuity
 
   static Diff? change(Folio db, Dict point, Dict calculated, DateTime at)
   {
-    previous:=db.readById(key(point.id),false)
+    previous:=stored(db,point.id)
     if (FinEnergyRepo.iso(previous?.get("mod")) != calculated["stateMod"]) throw ArgErr("表计累计状态已被其他任务更新，请稍后重试")
     if (previous?.get("finEnergyContinuity") == calculated["state"]) return null
-    tags:=Etc.makeDict(["finEnergyMeterContinuity":Marker.val,"finEnergyMainRef":point.id,"finEnergyContinuity":calculated["state"],"finEnergyContinuityAt":at,"dis":"FinEnergy meter continuity"])
+    tags:=Etc.makeDict(["finEnergyMeterContinuity":Marker.val,"finEnergyMainRef":point.id,"finEnergyContinuity":calculated["state"],"finEnergyContinuityAt":at,"dis":"FIN Energy meter continuity"])
     return previous == null ? Diff.makeAdd(tags,key(point.id)) : Diff(previous,tags)
   }
 
   static Diff? release(Folio db, Dict point, DateTime at)
   {
-    previous:=db.readById(key(point.id),false)
+    previous:=stored(db,point.id)
     if (previous == null) return null
     state:=(Str:Obj?)JsonInStream(previous["finEnergyContinuity"].toStr.in).readJson
     state["inputs"]=Str:Obj?[:]

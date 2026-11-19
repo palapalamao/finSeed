@@ -109,11 +109,11 @@ class FinEnergyJobs
     existing:=db.readAllList(Filter.has("job")).find |r| { r["jobExpr"] == "finEnergyScheduled()" } ?: db.readById(key,false)
     if (existing != null)
     {
-      if (!existing.has("job") || existing["jobExpr"] != "finEnergyScheduled()") throw ArgErr("FinEnergy 调度记录标识已被其他记录占用")
+      if (!existing.has("job") || existing["jobExpr"] != "finEnergyScheduled()") throw ArgErr("FIN Energy 调度记录标识已被其他记录占用")
       if (existing["jobSchedule"] == "hourly") db.commit(Diff(existing,Etc.makeDict(["jobSchedule":"every 1hr"])))
       return
     }
-    try { db.commit(Diff.makeAdd(Etc.makeDict(["dis":"FinEnergy 每小时计算与报警","job":Marker.val,"jobExpr":"finEnergyScheduled()","jobSchedule":"every 1hr"]),key)) }
+    try { db.commit(Diff.makeAdd(Etc.makeDict(["dis":"FIN Energy 每小时计算与报警","job":Marker.val,"jobExpr":"finEnergyScheduled()","jobSchedule":"every 1hr"]),key)) }
     catch (Err e)
     {
       if (e.typeof.name != "DuplicateRecErr") throw e
@@ -219,7 +219,7 @@ internal class FinEnergyTaskLock
     if (previous != null && !previous.has("finEnergyTaskLock")) throw ArgErr("任务锁标识已被其他记录占用")
     until:=previous?.get("finEnergyLeaseUntil") as DateTime
     if (previous?.has("finEnergyOwner") == true && (until == null || until > now)) throw FinEnergyHttpErr(409,"BUSY","已有计算任务正在执行")
-    tags:=[Str:Obj?]["dis":"FinEnergy 共享计算锁","finEnergyTaskLock":Marker.val,"finEnergyOwner":owner,"finEnergyLeaseUntil":now+lease,"finEnergyLockAt":now]
+    tags:=[Str:Obj?]["dis":"FIN Energy 共享计算锁","finEnergyTaskLock":Marker.val,"finEnergyOwner":owner,"finEnergyLeaseUntil":now+lease,"finEnergyLockAt":now]
     if (previous != null)
     {
       if (previous["finEnergyTaskJob"] is Ref) tags["finEnergyPreviousJob"]=previous["finEnergyTaskJob"]

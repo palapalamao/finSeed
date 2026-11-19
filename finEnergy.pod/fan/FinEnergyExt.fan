@@ -2,9 +2,11 @@ using web
 using hx
 using skyarcd
 using concurrent
+using fin
 
 @ExtMeta { name="finEnergy"; depends=["haystack","finstack"] }
-const class FinEnergyExt : Ext, Weblet
+@FinExtMeta { licFeature="fin energy" }
+const class FinEnergyExt : FinExt, Weblet
 {
   const FinEnergyRest rest := FinEnergyRest()
   private const AtomicInt lastRollup := AtomicInt(-1)
@@ -13,10 +15,11 @@ const class FinEnergyExt : Ext, Weblet
 
   override Void onHouseKeeping()
   {
-    if (!isRunning) return
+    if (!isRunning || !FinEnergyNativeLicense.allowedExt(this)) return
+    if (FinEnergyNamespace.needsMigration(rt.db)) return
     now:=Duration.nowTicks
     if (!FinEnergyMeterRollup.isDue(lastRollup.val,now,FinEnergyMeterRollup.configuredInterval(rt.db))) return
-    if (FinEnergyLicenseQuota.allowed(proj.sys,rt.db)) FinEnergyMeterRollup.update(rt.db)
+    FinEnergyMeterRollup.update(rt.db)
     lastRollup.val=now
   }
 

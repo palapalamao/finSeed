@@ -9,7 +9,7 @@ internal class FinEnergyMeterTimeline
 
   static Void initialize(Folio db, DateTime at:=DateTime.now)
   {
-    if (db.readById(key,false) != null) return
+    if (FinEnergyNamespace.singleton(db,"finEnergyMeterTimeline") != null) return
     diffs:=capture(db,Diff[,],at)
     if (!diffs.isEmpty) db.commitAll(diffs)
   }
@@ -17,7 +17,7 @@ internal class FinEnergyMeterTimeline
   ** Append these to the same optimistic transaction as the engineering change.
   static Diff[] capture(Folio db, Diff[] changes, DateTime at:=DateTime.now, Str? actor:=null)
   {
-    prior:=db.readById(key,false)
+    prior:=FinEnergyNamespace.singleton(db,"finEnergyMeterTimeline")
     before:=Str:Dict[:]
     db.readAllList(Filter.has("finEnergyKind")).each |r| { if (tracked(r)) before[r.id.id]=r }
     after:=before.dup
@@ -37,7 +37,7 @@ internal class FinEnergyMeterTimeline
     sequence:=((prior?.get("finEnergyTimelineRevision") as Number)?.toInt ?: 0)+1
     if (prior == null)
     {
-      diffs.add(Diff.makeAdd(Etc.makeDict(["finEnergyMeterTimeline":Marker.val,"finEnergyTimelineStart":at,"finEnergyTimelineRevision":Number(sequence),"dis":"FinEnergy meter history configuration"]),key))
+      diffs.add(Diff.makeAdd(Etc.makeDict(["finEnergyMeterTimeline":Marker.val,"finEnergyTimelineStart":at,"finEnergyTimelineRevision":Number(sequence),"dis":"FIN Energy meter history configuration"]),key))
       // Snapshot the committed post-change graph, starting only at this cutover.
       after.each |record,id| { diffs.add(epoch(record.id,configuration(db,record),at,sequence,null,true)) }
       return diffs
@@ -56,7 +56,7 @@ internal class FinEnergyMeterTimeline
   static [Str:Obj?][] segments(Folio db, [Str:Obj?][] currentRecords, DateTime from, DateTime to)
   {
     if (to <= from) return [Str:Obj?][,]
-    meta:=db.readById(key,false)
+    meta:=FinEnergyNamespace.singleton(db,"finEnergyMeterTimeline")
     start:=meta?.get("finEnergyTimelineStart") as DateTime
     epochs:=db.readAllList(Filter.has("finEnergyMeterEpoch")).dup.sort |a,b|
     {
@@ -146,7 +146,7 @@ internal class FinEnergyMeterTimeline
   private static Str json(Obj? value) { JsonOutStream.writeJsonToStr(value) }
   private static Diff epoch(Ref id, [Str:Obj?]? record, DateTime at, Int sequence, Str? actor:=null, Bool initial:=false)
   {
-    tags:=Str:Obj?["finEnergyMeterEpoch":Marker.val,"finEnergyRecordRef":id,"finEnergyEffectiveFrom":at,"finEnergyEpochSequence":Number(sequence),"dis":"FinEnergy meter configuration version"]
+    tags:=Str:Obj?["finEnergyMeterEpoch":Marker.val,"finEnergyRecordRef":id,"finEnergyEffectiveFrom":at,"finEnergyEpochSequence":Number(sequence),"dis":"FIN Energy meter configuration version"]
     if (actor != null && !actor.trim.isEmpty) tags["finEnergyEpochActor"]=actor
     if (initial) tags["finEnergyEpochInitial"]=Marker.val
     if (record == null) tags["finEnergyEpochRemoved"]=Marker.val

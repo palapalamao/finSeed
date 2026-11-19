@@ -208,7 +208,7 @@ internal class FinEnergyMeterRollup
       inputs.add(["id":child.id.id,"signature":(child["finEnergyPointRef"] as Ref)?.id,"value":n.toFloat*factor,"quality":"ok","rollover":rollover == null ? null : rollover.toFloat*factor])
     }
     if (continuityDb != null)
-      return FinEnergyMeterContinuity.advance(point,continuityDb.readById(FinEnergyMeterContinuity.key(point.id),false),inputs,continuityAt)
+      return FinEnergyMeterContinuity.advance(point,FinEnergyMeterContinuity.stored(continuityDb,point.id),inputs,continuityAt)
     return FinEnergyMath.num(sum) == null ? result("missing") : result("ok",Number(sum,unit))
   }
 

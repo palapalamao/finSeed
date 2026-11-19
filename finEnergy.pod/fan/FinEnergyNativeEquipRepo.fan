@@ -49,7 +49,6 @@ class FinEnergyNativeEquipRepo
       kind:=repo.stored(legacy.first["id"].toStr)["finEnergyKind"]
       pending=input.dup.add(["id":copyTarget,"kind":kind])
     }
-    FinEnergyLicenseQuota.checkMigration(cx.sys,cx.db,pending,plan)
     migrate(["action":"apply","revision":plan["revision"],"sourceRevision":plan["sourceRevision"]])
     aliases:=mapping
     return input.map |r->[Str:Obj?]|
@@ -286,7 +285,7 @@ class FinEnergyNativeEquipRepo
     {
       original:=readZinc(s["before"].toStr)
       current:=cx.db.readById(original.id,false)
-      if (current == null || Etc.dictToMap(current) != Etc.dictToMap(original)) throw FinEnergyHttpErr(409,"CONFLICT","旧档案已变化，停止清理")
+      if (current == null || !sameArchive(current,original)) throw FinEnergyHttpErr(409,"CONFLICT","旧档案已变化，停止清理")
       diffs.add(Diff(current,null,Diff.remove))
     }
     data["status"]="finalized"; diffs.add(Diff(job,repo.encode(data,job)))
@@ -331,7 +330,7 @@ class FinEnergyNativeEquipRepo
           tags:=Etc.dictToMap(original); tags.remove("id"); tags.remove("mod")
           diffs.add(Diff.makeAdd(Etc.makeDict(tags),FinEnergyRepo.addId(s["id"].toStr,cx.proj.name)))
         }
-        else if (Etc.dictToMap(current) != Etc.dictToMap(original)) throw FinEnergyHttpErr(409,"CONFLICT","旧档案已有后续修改，停止回滚")
+        else if (!sameArchive(current,original)) throw FinEnergyHttpErr(409,"CONFLICT","旧档案已有后续修改，停止回滚")
       }
       else
       {
@@ -358,5 +357,13 @@ class FinEnergyNativeEquipRepo
   private static Str:Obj? ownedAfter(Dict before, Dict patch)
   { out:=owned(before); patch.each |v,k| { if (v is Remove) out.remove(k); else out[k]=v }; return out }
   private static Str zinc(Dict rec) { ZincWriter.gridToStr(Etc.makeDictsGrid(null,[rec])) }
+  internal static Bool sameArchive(Dict current,Dict original)
+  {
+    // A namespace-only metadata commit updates mod without changing business
+    // content. Compare the entire archived record apart from that Folio clock.
+    a:=Etc.dictToMap(current); b:=Etc.dictToMap(original)
+    a.remove("mod"); b.remove("mod")
+    return a == b
+  }
   private static Dict readZinc(Str text) { ZincReader(text.in).readGrid.first ?: Etc.emptyDict }
 }

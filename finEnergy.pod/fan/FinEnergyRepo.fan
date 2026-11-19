@@ -24,44 +24,28 @@ class FinEnergyRepo
   {
     mustRead
     if (!cx.user.isAdmin) throw FinEnergyHttpErr(403, "PERMISSION", "当前 FIN 用户没有配置写入权限")
+    requireLicensedCalculation
   }
 
   internal Bool licenseAllowsCalculation()
-  { FinEnergyLicenseQuota.allowed(cx.sys,cx.db) }
+  { FinEnergyNativeLicense.allowed(cx) && !FinEnergyNamespace.needsMigration(cx.db) }
 
   internal Void requireLicensedCalculation()
   {
-    if (!licenseAllowsCalculation) throw FinEnergyHttpErr(409,"LICENSE_REQUIRED","licenseProjectOverLimit")
+    if (FinEnergyNamespace.needsMigration(cx.db)) throw FinEnergyHttpErr(409,"NAMESPACE_MIGRATION_REQUIRED","namespaceMigrationRequired")
+    if (!licenseAllowsCalculation) throw FinEnergyHttpErr(409,"LICENSE_REQUIRED","nativeLicenseRequired")
   }
 
   internal [Str:Obj?] licenseStatus()
   {
     mustRead
-    return FinEnergyLicenseStore.forSys(cx.sys).status(FinEnergyLicenseStore.hostId(cx.sys),
-      FinEnergyLicenseQuota.used(cx.db),cx.user.isAdmin || cx.user.isSu,cx.user.isSu)
-  }
-
-  internal [Str:Obj?] licenseImport(Obj? raw)
-  {
-    mustRead
-    if (!cx.user.isSu) throw FinEnergyHttpErr(403,"PERMISSION","licenseImportForbidden")
-    FinEnergyLicenseStore.forSys(cx.sys).install(raw as Str ?: throw FinEnergyLicenseGrant.invalid,
-      FinEnergyLicenseStore.hostId(cx.sys))
-    return licenseStatus
-  }
-
-  internal [Str:Obj?] licenseDelete(Obj? token)
-  {
-    mustRead
-    if (!cx.user.isSu) throw FinEnergyHttpErr(403,"PERMISSION","licenseDeleteForbidden")
-    FinEnergyLicenseStore.forSys(cx.sys).remove(token as Str)
-    return licenseStatus
+    return FinEnergyNativeLicense.status(cx)
   }
 
   private Void readRevision()
   {
     if (revisionRead) return
-    revision = cx.db.read(Filter.has("finEnergyRevision"),false)
+    revision = FinEnergyNamespace.singleton(cx.db,"finEnergyRevision")
     revisionRead = true
   }
 
@@ -71,6 +55,7 @@ class FinEnergyRepo
   [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false)
   {
     mustRead
+    requireLicensedCalculation
     readRevision
     rows:=cx.db.readAllList(Filter.has("finEnergyKind").and(Filter.has("finEnergy").or(Filter.has("equip"))))
     cockpitPreparation?.hold(1);out:=[Str:Obj?][,]
@@ -519,9 +504,9 @@ class FinEnergyRepo
   {FinEnergyCockpitConfigStore(cx.db,cx.proj.name,cx.proj.id,cx.user.username,cx.user.isAdmin,|Dict r->Bool| {cx.canRead(r)},|Dict r->Bool| {cx.canWrite(r)})}
   private Str:Obj? ownedSnapshot()
   {
-    before:=cx.db.readById(Ref("finEnergy-config-revision"),false)
+    before:=FinEnergyNamespace.singleton(cx.db,"finEnergyRevision")
     store:=ownedStore;b:=store.capture("budget",cockpitPreparation);r:=store.capture("rule",cockpitPreparation)
-    after:=cx.db.readById(Ref("finEnergy-config-revision"),false)
+    after:=FinEnergyNamespace.singleton(cx.db,"finEnergyRevision")
     if(before?.get("mod") != after?.get("mod")) throw FinEnergyHttpErr(409,"CONFLICT","cockpitConfigConflict")
     return ["projectRef":cx.proj.id.id,"budgets":b["records"],"budgetsComplete":b["complete"],"budgetAttribution":b["attribution"],"rules":r["records"],"rulesComplete":r["complete"],"ruleAttribution":r["attribution"]]
   }
@@ -852,7 +837,6 @@ class FinEnergyRepo
     if (!event)
     {
       readRevision
-      FinEnergyLicenseQuota.checkWrite(cx.sys,cx.db,changes)
       FinEnergyCleaningRepo(this).validateSaves(changes)
       changes.addAll(FinEnergyMeterTimeline.capture(cx.db,changes,DateTime.now,cx.user.username))
       // A shared optimistic revision serializes uniqueness/cycle checks across requests.

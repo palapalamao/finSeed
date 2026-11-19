@@ -31,140 +31,146 @@ const class FinEnergyLib
   }
 
   @Axon { admin=true }
-  static Dict finEnergyNativeSpaceAcceptance() { jsonResult(FinEnergyNativeSpaceAcceptance(Context.cur).run) }
+  static Dict finEnergyNativeSpaceAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyNativeSpaceAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyAreaAcceptance() { jsonResult(FinEnergyAreaAcceptance(Context.cur).run) }
+  static Dict finEnergyAreaAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyAreaAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyNativeAlarmAcceptance() { jsonResult(FinEnergyNativeAlarmAcceptance(Context.cur).run) }
+  static Dict finEnergyNativeAlarmAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyNativeAlarmAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
   static Dict finEnergyRenameNamespace(Str from, Str to, Bool apply := false, Str? revision := null)
   { FinEnergyNamespace.run(from,to,apply,revision) }
 
+  @Axon { admin=true }
+  static Dict finEnergyResumeNamespace(Str backup) { FinEnergyNamespace.resume(backup) }
+
+  @Axon { admin=true }
+  static Dict finEnergyRollbackNamespace(Str backup) { FinEnergyNamespace.rollback(backup) }
+
   ** Native Axon administration uses the same validation and permissions as the UI.
   @Axon
-  static Dict finEnergyCatalog() { jsonResult(FinEnergyRepo(Context.cur).catalog) }
+  static Dict finEnergyCatalog() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyRepo(Context.cur).catalog) }
 
   ** Bounded read-only native navigation metadata for deployment verification.
   @Axon
-  static Dict finEnergyNativeSpaceInfo() { jsonResult(FinEnergyRepo(Context.cur).nativeSpaceInfo) }
+  static Dict finEnergyNativeSpaceInfo() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyRepo(Context.cur).nativeSpaceInfo) }
 
   @Axon { admin=true }
-  static Dict finEnergyNativeEquipAcceptance() { jsonResult(FinEnergyNativeEquipAcceptance(Context.cur).run) }
+  static Dict finEnergyNativeEquipAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyNativeEquipAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyDirectEquipAcceptance() { jsonResult(FinEnergyDirectEquipAcceptance(Context.cur).run) }
+  static Dict finEnergyDirectEquipAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyDirectEquipAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyOwnedHistoryAcceptance() { jsonResult(FinEnergyOwnedHistoryAcceptance(Context.cur).run) }
+  static Dict finEnergyOwnedHistoryAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyOwnedHistoryAcceptance(Context.cur).run) }
 
   @Axon { admin = true }
-  static Dict finEnergyLeakHistoryAcceptance() { jsonResult(FinEnergyOwnedHistoryAcceptance(Context.cur).run(true)) }
+  static Dict finEnergyLeakHistoryAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyOwnedHistoryAcceptance(Context.cur).run(true)) }
 
   @Axon { admin = true }
   static Dict finEnergyLegacyMembership(Str json)
-  { jsonResult(FinEnergyLegacyMembershipRepo(FinEnergyRepo(Context.cur)).run((Str:Obj?)JsonInStream(json.in).readJson)) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyLegacyMembershipRepo(FinEnergyRepo(Context.cur)).run((Str:Obj?)JsonInStream(json.in).readJson)) }
 
   @Axon { admin=true }
-  static Dict finEnergyLegacyMembershipAcceptance() { jsonResult(FinEnergyLegacyMembershipAcceptance(Context.cur).run) }
+  static Dict finEnergyLegacyMembershipAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyLegacyMembershipAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyFlowHistoryAcceptance() { jsonResult(FinEnergyFlowHistoryAcceptance(Context.cur).run) }
+  static Dict finEnergyFlowHistoryAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyFlowHistoryAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyQueryReplayAcceptance(Str json) { jsonResult(FinEnergyQueryReplayAcceptance(Context.cur).run(json)) }
+  static Dict finEnergyQueryReplayAcceptance(Str json) { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyQueryReplayAcceptance(Context.cur).run(json)) }
 
   @Axon { admin=true }
-  static Dict finEnergyNativeMeterCreationAcceptance() { jsonResult(FinEnergyDirectEquipAcceptance(Context.cur).runCreation) }
+  static Dict finEnergyNativeMeterCreationAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyDirectEquipAcceptance(Context.cur).runCreation) }
 
   @Axon { admin=true }
-  static Dict finEnergyNativeEquipStageAcceptance() { jsonResult(FinEnergyNativeEquipAcceptance(Context.cur).run(true)) }
+  static Dict finEnergyNativeEquipStageAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyNativeEquipAcceptance(Context.cur).run(true)) }
 
   @Axon { admin=true }
   static Dict finEnergySaveConfig(Str json)
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     rec := (Str:Obj?)JsonInStream(json.in).readJson
     return jsonResult(FinEnergyRepo(Context.cur).save(rec))
   }
 
   @Axon
   static Dict finEnergyReport(Str json)
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     request := (Str:Obj?)JsonInStream(json.in).readJson
     return jsonResult(FinEnergyRepo(Context.cur).report(request))
   }
 
   @Axon
   static Dict finEnergyCleaningPreview(Str json)
-  { jsonResult(FinEnergyCleaningRepo(FinEnergyRepo(Context.cur)).preview((Str:Obj?)JsonInStream(json.in).readJson)) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyCleaningRepo(FinEnergyRepo(Context.cur)).preview((Str:Obj?)JsonInStream(json.in).readJson)) }
 
   @Axon { admin=true }
   static Dict finEnergyCleaningAcceptance()
-  { jsonResult(FinEnergyCleaningAcceptance(Context.cur).run) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyCleaningAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
   static Dict finEnergyCleaningVirtualAcceptance()
-  { jsonResult(FinEnergyCleaningVirtualAcceptance(Context.cur).run) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyCleaningVirtualAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
   static Dict finEnergyCleaningBoundaryAcceptance()
-  { jsonResult(FinEnergyCleaningBoundaryAcceptance(Context.cur).run) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyCleaningBoundaryAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
   static Dict finEnergyCrossModuleAcceptance(Str? runId := null)
-  { jsonResult(FinEnergyCrossModuleAcceptance(Context.cur).run(runId)) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyCrossModuleAcceptance(Context.cur).run(runId)) }
 
   @Axon { admin=true }
   static Dict finEnergyEpochIdentityAcceptance(Str action, Str runId)
-  { jsonResult(FinEnergyEpochIdentityAcceptance(Context.cur).run(action,runId)) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyEpochIdentityAcceptance(Context.cur).run(action,runId)) }
 
   private static Dict jsonResult(Obj data) { Etc.makeDict(["result":JsonOutStream.writeJsonToStr(data)]) }
 
   @Axon { admin=true }
-  static Dict finEnergyManage(Str json) { jsonResult(FinEnergyRepo(Context.cur).manage((Str:Obj?)JsonInStream(json.in).readJson)) }
+  static Dict finEnergyManage(Str json) { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyRepo(Context.cur).manage((Str:Obj?)JsonInStream(json.in).readJson)) }
 
   @Axon { admin=true }
-  static Dict finEnergyMigrate(Str json) { jsonResult(FinEnergyRepo(Context.cur).migration((Str:Obj?)JsonInStream(json.in).readJson)) }
+  static Dict finEnergyMigrate(Str json) { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyRepo(Context.cur).migration((Str:Obj?)JsonInStream(json.in).readJson)) }
 
   @Axon { admin=true }
-  static Dict finEnergyEngineeringAcceptance() { jsonResult(FinEnergyEngineeringAcceptance(Context.cur).run) }
+  static Dict finEnergyEngineeringAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyEngineeringAcceptance(Context.cur).run) }
 
   @Axon { admin=true }
-  static Dict finEnergyThreeTreeAcceptance() { jsonResult(FinEnergyThreeTreeAcceptance(Context.cur).run) }
+  static Dict finEnergyThreeTreeAcceptance() { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyThreeTreeAcceptance(Context.cur).run) }
 
   ** Reproducible integration checks restricted to the independent acceptance project.
   @Axon { admin=true }
   static Dict finEnergyAcceptance()
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     return Etc.makeDict(["result":JsonOutStream.writeJsonToStr(FinEnergyAcceptance(Context.cur).run)])
   }
 
   ** Exercise the real HTTP routes from the audited native FIN request context.
   @Axon { admin=true }
   static Dict finEnergyTransportAcceptance()
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     return Etc.makeDict(["result":JsonOutStream.writeJsonToStr(FinEnergyHttpProbe().run)])
   }
 
   @Axon
   static Dict finEnergyPermissionAcceptance()
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     return Etc.makeDict(["result":JsonOutStream.writeJsonToStr(FinEnergyHttpProbe().permissions)])
   }
 
   ** Test-only browser bridge; native FIN identity and route permissions still apply.
   @Axon
   static Dict finEnergyAcceptanceRequest(Str path, Str? payload := null)
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     return Etc.makeDict(["result":JsonOutStream.writeJsonToStr(FinEnergyHttpProbe().proxy(path,payload))])
   }
 
   ** Native scheduled-job entry; configuration determines calculation/alarm enablement.
   @Axon { admin=true }
   static Dict finEnergyScheduled()
-  {
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation;
     result := FinEnergyJobs(FinEnergyRepo(Context.cur)).scheduled
     return Etc.makeDict(["result":JsonOutStream.writeJsonToStr(result)])
   }
@@ -172,5 +178,5 @@ const class FinEnergyLib
   ** Bounded administration path shared with the scan button and scheduled job.
   @Axon { admin=true }
   static Dict finEnergyScanAlarms(Str from, Str to)
-  { jsonResult(FinEnergyJobs(FinEnergyRepo(Context.cur)).run(["action":"scanAlarms","from":from,"to":to])) }
+  { FinEnergyRepo(Context.cur).requireLicensedCalculation; return jsonResult(FinEnergyJobs(FinEnergyRepo(Context.cur)).run(["action":"scanAlarms","from":from,"to":to])) }
 }

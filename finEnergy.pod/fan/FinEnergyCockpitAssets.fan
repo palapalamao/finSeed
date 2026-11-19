@@ -28,7 +28,7 @@ class FinEnergyCockpitAssets
     this.db=db; this.directory=(projectDir+Uri.fromStr("finEnergy-private/cockpit-assets/")).normalize
     this.projectPath=Interop.toJava(projectDir).getCanonicalPath+JavaFile.separator
     this.projectRef=projectRef; this.project=project; this.actor=actor; this.admin=admin; this.canRead=canRead; this.canWrite=canWrite
-    this.manifestId=Ref("finEnergy-cockpit-assets").toAbs("p:"+project+":r:")
+    this.manifestId=FinEnergyNamespace.singleton(db,"finEnergyCockpitAssetManifest")?.id ?: Ref("finEnergy-cockpit-assets").toAbs("p:"+project+":r:")
   }
   Str:Obj? list()
   {

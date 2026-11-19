@@ -40,7 +40,7 @@ internal class FinEnergyCockpitConfigStore
   {
     captureOwner?.hold(8)
     marker(type)
-    manifest:=db.readById(manifestId,false)
+    manifest:=FinEnergyNamespace.singleton(db,"finEnergyCockpitManifest")
     if(manifest == null) return ["records":[Str:Obj?][,],"complete":true,"canWrite":manage]
     requireManifest(manifest,false)
     complete:=true;out:=[Str:Obj?][,];attributions:=Str:Obj?[:]
@@ -78,7 +78,7 @@ internal class FinEnergyCockpitConfigStore
   Str:Obj? remove(Str type,Str id,Obj? mod)
   {
     requireWrite
-    manifest:=db.readById(manifestId,false) ?: throw FinEnergyHttpErr(404,"NOT_FOUND","cockpitConfigNotFound")
+    manifest:=FinEnergyNamespace.singleton(db,"finEnergyCockpitManifest") ?: throw FinEnergyHttpErr(404,"NOT_FOUND","cockpitConfigNotFound")
     requireManifest(manifest,true);before:=record(ref(id));requireOwned(before,type,manifest);authorize(before,true);FinEnergyRepo.checkMod(before,mod)
     revision:=revisionBefore
     changes:=[Diff(before,null,Diff.remove)]
@@ -95,7 +95,7 @@ internal class FinEnergyCockpitConfigStore
     ["id","mod","scopeRef","categoryRef","calendarRef"].each |key| {if(input[key] != null && input[key] isnot Str) throw ArgErr("cockpitConfigFields")}
     marker(type)
     // Both optimistic guards are captured before reading candidate configuration.
-    revision:=revisionBefore;manifest:=db.readById(manifestId,false)
+    revision:=revisionBefore;manifest:=FinEnergyNamespace.singleton(db,"finEnergyCockpitManifest")
     if(manifest != null) requireManifest(manifest,true)
     previous:=input["id"] == null ? null : record(ref(input["id"].toStr))
     if(previous != null) {requireOwned(previous,type,manifest);authorize(previous,true);FinEnergyRepo.checkMod(previous,input["mod"])}
@@ -160,7 +160,7 @@ internal class FinEnergyCockpitConfigStore
   }
   Str:Obj? history(Str id)
   {
-    target:=ref(id);manifest:=db.readById(manifestId,false)
+    target:=ref(id);manifest:=FinEnergyNamespace.singleton(db,"finEnergyCockpitManifest")
     if(manifest == null || !owned(manifest).contains(target)) throw FinEnergyHttpErr(404,"NOT_FOUND","cockpitConfigNotFound")
     requireManifest(manifest,false)
     current:=db.readById(target,false)
@@ -172,7 +172,7 @@ internal class FinEnergyCockpitConfigStore
   Bool referencesId(Str id)
   {
     target:=ref(id)
-    manifest:=db.readById(manifestId,false);if(manifest == null) return false
+    manifest:=FinEnergyNamespace.singleton(db,"finEnergyCockpitManifest");if(manifest == null) return false
     requireManifest(manifest,false)
     return owned(manifest).any |key|
     {
@@ -199,7 +199,7 @@ internal class FinEnergyCockpitConfigStore
   }
   private Dict? revisionBefore()
   {
-    r:=db.readById(revisionId,false)
+    r:=FinEnergyNamespace.singleton(db,"finEnergyRevision")
     if(r != null) {authorize(r,true);if(!r.has("finEnergyRevision") || prohibited.any |key| {r.has(key)}) throw FinEnergyHttpErr(409,"CONFLICT","cockpitConfigManifest")}
     return r
   }

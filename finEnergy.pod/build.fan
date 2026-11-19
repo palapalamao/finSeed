@@ -18,7 +18,7 @@ class Build : BuildFinPod
       "sys 1.0+", "concurrent 1.0+", "web 1.0+", "util 1.0+",
       "haystack 3.1.5.1+", "axon 3.1.5+", "folio 3.1.5+", "folio3 3.1.5+",
       "hx 3.1.5+", "skyarc 3.1.5+", "skyarcd 3.1.5+", "legacy 3.1.5+",
-      "hisExt 3.1.5+", "finStackCoreExt 5.3.0.2761+", "alarmExt 5.3.0.2761+",
+      "hisExt 3.1.5+", "finStackCoreExt 5.3.0.2761+", "fin 5.3.0.2761+", "alarmExt 5.3.0.2761+",
     ]
     // BuildFinPod has no testDirs. Source and resource directories are not recursive.
     srcDirs = [`fan/`, `fan/engine/`, `test/`]
