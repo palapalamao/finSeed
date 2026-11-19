@@ -16,6 +16,7 @@ const class FinEnergyExt : FinExt, Weblet
   override Void onHouseKeeping()
   {
     if (!isRunning || !FinEnergyNativeLicense.allowedExt(this)) return
+    if (FinEnergyNamespace.recoverMaintenance(rt.db,proj.name,proj.ioDir)) return
     if (FinEnergyNamespace.needsMigration(rt.db)) return
     now:=Duration.nowTicks
     if (!FinEnergyMeterRollup.isDue(lastRollup.val,now,FinEnergyMeterRollup.configuredInterval(rt.db))) return

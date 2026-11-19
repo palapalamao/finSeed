@@ -4,6 +4,8 @@ using skyarcd
 using hx
 using alarmExt
 using util
+using concurrent
+using [java] java.util.concurrent.locks::ReentrantLock
 using [java] fanx.interop::Interop
 using [java] java.io::File as JavaFile
 using [java] java.nio.file::Files
@@ -13,6 +15,8 @@ using [java] java.nio.file::StandardCopyOption
 ** Explicit administrator-only namespace upgrade. Record IDs and history stay intact.
 class FinEnergyNamespace
 {
+  private static const Unsafe maintenanceLock := Unsafe(ReentrantLock())
+
   internal static Dict? singleton(Folio db,Str marker)
   {
     matches:=db.readAllList(Filter.has(marker))
@@ -104,9 +108,18 @@ class FinEnergyNamespace
   ** This is a maintenance operation: stop business jobs before apply/rollback.
   static Dict run(Str from, Str to, Bool apply, Str? expected)
   {
+    gate:=(ReentrantLock)maintenanceLock.val
+    gate.lock
+    try {return runImpl(from,to,apply,expected)}
+    finally {gate.unlock}
+  }
+
+  private static Dict runImpl(Str from,Str to,Bool apply,Str? expected)
+  {
     cx:=Context.cur
     administrator
     migrationDirection(from,to)
+    if (apply) FinEnergyNamespaceFence.requireAvailable(cx.db)
     records:=cx.db.readAllList(Filter.has("id")).dup.sort |a,b->Int| { a.id.toStr <=> b.id.toStr }
     originals:=Dict[,]; updated:=Dict[,]; diffs:=Diff[,]
     records.each |r|
@@ -147,8 +160,11 @@ class FinEnergyNamespace
   ** Delta merges retain native updates and accept already-applied resources.
   static Dict resume(Str backup)
   {
+    gate:=(ReentrantLock)maintenanceLock.val
+    gate.lock
     try {return resumeImpl(backup)}
     catch (Err e) {throw Err("Namespace resume interrupted; backup="+backup,e)}
+    finally {gate.unlock}
   }
 
   private static Dict resumeImpl(Str backup)
@@ -161,6 +177,13 @@ class FinEnergyNamespace
     from:=report["from"].toStr; to:=report["to"].toStr
     migrationDirection(from,to)
     verifyBackup(folder,report)
+    verifyJournalIdentity(folder,cx.proj.name,report)
+    if (report["phase"] == "complete")
+    {
+      finishMaintenance(cx.db,cx.proj.name,cx.proj.ioDir,folder.name)
+      return Etc.makeDict(report)
+    }
+    FinEnergyNamespaceFence.acquire(cx.db,cx.proj.name,report)
     before:=readGrid(folder+`records-before.zinc`); after:=readGrid(folder+`records-after.zinc`)
     alarmBefore:=readGrid(folder+`alarms-before.zinc`); alarmAfter:=readGrid(folder+`alarms-after.zinc`)
     files:=(List)JsonInStream((folder+`files.json`).readAllStr.in).readJson
@@ -202,6 +225,7 @@ class FinEnergyNamespace
     alarmUpdates=resumeAlarms(alarmBefore,alarmAfter)
     writeAlarms(alarmUpdates)
     report["phase"]="complete";report["applied"]=true;journal(folder,report)
+    finishMaintenance(cx.db,cx.proj.name,cx.proj.ioDir,folder.name)
     return Etc.makeDict(report)
   }
 
@@ -222,8 +246,11 @@ class FinEnergyNamespace
   ** Safe to repeat after interruption; the source files were never moved/deleted.
   static Dict rollback(Str backup)
   {
+    gate:=(ReentrantLock)maintenanceLock.val
+    gate.lock
     try {return rollbackImpl(backup)}
     catch (Err e) {throw Err("Namespace rollback interrupted; backup="+backup,e)}
+    finally {gate.unlock}
   }
 
   private static Dict rollbackImpl(Str backup)
@@ -236,6 +263,18 @@ class FinEnergyNamespace
     from:=report["from"].toStr; to:=report["to"].toStr
     migrationDirection(from,to)
     verifyBackup(folder,report)
+    verifyJournalIdentity(folder,cx.proj.name,report)
+    if (report["phase"] == "rolledBack")
+    {
+      finishMaintenance(cx.db,cx.proj.name,cx.proj.ioDir,folder.name)
+      return Etc.makeDict(report)
+    }
+    priorFence:=FinEnergyNamespaceFence.current(cx.db)
+    if (priorFence != null) FinEnergyNamespaceFence.verifyOwner(priorFence,cx.proj.name,report)
+    // Change the terminal journal before acquiring its fence, so restart
+    // reconciliation cannot clear maintenance while rollback is planning.
+    report["phase"]="rollbackPlanning";journal(folder,report)
+    FinEnergyNamespaceFence.acquire(cx.db,cx.proj.name,report)
     before:=readGrid(folder+`records-before.zinc`); after:=readGrid(folder+`records-after.zinc`)
     alarmBefore:=readGrid(folder+`alarms-before.zinc`); alarmAfter:=readGrid(folder+`alarms-after.zinc`)
     files:=(List)JsonInStream((folder+`files.json`).readAllStr.in).readJson
@@ -275,6 +314,7 @@ class FinEnergyNamespace
       if (item["created"] == true && target.exists) target.delete
     }
     report["phase"]="rolledBack"; report["applied"]=false; journal(folder,report)
+    finishMaintenance(cx.db,cx.proj.name,cx.proj.ioDir,folder.name)
     return Etc.makeDict(report)
   }
 
@@ -364,6 +404,7 @@ class FinEnergyNamespace
   private static Bool same(Dict a,Dict b) { restoreChanges(a,b).isEmpty }
   internal static Bool needsMigration(Folio db)
   {
+    if (FinEnergyNamespaceFence.blocked(db)) return true
     names:=Str[,]
     ["enerCubix","enercubix"].each |prefix|
     {
@@ -373,14 +414,57 @@ class FinEnergyNamespace
     names[1..-1].each |name| {filter=filter.or(Filter.has(name))}
     return db.read(filter,false) != null
   }
+  ** Restart reconciliation only releases a verified terminal journal. Missing,
+  ** changed or incomplete recovery materials keep every business entry paused.
+  internal static Bool recoverMaintenance(Folio db,Str project,File ioDir)
+  {
+    gate:=(ReentrantLock)maintenanceLock.val
+    if (!gate.tryLock) return FinEnergyNamespaceFence.blocked(db)
+    try {return recoverMaintenanceImpl(db,project,ioDir)}
+    finally {gate.unlock}
+  }
+
+  private static Bool recoverMaintenanceImpl(Folio db,Str project,File ioDir)
+  {
+    if (!FinEnergyNamespaceFence.blocked(db)) return false
+    try
+    {
+      fence:=FinEnergyNamespaceFence.current(db)
+      folder:=maintenanceFolder(ioDir,fence["finEnergyMigrationBackup"].toStr)
+      report:=(Str:Obj?)JsonInStream((folder+`progress.json`).readAllStr.in).readJson
+      verifyJournalIdentity(folder,project,report)
+      FinEnergyNamespaceFence.verifyOwner(fence,project,report)
+      if (!["complete","rolledBack"].contains(report["phase"])) return true
+      verifyBackup(folder,report)
+      FinEnergyNamespaceFence.release(db,project,report)
+      return FinEnergyNamespaceFence.blocked(db)
+    }
+    catch (Err e) {return true}
+  }
+
+  private static Void finishMaintenance(Folio db,Str project,File ioDir,Str backup)
+  {
+    folder:=maintenanceFolder(ioDir,backup)
+    report:=(Str:Obj?)JsonInStream((folder+`progress.json`).readAllStr.in).readJson
+    verifyJournalIdentity(folder,project,report)
+    verifyBackup(folder,report)
+    FinEnergyNamespaceFence.release(db,project,report)
+  }
+
+  private static Void verifyJournalIdentity(File folder,Str project,Map report)
+  {
+    if (report["project"] != project || report["backup"] != folder.name) throw ArgErr("Namespace journal ownership mismatch")
+    migrationDirection(report["from"].toStr,report["to"].toStr)
+  }
+
   private static Void migrationDirection(Str from,Str to)
   {
     if (!["enerCubix","enercubix"].contains(from) || to != "finEnergy") throw ArgErr("Only the legacy FIN Energy namespace upgrade is supported")
   }
-  private static File backupFolder(Str backup)
+  private static File backupFolder(Str backup) { maintenanceFolder(Context.cur.proj.ioDir,backup) }
+  private static File maintenanceFolder(File root,Str backup)
   {
     if (!Regex<|namespace-[0-9a-fA-F-]{36}|>.matches(backup)) throw ArgErr("Invalid namespace backup")
-    root:=Context.cur.proj.ioDir
     folder:=root+(backup+"/").toUri
     if (!Interop.toJava(folder).getCanonicalPath.startsWith(Interop.toJava(root).getCanonicalPath+JavaFile.separator)) throw ArgErr("Namespace backup escapes project")
     return folder
