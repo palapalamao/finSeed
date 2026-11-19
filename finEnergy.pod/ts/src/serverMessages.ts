@@ -2,6 +2,7 @@
 const cockpitEnglish={"cockpitSchema":"Unsupported cockpit request version.","cockpitRequestId":"The cockpit request identifier is too long.","cockpitScope":"Select a valid statistical scope and selection mode.","cockpitScopeLimit":"Select between 1 and 200 scope objects.","cockpitRef":"An object reference is invalid or belongs to another project.","cockpitModules":"Select supported cockpit modules.","cockpitComparison":"This cockpit slice does not yet support comparison queries.","cockpitTime":"Select a supported period with valid absolute timestamps.","cockpitTimeRange":"The period must have a later end and span no more than 366 local days.","cockpitField":"The cockpit request contains a missing or invalid field.","cockpitMeterLimit":"The scope contains more than 200 meters. Select a smaller scope.","cockpitScopeForbidden":"The requested scope or energy category is unavailable or not accessible."};
 const cockpitChinese={"cockpitSchema":"驾驶舱请求版本不受支持。","cockpitRequestId":"驾驶舱请求标识过长。","cockpitScope":"请选择有效的统计范围及选择方式。","cockpitScopeLimit":"请选择 1 至 200 个范围对象。","cockpitRef":"对象引用无效或不属于当前项目。","cockpitModules":"请选择已支持的驾驶舱模块。","cockpitComparison":"当前驾驶舱切片尚未支持同期比较。","cockpitTime":"请选择支持的统计间隔并填写有效的绝对时间。","cockpitTimeRange":"结束时间必须晚于开始时间，区间不得超过 366 个当地日。","cockpitField":"驾驶舱请求存在缺失或无效的字段。","cockpitMeterLimit":"统计范围超过 200 块表计，请缩小范围。","cockpitScopeForbidden":"所选统计范围或能源分类不可用或没有读取权限。"};
 export const serverMessages:Record<string,string>={
+ namespaceMigrationRequired:'Legacy product configuration must be migrated by a FIN administrator before queries and scheduled tasks can run. Native FIN license status remains available.',
  nativeLicenseRequired:'A valid native FIN energy feature license is required. Contact your FIN license administrator.',
  '无效费率时段分类':'Invalid tariff time-band category',
  '部分时段未配置尖峰谷平分类，保留为未分类':'Some periods have no tariff time-band label and remain unclassified',
@@ -350,6 +351,7 @@ export const serverMessages:Record<string,string>={
 // Core validation and source errors originate in English; Chinese sessions
 // resolve these at the same service boundary as Chinese-owned API messages.
 export const chineseServerMessages:Record<string,string>={
+ namespaceMigrationRequired:'请先由 FIN 管理员迁移原产品配置，再运行查询与定时任务。FIN 原生授权状态仍可查看。',
  nativeLicenseRequired:'需要有效的 FIN 原生能源功能授权，请联系 FIN 授权管理员。',
  "legacyTopologyInvalidProof":"历史关系恢复资料无效。",
  "legacyTopologyUnobservedRange":"恢复范围超出备份或业务修订时间的证据范围。",
