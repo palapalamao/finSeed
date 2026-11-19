@@ -2,18 +2,7 @@
 const cockpitEnglish={"cockpitSchema":"Unsupported cockpit request version.","cockpitRequestId":"The cockpit request identifier is too long.","cockpitScope":"Select a valid statistical scope and selection mode.","cockpitScopeLimit":"Select between 1 and 200 scope objects.","cockpitRef":"An object reference is invalid or belongs to another project.","cockpitModules":"Select supported cockpit modules.","cockpitComparison":"This cockpit slice does not yet support comparison queries.","cockpitTime":"Select a supported period with valid absolute timestamps.","cockpitTimeRange":"The period must have a later end and span no more than 366 local days.","cockpitField":"The cockpit request contains a missing or invalid field.","cockpitMeterLimit":"The scope contains more than 200 meters. Select a smaller scope.","cockpitScopeForbidden":"The requested scope or energy category is unavailable or not accessible."};
 const cockpitChinese={"cockpitSchema":"驾驶舱请求版本不受支持。","cockpitRequestId":"驾驶舱请求标识过长。","cockpitScope":"请选择有效的统计范围及选择方式。","cockpitScopeLimit":"请选择 1 至 200 个范围对象。","cockpitRef":"对象引用无效或不属于当前项目。","cockpitModules":"请选择已支持的驾驶舱模块。","cockpitComparison":"当前驾驶舱切片尚未支持同期比较。","cockpitTime":"请选择支持的统计间隔并填写有效的绝对时间。","cockpitTimeRange":"结束时间必须晚于开始时间，区间不得超过 366 个当地日。","cockpitField":"驾驶舱请求存在缺失或无效的字段。","cockpitMeterLimit":"统计范围超过 200 块表计，请缩小范围。","cockpitScopeForbidden":"所选统计范围或能源分类不可用或没有读取权限。"};
 export const serverMessages:Record<string,string>={
- licenseMeterLimit:'This project can enroll up to 10 meters with the free allowance. Open Settings → License management to activate FinEnergy.',
- licenseProjectOverLimit:'This project exceeds 10 enrolled meters. Open Settings → License management to activate FinEnergy, or reduce the number of enrolled meters.',
- licenseInvalid:'The license file or its signature is invalid.',
- licenseInvalidPeriod:'The license contains an invalid validity period. Ask the issuer to check its dates.',
- licenseHostMismatch:'This license belongs to a different FIN machine code.',
- licenseHostUnavailable:'The FIN machine code is unavailable.',
- licenseExpired:'This license has expired.',
- licenseNotYetValid:'This license has not taken effect yet.',
- licenseImportForbidden:'A FIN superuser must import the license.',
- licenseDeleteForbidden:'A FIN superuser must delete the license.',
- licenseChanged:'The installed license has changed. Review the current license before deleting it.',
- licenseStoreFailed:'FIN could not save the license. Check the instance storage and try again.',
+ nativeLicenseRequired:'A valid native FIN energy feature license is required. Contact your FIN license administrator.',
  '无效费率时段分类':'Invalid tariff time-band category',
  '部分时段未配置尖峰谷平分类，保留为未分类':'Some periods have no tariff time-band label and remain unclassified',
  '尖、峰、谷时段不能重叠':'Sharp-peak, peak and valley hours must not overlap',
@@ -361,18 +350,7 @@ export const serverMessages:Record<string,string>={
 // Core validation and source errors originate in English; Chinese sessions
 // resolve these at the same service boundary as Chinese-owned API messages.
 export const chineseServerMessages:Record<string,string>={
- licenseMeterLimit:'免费额度允许本项目纳入最多 10 块表。请在设置 → 授权管理中激活FIN Energy 能源管理。',
- licenseProjectOverLimit:'本项目已纳入超过 10 块表。请在设置 → 授权管理中激活，或减少本项目纳管表计。',
- licenseInvalid:'授权文件或签名无效。',
- licenseInvalidPeriod:'授权文件中的有效期有误。请联系签发人员核对日期。',
- licenseHostMismatch:'授权文件的机器码与当前 FIN 不一致。',
- licenseHostUnavailable:'无法读取 FIN 机器码。',
- licenseExpired:'此授权已到期。',
- licenseNotYetValid:'此授权尚未生效。',
- licenseImportForbidden:'只有 FIN 超级用户可导入授权。',
- licenseDeleteForbidden:'只有 FIN 超级用户可删除授权。',
- licenseChanged:'当前授权已发生变化。请核对更新后的授权再删除。',
- licenseStoreFailed:'FIN 无法保存授权。请检查实例存储后重试。',
+ nativeLicenseRequired:'需要有效的 FIN 原生能源功能授权，请联系 FIN 授权管理员。',
  "legacyTopologyInvalidProof":"历史关系恢复资料无效。",
  "legacyTopologyUnobservedRange":"恢复范围超出备份或业务修订时间的证据范围。",
  "legacyTopologyMissingSource":"备份缺少所选表计或明确的主点引用。",

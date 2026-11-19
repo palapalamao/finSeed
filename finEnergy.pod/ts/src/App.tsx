@@ -82,7 +82,7 @@ export function App(){
  ];
  const selectedDestination=analysisView?'analysis':settingsView?'configuration':view==='cockpit'?'dashboard':view;
  const navigation=(mobile=false)=><nav className={mobile?'mobile-navigation':'primary-navigation'} aria-label={t('主导航')}>{destinations.map(item=><Button disabled={exportLocked} key={item.key} type="text" aria-label={item.label} icon={mobile?item.icon:undefined} aria-current={selectedDestination===item.key?'page':undefined} className={selectedDestination===item.key?'nav-active':undefined} onClick={()=>navigate(item.target)}>{item.label}</Button>)}</nav>;
- return <ConfigProvider locale={componentLocales[locale]} theme={{token:{colorPrimary:'#137f7a',colorSuccess:'#218374',colorInfo:'#3976ba',colorBgLayout:'#f3f6f8',colorText:'#24323d',borderRadius:6,fontFamily:'"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',fontSize:13,controlHeight:34},components:{Table:{headerBg:'#f3f6f8'},Layout:{headerBg:'#fff'}}}}>
+ return <ConfigProvider locale={componentLocales[locale]} theme={{token:{colorPrimary:'#0e2738',colorSuccess:'#14765a',colorInfo:'#3488b2',colorBgLayout:'#f3f6f8',colorText:'#0e2738',borderRadius:6,fontFamily:'Manrope, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',fontSize:13,controlHeight:34},components:{Table:{headerBg:'#f3f6f8'},Layout:{headerBg:'#fff'}}}}>
   <Layout className={exportLocked?"app-layout finenergy-app cockpit-export-locked":"app-layout finenergy-app"}>
    <Layout.Header className="app-header">
     <Button type="text" className="mobile-nav-toggle" icon={<MenuOutlined/>} aria-label={t('打开导航')} onClick={()=>setMobileOpen(true)}/>

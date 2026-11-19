@@ -1,3 +1,4 @@
+import {readPreference} from './preferences';
 import {serverMessage,t} from './i18n';
 import {isAreaSpace} from './serviceArea';
 import {useEffect,useMemo,useState} from 'react';
@@ -25,7 +26,7 @@ const unchanged='__unchanged__',clear='__clear__',root='__root__';
 const assignFields=[['spaceId',t("空间归属")],['meterParentId',t("上级表计")],['organizationId',t("组织归属")],['utilityId',t("分项")],['categoryId',t("能源类型")],['includeInTotals',t("计入合计")]]as const;
 interface MeterTreeDisplay {name?:string;hidden?:boolean}
 function readTreeDisplay(key:string):MeterTreeDisplay{
- try{const saved=JSON.parse(localStorage.getItem(key)||'{}');return {name:typeof saved?.name==='string'?saved.name.trim().slice(0,120)||undefined:undefined,hidden:saved?.hidden===true};}catch{return {};}
+ try{const saved=JSON.parse(readPreference(localStorage,key,key.replace('finenergy:','enercubix:').replace('/finEnergy/','/enerCubix/'))||'{}');return {name:typeof saved?.name==='string'?saved.name.trim().slice(0,120)||undefined:undefined,hidden:saved?.hidden===true};}catch{return {};}
 }
 export function MeterManager({api,catalog,reload}:Props){
  const treeDisplayKey=`finenergy:meter-tree:v1:${api.base}`;

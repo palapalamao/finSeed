@@ -1,3 +1,4 @@
+import {chartTheme} from './chartTheme';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {Button,Empty,Space,Tag} from 'antd';
 import * as echarts from 'echarts/core';
@@ -14,7 +15,7 @@ export function CleaningPreviewChart({preview,unit}:{preview:CleaningPreview;uni
  const data=useMemo(()=>cleaningChartData(preview),[preview]);const [selected,setSelected]=useState(-1);
  useEffect(()=>{
   setSelected(-1);if(!host.current||!data.hasValues)return;
-  const instance=echarts.init(host.current);chart.current=instance;instance.setOption(cleaningChartOption(data,unit));
+  const instance=echarts.init(host.current,chartTheme);chart.current=instance;instance.setOption(cleaningChartOption(data,unit));
   const resize=new ResizeObserver(()=>instance.resize());resize.observe(host.current);
   return()=>{resize.disconnect();chart.current=null;instance.dispose();};
  },[data,unit]);

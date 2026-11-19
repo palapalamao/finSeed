@@ -5,9 +5,9 @@ import type {ReportRequest,ReportResult} from './types';
 import {forecastChartOptions} from './forecast';
 import {comparisonChartOptions} from './comparison';
 import {compactReportTime,numberText} from './reportDisplay';
-export const palette=['#137f7a','#3976ba','#b6842c','#7865af','#60aab3','#bb7463'];
+export const palette=['#3488b2','#9819f5','#00ccff','#00eaa5','#0e2738','#828e97'];
 export const loadBandNames=localizedRecord(()=>({sharp:t("尖时"),mixed:t("混合时段"),peak:t("峰时"),valley:t("谷时"),flat:t("平时"),unknown:t("未分类")}));
-export const loadBandColors={sharp:'#b94052',mixed:'#7865af',peak:'#dc9f36',valley:'#29a28b',flat:'#1576a7',unknown:'#8896a4'};
+export const loadBandColors={sharp:'#b94052',mixed:'#9819f5',peak:'#dc9f36',valley:'#29a28b',flat:'#1576a7',unknown:'#8896a4'};
 export type AxisBounds=Record<string,{min?:number;max?:number}>;
 /** Compact overview presentation only; series, time coordinates and values are unchanged. */
 export function compactChartOptions(options:EChartsCoreOption):EChartsCoreOption{
@@ -45,7 +45,7 @@ function leakChartOptions(result:ReportResult):EChartsCoreOption{
  const references=result.series.filter(series=>isReferenceCurve(series,'leak'));const units=[...new Set(references.map(series=>series.unit))];const times=rows.map(row=>String(row.ts));
  const branches=(Array.isArray(result.extra?.leakBranches)?result.extra.leakBranches:[]) as Record<string,unknown>[];
  const ids=Array.from(new Set(branches.map(row=>String(row.branchId))));
- const bars=[{name:t("总表"),type:'bar',barMaxWidth:42,itemStyle:{color:'#173d65'},data:rows.map(row=>({value:('knownTotal'in row?row.knownTotal:row.total)??null}))},
+ const bars=[{name:t("总表"),type:'bar',barMaxWidth:42,itemStyle:{color:'#0e2738'},data:rows.map(row=>({value:('knownTotal'in row?row.knownTotal:row.total)??null}))},
   ...(ids.length?ids.map((id,index)=>{const values=new Map(branches.filter(row=>row.branchId===id).map(row=>[String(row.ts),row]));return {name:String(branches.find(row=>row.branchId===id)?.name||t("分表")),type:'bar',stack:'submeters',barMaxWidth:42,itemStyle:{color:palette[index%palette.length]},tooltip:{valueFormatter:(value:unknown,index:number)=>{const branch=values.get(String(rows[index]?.ts));return branch?.participationQuality==='snapshotRecovered'&&typeof value==='number'?t('分表已有量 {0}（按旧备份恢复）',numberText(value)):branch?.participationQuality==='notParticipating'?t('此时段未参与'):branch?.participationQuality==='topologyUnknown'?t('历史计量关系尚未确认'):typeof value==='number'?numberText(value):t('缺测');}},data:rows.map(row=>{const branch=values.get(String(row.ts));return {value:branch&&'knownValue'in branch?branch.knownValue:row.submeter==null?null:branch?.value??null,quality:branch?.knownQuality??branch?.quality,activeSeconds:branch?.activeSeconds};})};}):[{name:t("分表合计"),type:'bar',stack:'submeters',barMaxWidth:42,itemStyle:{color:palette[0]},data:rows.map(row=>({value:('knownSubmeter'in row?row.knownSubmeter:row.submeter)??null}))}])];
  return {animation:false,tooltip:{trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:(value:unknown)=>typeof value==='number'?numberText(value):t("缺测")},legend:{type:'scroll',bottom:2},grid:{left:70,right:35+units.length*45,top:35,bottom:80},xAxis:{type:'category',data:rows.map(row=>String(row.ts)),axisLabel:{formatter:(value:string)=>compactReportTime(value,result.period),hideOverlap:true}},yAxis:[{type:'value',name:t(result.series.find(series=>!isReferenceCurve(series,'leak'))?.unit||''),scale:false},...referenceAxes(units)],dataZoom:[{type:'inside'},{type:'slider',bottom:35,height:18}],...(references.length?{tooltip:referenceTooltip}:{}),series:[...bars,...references.map((series,index)=>referenceLine(series,times,1+units.indexOf(series.unit),palette[(index+2)%palette.length]))]};
 }

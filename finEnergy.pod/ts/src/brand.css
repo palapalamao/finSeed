@@ -1,0 +1,9 @@
+@font-face{font-family:Manrope;src:url('./assets/fonts/Manrope-variable.ttf') format('truetype');font-style:normal;font-weight:200 800;font-display:swap;}
+:root{--j2-deep-blue:#0e2738;--j2-blue:#3488b2;--j2-aqua:#00ccff;--j2-green:#00eaa5;--j2-purple:#9819f5;--j2-dark-grey:#4d5d6b;--j2-light-grey:#ebebeb;}
+body,.finenergy-app{font-family:Manrope,"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;}
+.app-header{border-top:3px solid var(--j2-aqua);}
+.brand-wordmark strong{font-weight:650;letter-spacing:-.025em;}
+.brand-mark{flex-shrink:0;}
+.license-native-path{display:inline-block;padding:10px 14px;background:#edf5f9;border-left:3px solid var(--j2-aqua);border-radius:0 6px 6px 0;color:var(--j2-deep-blue);}
+:focus-visible{outline:2px solid var(--j2-purple);outline-offset:3px;}
+@media(max-width:600px){.brand-wordmark strong{font-size:17px;}.license-settings .workspace-title{align-items:flex-start;}}

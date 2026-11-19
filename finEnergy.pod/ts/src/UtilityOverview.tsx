@@ -1,3 +1,4 @@
+import {chartTheme} from './chartTheme';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {Alert,Button,Empty,Table} from 'antd';
 import * as echarts from 'echarts/core';
@@ -14,7 +15,7 @@ import './utility.css';
 echarts.use([PieChart,GraphicComponent,LegendComponent,TooltipComponent,CanvasRenderer]);
 function UtilityChart({group,onSelect,exporting}:{group:UtilityGroup;onSelect:(id:string)=>void;exporting:boolean}){
  const host=useRef<HTMLDivElement>(null);
- useEffect(()=>{if(!host.current)return;const chart=echarts.init(host.current);chart.setOption(utilityChartOptions(group));chart.on('click',params=>{const data=params.data as {utilityId?:string}|undefined;if(!exporting&&data?.utilityId!==undefined)onSelect(data.utilityId);});const resize=new ResizeObserver(()=>chart.resize());resize.observe(host.current);return()=>{resize.disconnect();chart.dispose();};},[group,exporting,onSelect]);
+ useEffect(()=>{if(!host.current)return;const chart=echarts.init(host.current,chartTheme);chart.setOption(utilityChartOptions(group));chart.on('click',params=>{const data=params.data as {utilityId?:string}|undefined;if(!exporting&&data?.utilityId!==undefined)onSelect(data.utilityId);});const resize=new ResizeObserver(()=>chart.resize());resize.observe(host.current);return()=>{resize.disconnect();chart.dispose();};},[group,exporting,onSelect]);
  return <div className="utility-chart" ref={host} role="img" aria-label={t('所选范围的分项构成，详细数值见下方明细表')}/>;
 }
 function UtilityPanel({group,snapshot,exporting}:{group:UtilityGroup;snapshot:ReportSnapshot;exporting:boolean}){

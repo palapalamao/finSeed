@@ -1,3 +1,4 @@
+import {readPreference} from './preferences';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn.js';
 import {englishMessages} from './messages';
@@ -71,7 +72,7 @@ export function initializeLocale(finLanguage:string,username?:string){
  finUserLanguage=finLanguage;
  preferenceKey=username?'finEnergy.locale.v2.'+encodeURIComponent(username):undefined;
  languagePreference='auto';
- try{const saved=preferenceKey?localStorage.getItem(preferenceKey):null;if(isLocale(saved))languagePreference=saved;}catch{/* Keep the authenticated FIN language when storage is unavailable. */}
+ try{const saved=preferenceKey?readPreference(localStorage,preferenceKey,'enerCubix.locale.v2.'+encodeURIComponent(username!)):null;if(isLocale(saved))languagePreference=saved;}catch{/* Keep the authenticated FIN language when storage is unavailable. */}
  applyLocale();
 }
 function applyLocale(){

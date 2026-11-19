@@ -5,6 +5,7 @@ import {initializeLocale,t} from './i18n';
 import {loadFinSession} from './session';
 import './styles.css';
 import './finenergy.css';
+import './brand.css';
 async function bootstrap(){
  const root=document.getElementById('root')!;
  root.textContent='…';

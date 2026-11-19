@@ -35,7 +35,7 @@ export function cleaningChartOption(data:CleaningChartData,unit:string):EChartsO
  const yAxis=(gridIndex:number)=>({type:'value' as const,gridIndex,scale:gridIndex===0,splitNumber:3,axisLine:{show:true,lineStyle:{color:'#738592'}},axisTick:{show:true},axisLabel:{show:true,color:'#435967',hideOverlap:true},splitLine:{lineStyle:{color:'#e9eff1'}}});
  const line=(name:string,index:number,color:string,rows:typeof data.raw)=>({name,type:'line' as const,xAxisIndex:index,yAxisIndex:index,data:rows,connectNulls:false,showSymbol:true,symbolSize:3,lineStyle:{width:1.5},itemStyle:{color},markArea:{silent:true,data:areas}});
  return {
-  animation:false,color:['#3976ba','#137f7a','#c74b3f'],
+  animation:false,color:['#3488b2','#0e2738','#c74b3f'],
   title:[{text:rawName,subtext:unit,left:10,top:4,textStyle:{fontSize:13,color:'#2e4554'},subtextStyle:{fontSize:11}},{text:cleanName,subtext:unit,left:10,top:'46%',textStyle:{fontSize:13,color:'#2e4554'},subtextStyle:{fontSize:11}}],
   grid:[{left:12,right:22,top:65,height:'25%',outerBoundsMode:'same'},{left:12,right:22,top:'58%',height:'25%',outerBoundsMode:'same'}],
   xAxis:[{...axis,gridIndex:0},{...axis,gridIndex:1}],yAxis:[yAxis(0),yAxis(1)],
@@ -51,6 +51,6 @@ export function cleaningChartOption(data:CleaningChartData,unit:string):EChartsO
     return `${row.ts}\n${t('{0}：{1}',entry.seriesName||'',value)}${numeric(row.value)&&row.valueType!=='na'&&unit?' '+unit:''}`;
    }).filter(Boolean).join('\n');
   }},
-  series:[line(rawName,0,'#3976ba',data.raw),{name:cleanName,type:'bar',xAxisIndex:1,yAxisIndex:1,data:data.cleaned,barMaxWidth:30,itemStyle:{color:'#137f7a'},markArea:{silent:true,data:areas}},{name:anomalyName,type:'scatter',xAxisIndex:0,yAxisIndex:0,symbol:'diamond',symbolSize:10,itemStyle:{color:'#c74b3f'},z:5,data:data.anomalies.filter(row=>row.rawValue!==null).map(anomaly=>({value:[anomaly.end,anomaly.rawValue],anomaly,itemStyle:{color:anomaly.corrected?'#b6842c':'#c74b3f'}}))}]
+  series:[line(rawName,0,'#3488b2',data.raw),{name:cleanName,type:'bar',xAxisIndex:1,yAxisIndex:1,data:data.cleaned,barMaxWidth:30,itemStyle:{color:'#0e2738'},markArea:{silent:true,data:areas}},{name:anomalyName,type:'scatter',xAxisIndex:0,yAxisIndex:0,symbol:'diamond',symbolSize:10,itemStyle:{color:'#c74b3f'},z:5,data:data.anomalies.filter(row=>row.rawValue!==null).map(anomaly=>({value:[anomaly.end,anomaly.rawValue],anomaly,itemStyle:{color:anomaly.corrected?'#b6842c':'#c74b3f'}}))}]
  };
 }

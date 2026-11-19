@@ -1,6 +1,6 @@
 .energy-flow-view{color:#304c58;background:#fff;font-variant-numeric:tabular-nums}
 .energy-flow-summary-references{margin:0 0 18px}.energy-flow-summary-references li{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:4px 0}.energy-flow-summary-references li>span{font-variant-numeric:tabular-nums}
-.energy-flow-panels{display:grid;gap:28px;min-width:0}.energy-flow-panels>.energy-flow-current{border-top:1px solid #dce5e9;padding-top:20px;min-width:0}.energy-flow-accounting{padding:14px 18px;border:1px solid #dce5e9;background:#f5f9fa;border-radius:5px;color:#536e7d;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.energy-flow-accounting p{margin:4px 0}.energy-flow-accounting strong{color:#255d57;font-size:15px}.energy-flow-accounting ul{margin:6px 0;padding-left:20px}.energy-flow-accounting summary{cursor:pointer}.energy-flow-basis{font-size:12px;color:#718793}.energy-flow-reference{opacity:.65}.energy-flow-current .energy-flow-heading p{max-width:850px}
+.energy-flow-panels{display:grid;gap:28px;min-width:0}.energy-flow-panels>.energy-flow-current{border-top:1px solid #dce5e9;padding-top:20px;min-width:0}.energy-flow-accounting{padding:14px 18px;border:1px solid #dce5e9;background:#f5f9fa;border-radius:5px;color:#536e7d;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.energy-flow-accounting p{margin:4px 0}.energy-flow-accounting strong{color:#0e2738;font-size:15px}.energy-flow-accounting ul{margin:6px 0;padding-left:20px}.energy-flow-accounting summary{cursor:pointer}.energy-flow-basis{font-size:12px;color:#718793}.energy-flow-reference{opacity:.65}.energy-flow-current .energy-flow-heading p{max-width:850px}
 .energy-flow-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:5px 0 19px}
 .energy-flow-heading h3{font-size:18px;font-weight:600;margin:0 0 7px}
 .energy-flow-heading p{font-size:12px;color:#718793;margin:0;line-height:1.7}
@@ -20,7 +20,7 @@
 .energy-flow-toolbar{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;padding:18px 0 10px}
 .energy-flow-path{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;color:#718793}
 .energy-flow-path>span{display:inline-flex;align-items:center;gap:8px;min-width:0}
-.energy-flow-path button{padding:3px 0;border:0;background:transparent;color:#137f7a;font:inherit;cursor:pointer}
+.energy-flow-path button{padding:3px 0;border:0;background:transparent;color:#0e2738;font:inherit;cursor:pointer}
 .energy-flow-path b{font-weight:500;color:#455c6a}
 .energy-flow-path button:disabled{opacity:.5;cursor:default}
 .energy-flow-separator{color:#8a9da8}
@@ -40,7 +40,7 @@
 .energy-flow-node-name,.energy-flow-node-value,.energy-flow-root-value,.energy-flow-node-unit{paint-order:stroke;stroke:white;stroke-width:4px;stroke-linejoin:round}
 .energy-flow-node-name{font-size:13px;font-weight:500}
 .energy-flow-node-value{font-size:12px;fill:#617c89!important}
-.energy-flow-root-value{font-size:25px;font-weight:550;fill:#255d57!important}
+.energy-flow-root-value{font-size:25px;font-weight:550;fill:#0e2738!important}
 .energy-flow-node-unit{font-size:12px;fill:#718793!important}
 .energy-flow-node-difference{fill:#71808b!important;font-weight:400}
 .energy-flow-empty-marker{fill:#fff;stroke:#a7b5bf;stroke-width:1.5;stroke-dasharray:2 1}
@@ -65,7 +65,7 @@
 .energy-flow-table tbody tr:last-child>*{border-bottom:0}
 .energy-flow-numeric{text-align:right;white-space:nowrap}
 .energy-flow-source{max-width:280px;min-width:140px;color:#718793;overflow-wrap:anywhere}
-.energy-flow-table-node{border:0;padding:0;background:transparent;color:#137f7a;display:inline-flex;align-items:center;gap:8px;text-align:left;font:inherit;cursor:pointer}
+.energy-flow-table-node{border:0;padding:0;background:transparent;color:#0e2738;display:inline-flex;align-items:center;gap:8px;text-align:left;font:inherit;cursor:pointer}
 .energy-flow-table-node:disabled{opacity:.6;cursor:default}
 .energy-flow-table-node>span{font-size:16px;line-height:1}
 .energy-flow-quality{display:inline-block;font-size:11px;color:#36796d;background:#f0f8f5;border-radius:3px;padding:2px 7px;white-space:nowrap}

@@ -1,0 +1,2 @@
+/** J2 typography is shared by interactive charts and frozen canvas exports. */
+export const chartTheme={textStyle:{fontFamily:'Manrope, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',color:'#0e2738'},legend:{textStyle:{color:'#4d5d6b'}},categoryAxis:{axisLabel:{color:'#4d5d6b'},axisLine:{lineStyle:{color:'#c5d1d9'}}},valueAxis:{axisLabel:{color:'#4d5d6b'},splitLine:{lineStyle:{color:'#ebebeb'}}}};

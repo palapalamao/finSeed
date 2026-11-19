@@ -46,3 +46,14 @@ it('does not reload or pretend a choice was saved if browser storage is blocked'
  expect(()=>i18n.changeLanguage('zh-CN')).toThrow('Unable to save');
  expect(location.reload).not.toHaveBeenCalled();expect(i18n.locale).toBe('en-US');
 });
+
+it('migrates only the matching FIN user legacy preference and removes it after migration',async()=>{
+ const {saved}=browser();saved.set('enerCubix.locale.v2.alice','zh-CN');saved.set('enerCubix.locale.v1','zh-CN');
+ const i18n=await import('./i18n');i18n.initializeLocale('en','bob');expect(i18n.locale).toBe('en-US');
+ i18n.initializeLocale('en','alice');expect(i18n.locale).toBe('zh-CN');expect(saved.get('finEnergy.locale.v2.alice')).toBe('zh-CN');expect(saved.has('enerCubix.locale.v2.alice')).toBe(false);
+ i18n.changeLanguage('auto');i18n.initializeLocale('en','alice');expect(i18n.locale).toBe('en-US');
+});
+it('keeps a current FIN Energy preference ahead of the legacy value',async()=>{
+ const {saved}=browser();saved.set('finEnergy.locale.v2.alice','en-US');saved.set('enerCubix.locale.v2.alice','zh-CN');
+ const i18n=await import('./i18n');i18n.initializeLocale('zh','alice');expect(i18n.locale).toBe('en-US');
+});

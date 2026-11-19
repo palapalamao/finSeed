@@ -204,7 +204,7 @@ export function focusEnergyFlowSnapshot(snapshot:ReportSnapshot,focusId?:string)
 export interface EnergyFlowPosition {node:EnergyFlowNode;depth:number;x:number;y:number;height:number;color:string}
 export interface EnergyFlowRibbon {link:EnergyFlowLink;path:string;thickness:number;color:string}
 export interface EnergyFlowLayout {width:number;height:number;nodes:EnergyFlowPosition[];links:EnergyFlowRibbon[]}
-export const energyFlowColors=['#137f7a','#3976ba','#7865af','#bd893b','#538579'];
+export const energyFlowColors=['#0e2738','#3488b2','#9819f5','#4d5d6b','#006b55'];
 const differenceColor='#a7b5bf';
 export function energyFlowLayout(data:EnergyFlowData):EnergyFlowLayout {
  const focus=energyFlowFocus(data);const width=1100;

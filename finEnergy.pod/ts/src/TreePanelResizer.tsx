@@ -1,3 +1,4 @@
+import {readPreference} from './preferences';
 import {t} from './i18n';
 import {useLayoutEffect,useRef,useState,type PointerEvent} from 'react';
 
@@ -6,7 +7,7 @@ export function TreePanelResizer({scope,label}:{scope:'analysis'|'metering';labe
  const storageKey=`finEnergy:tree-width:v1:${scope}`;
  const handle=useRef<HTMLDivElement>(null);
  const drag=useRef<{x:number;width:number;current:number}|undefined>(undefined);
- const[preferred,setPreferred]=useState<number|undefined>(()=>{try{const value=Number(localStorage.getItem(storageKey));return Number.isFinite(value)&&value>=minWidth?value:undefined;}catch{return undefined;}});
+ const[preferred,setPreferred]=useState<number|undefined>(()=>{try{const value=Number(readPreference(localStorage,storageKey,`enerCubix:tree-width:v1:${scope}`));return Number.isFinite(value)&&value>=minWidth?value:undefined;}catch{return undefined;}});
  const[limits,setLimits]=useState({max:minWidth,defaultWidth:minWidth});
  const width=Math.min(limits.max,Math.max(minWidth,preferred??limits.defaultWidth));
  useLayoutEffect(()=>{

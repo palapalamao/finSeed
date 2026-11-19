@@ -34,7 +34,7 @@ for(const locale of ['zh-CN','en-US'])for(const mobile of [false,true])test.desc
    let pixels=0;
    for(let y=Math.ceil(rendered.height/2);y<rendered.height;y++){
     const offset=(y*rendered.width+x)*4;
-    if(rendered.data[offset]===19&&rendered.data[offset+1]===127&&rendered.data[offset+2]===122)pixels++;
+    if(rendered.data[offset]===14&&rendered.data[offset+1]===39&&rendered.data[offset+2]===56)pixels++;
    }
    tallestBar=Math.max(tallestBar,pixels);
   }
