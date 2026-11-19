@@ -1,8 +1,8 @@
-# FIN Energy 能源管理授权签发后台
+# 能源魔方授权签发后台
 
 [English](README.md)
 
-签发后台独立运行于 Node.js 22.22，使用 SQLite 保存签发账号、记录及原始授权文件。客户可在离线 FIN 环境中导入FIN Energy 能源管理授权。
+签发后台独立运行于 Node.js 22.22，使用 SQLite 保存签发账号、记录及原始授权文件。客户可在离线 FIN 环境中导入能源魔方授权。
 
 ## 配置签发后台
 
@@ -34,17 +34,17 @@ node license-issuer/server.mjs
 
 ## 签发与续期
 
-1. 登录后选择授权类型。选择**机器绑定**时，粘贴 FIN 机器码或导入FIN Energy 能源管理导出的申请文件。选择**培训授权**时直接设置有效期，授权在有效期内可在任意 FIN 主机使用。
+1. 登录后选择授权类型。选择**机器绑定**时，粘贴 FIN 机器码或导入能源魔方导出的申请文件。选择**培训授权**时直接设置有效期，授权在有效期内可在任意 FIN 主机使用。
 2. 按页面显示的浏览器时区填写生效及到期时间。在签发确认页核对转换后的 UTC 时间。到期时间是授权失效的起点。
 3. 点击**生成授权**。服务端记录签发人和签发时间，保存原始签名文件后提供下载。
-4. 将 `.finenergy-license` 文件交给客户的 FIN 超级用户，在有效期内从FIN Energy 能源管理**设置 → 授权管理**导入。
+4. 将 `.enercubix-license` 文件交给客户的 FIN 超级用户，在有效期内从能源魔方**设置 → 授权管理**导入。
 5. 通过**签发记录**重新下载原文件或续期。换机时选择**续期或换机**，输入新机器码。新记录会关联原授权编号。
 
 通过签发方受保护的存储备份数据库和私钥。复制 SQLite 数据库前停止签发后台，以保留完整事务。
 
 ## 文件格式与验证
 
-申请文件包含 `version`（1）、`product`（`finEnergy`）、`hostId` 和 `requestedAt`。授权文件包含 `keyId`、`payload` 和 `signature`。数据和签名采用标准 Base64。签发端使用 RSA PKCS#1 v1.5 与 SHA-256 对原始 UTF-8 JSON 字节签名。签名内容包括 `version`、`product`、`type`、`licenseId`、`issuedAt`、`notBefore` 和 `expiresAt`。`host` 类型还包含 `hostId`。`training` 类型只按有效期使用，授权内容不含机器码。签名时间字段使用 UTC ISO 8601。
+申请文件包含 `version`（1）、`product`（`enerCubix`）、`hostId` 和 `requestedAt`。授权文件包含 `keyId`、`payload` 和 `signature`。数据和签名采用标准 Base64。签发端使用 RSA PKCS#1 v1.5 与 SHA-256 对原始 UTF-8 JSON 字节签名。签名内容包括 `version`、`product`、`type`、`licenseId`、`issuedAt`、`notBefore` 和 `expiresAt`。`host` 类型还包含 `hostId`。`training` 类型只按有效期使用，授权内容不含机器码。签名时间字段使用 UTC ISO 8601。
 
 导出的公钥表按密钥编号索引，公钥采用 DER SubjectPublicKeyInfo 格式并以 Base64 编码。
 

@@ -14,10 +14,12 @@ foreach ($finEnergyManifest in @('package.json', 'finEnergy.pod\ts\package.json'
 $finEnergyZip = [IO.Compression.ZipFile]::OpenRead($finEnergyArtifact)
 try {
     $finEnergyEntries = @($finEnergyZip.Entries | ForEach-Object FullName)
-    $finEnergyRequired = @('meta.props', 'index.props', 'lib/menu.trio', 'locale/en.props', 'locale/zh.props', 'res/web/finEnergy/index.html')
+    $finEnergyRequired = @('meta.props', 'index.props', 'lib/menu.trio', 'locale/en.props', 'locale/zh.props', 'res/Manrope-OFL.txt', 'res/Manrope-SOURCE.txt', 'res/web/finEnergy/index.html', "res/web/finEnergy/index-$finEnergyVersion.html")
     foreach ($finEnergyEntry in $finEnergyRequired) {
         if ($finEnergyEntry -notin $finEnergyEntries) { throw "Pod missing required entry: $finEnergyEntry" }
     }
+    if ('res/license-keys.json' -in $finEnergyEntries) { throw 'Native FIN candidate must not include a legacy RSA keyring.' }
+    if (-not ($finEnergyEntries | Where-Object { $_ -match '^res/web/finEnergy/modules/Manrope.*\.ttf$' })) { throw 'Locally packaged Manrope font is missing.' }
     $finEnergyReader = [IO.StreamReader]::new($finEnergyZip.GetEntry('meta.props').Open())
     try { $finEnergyMeta = $finEnergyReader.ReadToEnd() } finally { $finEnergyReader.Dispose() }
     if ($finEnergyMeta -notmatch '(?m)^pod.name=finEnergy\s*$' -or $finEnergyMeta -notmatch ('(?m)^pod.version=' + [regex]::Escape($finEnergyVersion) + '\s*$')) { throw 'Pod name/version mismatch.' }
@@ -36,6 +38,9 @@ try {
         requiredEntries = $finEnergyRequired
         resourceEntries = @($finEnergyEntries | Where-Object { $_ -match '^(lib/|locale/|res/)' })
         runtimeVerified = $false
+        nativeFeature = 'fin energy'
+        nativeFeatureConfirmedByHq = $false
+        licensedRuntimeVerified = $false
     }
     $finEnergyJson = $finEnergyResult | ConvertTo-Json -Depth 6
     $finEnergyReport = Join-Path (Split-Path -Parent $finEnergyArtifact) 'acceptance.json'

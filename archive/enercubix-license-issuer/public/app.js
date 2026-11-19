@@ -6,7 +6,7 @@ const labels = {
   password: ['密码', 'Password'],
   login: ['登录', 'Sign in'],
   logout: ['退出登录', 'Sign out'],
-  issueTitle: ['签发FIN Energy 能源管理授权', 'Issue an FinEnergy license'],
+  issueTitle: ['签发能源魔方授权', 'Issue an EnerCubix license'],
   licenseType: ['授权类型', 'License type'],
   host: ['机器绑定', 'Machine-bound'],
   training: ['培训授权', 'Training'],
@@ -69,7 +69,7 @@ const form = $('issue');
 const fields = form.elements;
 const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let language = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-try { language = localStorage.getItem('finenergy-issuer-language') ?? language; } catch { /* Session-only preference. */ }
+try { language = localStorage.getItem('enercubix-issuer-language') ?? language; } catch { /* Session-only preference. */ }
 if (!['zh', 'en'].includes(language)) language = 'en';
 
 let session = null;
@@ -267,7 +267,7 @@ function renderConfirmation() {
 
 function applyLanguage() {
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
-  document.title = 'FinEnergy · ' + t('title');
+  document.title = 'EnerCubix · ' + t('title');
   $('language').value = language;
   for (const el of document.querySelectorAll('[data-text]')) setText(el, t(el.dataset.text));
   for (const el of document.querySelectorAll('[data-label]')) el.setAttribute('aria-label', t(el.dataset.label));
@@ -280,7 +280,7 @@ function applyLanguage() {
 
 $('language').addEventListener('change', event => {
   language = event.target.value;
-  try { localStorage.setItem('finenergy-issuer-language', language); } catch { /* Session-only preference. */ }
+  try { localStorage.setItem('enercubix-issuer-language', language); } catch { /* Session-only preference. */ }
   applyLanguage();
 });
 

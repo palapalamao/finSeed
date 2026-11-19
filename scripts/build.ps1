@@ -1,20 +1,10 @@
-param([string]$SdkPath, [switch]$SkipUi, [string]$LicenseKeyring)
+param([string]$SdkPath, [switch]$SkipUi)
 . "$PSScriptRoot\sdk.ps1"
 $finEnergyRoot = Get-FinEnergyRoot
 $finEnergySdk = Get-FinEnergySdk -SdkPath $SdkPath
 $finEnergyPreviousHome = $env:FAN_HOME
 $finEnergyPreviousUi = $env:FINENERGY_UI_BUILT
-$finEnergyKeyringPath = Join-Path $finEnergyRoot 'finEnergy.pod\res\license-keys.json'
-$finEnergyPreparedKeyring = $false
 try {
-    if (Test-Path -LiteralPath $finEnergyKeyringPath) {
-        throw 'A build keyring is already present in the Pod source. Use -LicenseKeyring to select a keyring for this build.'
-    }
-    if ($LicenseKeyring) {
-        $finEnergyKeyringSource = (Resolve-Path -LiteralPath $LicenseKeyring -ErrorAction Stop).Path
-        Invoke-FinEnergyCommand 'node' @((Join-Path $PSScriptRoot 'prepare-license-keyring.mjs'), $finEnergyKeyringSource, $finEnergyKeyringPath)
-        $finEnergyPreparedKeyring = $true
-    }
     $env:FAN_HOME = $finEnergySdk
     Push-Location $finEnergyRoot
     try {
@@ -40,7 +30,6 @@ try {
     finally { Pop-Location }
 }
 finally {
-    if ($finEnergyPreparedKeyring) { Remove-Item -LiteralPath $finEnergyKeyringPath }
     $env:FAN_HOME = $finEnergyPreviousHome
     $env:FINENERGY_UI_BUILT = $finEnergyPreviousUi
 }

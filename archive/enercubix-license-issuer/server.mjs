@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { IssuerError, idPattern, makeSigner, normalizeIssue, objectInput, parseActivationRequest } from './license.mjs';
 import { openIssuerStore } from './store.mjs';
 
-const cookieName = '__Host-finenergy-issuer';
+const cookieName = '__Host-enercubix-issuer';
 const sessionSeconds = 8 * 60 * 60;
 const loginWindow = 10 * 60 * 1000;
 const maxBody = 16 * 1024;
@@ -163,7 +163,7 @@ export function createIssuerHandler({ origin, store, privateKey, keyId, now = Da
         if (file === undefined) throw new IssuerError('notFound', 404);
         res.writeHead(200, {
           'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="finenergy-' + fileId + '.finenergy-license"',
+          'Content-Disposition': 'attachment; filename="enercubix-' + fileId + '.enercubix-license"',
         });
         return res.end(file);
       }
@@ -176,7 +176,7 @@ export function createIssuerHandler({ origin, store, privateKey, keyId, now = Da
       if (error instanceof IssuerError) return json(res, error.status, { error: error.code });
       // The signing request and any credentials belong to the issuer account.
       // Avoid copying them into process logs.
-      console.error('FinEnergy issuer request failed');
+      console.error('EnerCubix issuer request failed');
       return json(res, 500, { error: 'internalError' });
     }
   };
@@ -208,7 +208,7 @@ function run(env) {
     const handler = createIssuerHandler({ origin: url.origin, store, privateKey, keyId: env.ISSUER_KEY_ID });
     const server = createServer(tls, handler);
     server.maxConnections = 128;
-    server.listen(port, env.ISSUER_BIND ?? '127.0.0.1', () => console.log('FinEnergy issuer listening on ' + url.origin));
+    server.listen(port, env.ISSUER_BIND ?? '127.0.0.1', () => console.log('EnerCubix issuer listening on ' + url.origin));
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close(() => store.close()));
   } catch (error) {
     store.close();

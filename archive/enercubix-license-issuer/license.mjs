@@ -1,6 +1,6 @@
 import { constants, createPrivateKey, createPublicKey, randomUUID, sign } from 'node:crypto';
 
-export const product = 'finEnergy';
+export const product = 'enerCubix';
 export const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 export class IssuerError extends Error {

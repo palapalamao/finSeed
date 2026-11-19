@@ -1,0 +1,60 @@
+{
+  "commit": "76183616",
+  "files": [
+    {
+      "original": "license-issuer/README.md",
+      "archive": "archive/enercubix-license-issuer/README.md",
+      "sha256": "8029d37d2f0f9ce6e868ff70de987b1bda1193e313ab731e06789f3f27f14f35"
+    },
+    {
+      "original": "license-issuer/README.zh-CN.md",
+      "archive": "archive/enercubix-license-issuer/README.zh-CN.md",
+      "sha256": "36964df005ca26eb407da4ee4621cc51afc2532a0942a5685c7ccf43cd339101"
+    },
+    {
+      "original": "license-issuer/cli.mjs",
+      "archive": "archive/enercubix-license-issuer/cli.mjs",
+      "sha256": "db420d284c06a01f890c3c27b72d2cd840a745fcd005c8a8a8826f51c93e5835"
+    },
+    {
+      "original": "license-issuer/issuer.test.mjs",
+      "archive": "archive/enercubix-license-issuer/issuer.test.mjs",
+      "sha256": "44eab1b7cb6f78a66523e5c23cf1abff307c1245fccad0f3b6b24853db84988b"
+    },
+    {
+      "original": "license-issuer/license.mjs",
+      "archive": "archive/enercubix-license-issuer/license.mjs",
+      "sha256": "b0b4b465ffc3f77455584a12c60a03c7015c9f2ff366f50d2be710f07e3171b7"
+    },
+    {
+      "original": "license-issuer/public/app.js",
+      "archive": "archive/enercubix-license-issuer/public/app.js",
+      "sha256": "4a31a0c80d43de3a86decb4e3d0705889698ba1d2f00bcf0dab81c53e8431c5b"
+    },
+    {
+      "original": "license-issuer/public/index.html",
+      "archive": "archive/enercubix-license-issuer/public/index.html",
+      "sha256": "f320c3fdcfef11063b9eff9c4b9cd8f61e3df9e60365ec242328267ff50b56ae"
+    },
+    {
+      "original": "license-issuer/public/style.css",
+      "archive": "archive/enercubix-license-issuer/public/style.css",
+      "sha256": "931ffa272932cc5741005727004c5be653d8468762ebbe5d2f65c7bea03dffae"
+    },
+    {
+      "original": "license-issuer/server.mjs",
+      "archive": "archive/enercubix-license-issuer/server.mjs",
+      "sha256": "87769712adae3aeea5175830a20a298e4dcbec94826d7f3f387894eb139d8ebf"
+    },
+    {
+      "original": "license-issuer/store.mjs",
+      "archive": "archive/enercubix-license-issuer/store.mjs",
+      "sha256": "cb5ab418cf7becd4dbb030c979dc081bc0f7c2d2e4028d1897c01dd6d05aee7c"
+    },
+    {
+      "original": "scripts/prepare-license-keyring.mjs",
+      "archive": "archive/enercubix-license-issuer/scripts/prepare-license-keyring.mjs",
+      "sha256": "791713dfef6b84c1120e8bbcda2d2ab134f5e34180abf41bc41fe9c6bee93ae4"
+    }
+  ]
+}
