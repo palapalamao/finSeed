@@ -37,7 +37,7 @@ export function comparisonSlots(from:string,to:string,period:string,alignment?:s
  const output:string[]=[];while(at.valueOf()<end.valueOf()&&output.length<100001){output.push(at.format('YYYY-MM-DDTHH:mm:ssZ'));at=aligned?at.add(period==='hour'?3600000:period==='day'?86400000:604800000,'millisecond'):at.add(1,period as 'day');}
  return output;
 }
-export function comparisonChartOptions(result:ReportResult,request:ReportRequest,colors=['#1576a7','#29a28b','#dc9f36','#757cbb','#60b3c3','#cb7662']):EChartsCoreOption{
+export function comparisonChartOptions(result:ReportResult,request:ReportRequest,colors=['#1576a7','#29a28b','#dc9f36','#757cbb','#00ccff','#cb7662']):EChartsCoreOption{
  const paired=!!request.otherFrom&&!!request.otherTo;
  const times=comparisonSlots(result.from,result.to,result.period,request.comparisonAlignment);
  const otherTimes=paired?comparisonSlots(request.otherFrom!,request.otherTo!,result.period,request.comparisonAlignment):[];

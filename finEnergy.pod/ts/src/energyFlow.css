@@ -7,13 +7,13 @@
 .energy-flow-back{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;min-height:34px;border:1px solid #dce5e9;background:#fff;color:#536c7b;border-radius:5px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
 .energy-flow-back:hover:not(:disabled){background:#f3f8f7}
 .energy-flow-back:disabled{opacity:.45;cursor:default}
-.energy-flow-view button:focus-visible,.energy-flow-node:focus-visible,.energy-flow-graph-scroll:focus-visible{outline:3px solid #79bcb5;outline-offset:3px}
+.energy-flow-view button:focus-visible,.energy-flow-node:focus-visible,.energy-flow-graph-scroll:focus-visible{outline:3px solid #76b9da;outline-offset:3px}
 .energy-flow-metrics{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:24px;padding:0 0 23px;border-bottom:1px solid #edf1f3}
 .energy-flow-metric{border-left:1px solid #e5edef;padding-left:24px;min-width:0}
 .energy-flow-metric:first-child{padding-left:0;border:0}
 .energy-flow-metric>span{display:block;color:#6a808e;font-size:12px;margin-bottom:9px}
 .energy-flow-metric strong{display:block;color:#2f464e;font-size:28px;line-height:1.2;font-weight:550;overflow-wrap:anywhere}
-.energy-flow-metric:first-child strong{font-size:32px;color:#215e59}
+.energy-flow-metric:first-child strong{font-size:32px;color:#0e2738}
 .energy-flow-metric small{font-size:12px;font-weight:400;color:#718793;margin-left:6px}
 .energy-flow-metric p{font-size:11px;line-height:1.6;color:#718793;margin:8px 0 0}
 .energy-flow-metric-warning strong{color:#a75a32}
@@ -68,7 +68,7 @@
 .energy-flow-table-node{border:0;padding:0;background:transparent;color:#0e2738;display:inline-flex;align-items:center;gap:8px;text-align:left;font:inherit;cursor:pointer}
 .energy-flow-table-node:disabled{opacity:.6;cursor:default}
 .energy-flow-table-node>span{font-size:16px;line-height:1}
-.energy-flow-quality{display:inline-block;font-size:11px;color:#36796d;background:#f0f8f5;border-radius:3px;padding:2px 7px;white-space:nowrap}
+.energy-flow-quality{display:inline-block;font-size:11px;color:#3488b2;background:#f0f8f5;border-radius:3px;padding:2px 7px;white-space:nowrap}
 .energy-flow-quality-derived{color:#677e8d;background:#f1f4f6}
 .energy-flow-quality-warning{color:#916229;background:#fff5e5}
 .energy-flow-balance-quality{display:block;color:#916229;margin-top:3px;font-size:10px}
