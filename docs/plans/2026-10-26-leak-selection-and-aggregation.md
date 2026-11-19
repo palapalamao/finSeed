@@ -2,7 +2,7 @@
 
 ## 2026-10-27 最新交付口径（0.12.9）
 
-本节与下方“最新数据源要求”覆盖本文早期归档约定：实测表、物理表、虚拟表的自身用量统一只读各自明确主能耗点历史；FIN负责历史采集存储，能源魔方不另建辅助归档或以分表／公式输入替代自身缺测。当前值公式／自动求和保留，历史关系只作日志。虚拟分类的引用来源与纯加法去重贡献分别展示，不与分类自身主点用量混加。
+本节与下方“最新数据源要求”覆盖本文早期归档约定：实测表、物理表、虚拟表的自身用量统一只读各自明确主能耗点历史；FIN负责历史采集存储，FIN Energy 能源管理不另建辅助归档或以分表／公式输入替代自身缺测。当前值公式／自动求和保留，历史关系只作日志。虚拟分类的引用来源与纯加法去重贡献分别展示，不与分类自身主点用量混加。
 
 多视角能流、多对象独立图、当前范围手动查询、共享成员说明、默认FIN名称与品牌修订已统一发布0.12.9。产品源码 `3a0218cfc3bd43b8a30e3c938804f4899f4e054a`，实际安装包 `83B31883AEDD249F218A34846E1321C6471DA6FB6332CF663802F71519FA2771`；0.12.8仅曾冻结候选、未部署。用户授权的手动免登录方式保留。
 
@@ -80,7 +80,7 @@
 - 非加法、带权和减法公式不按简单加法展开。不能解析时保留自身量并说明限制。
 - 同源别名按现有规则归并；循环、冲突归属、来源缺失及能源／单位不兼容明确报告。
 - 中间计算汇总可分组展示，不与其物理来源重复相加。多主表保持各自对照组，范围摘要按来源并集去重。
-- 范围解析、基础用量、图表、明细、来源独立性与漏损资格使用同一成员结果；`EnerCubixBalance.fan` 必须纳入实现核对。
+- 范围解析、基础用量、图表、明细、来源独立性与漏损资格使用同一成员结果；`FinEnergyBalance.fan` 必须纳入实现核对。
 
 ### 2.4 堆积柱与结论分开
 
@@ -113,7 +113,7 @@
 
 | 项目 | 用户指定入口 | 本轮用途 |
 | --- | --- | --- |
-| cubeTest | `http://localhost:8080/finMobile/cubeTest#_enerCubix` | 原始24日缺柱复现、总分表自身历史、堆积与差额条件、消息中心基础验收 |
+| cubeTest | `http://localhost:8080/finMobile/cubeTest#_finEnergy` | 原始24日缺柱复现、总分表自身历史、堆积与差额条件、消息中心基础验收 |
 | zeda | `http://localhost:8080/finMobile/zeda` | 现有较大层级、空间／组织／计量视角、物理边界去重、跨报告及分页性能回归 |
 
 - 两项目均复用本机8080及现有数据，不再寻找、搭建或等待单独 FIN 测试环境；旧 `finseed_acceptance`、38085 等记录只保留历史证据，不作为本轮执行目标。
@@ -139,13 +139,13 @@
 
 ### 任务 2：完成局部选择与自动汇总解耦（开发负责，已实现并本地验证）
 
-后端：`enerCubix.pod/fan/engine/EnerCubixDimension.fan`、`EnerCubixReport.fan`、`EnerCubixBalance.fan`、`EnerCubixFlowOverview.fan`、`EnerCubixLeakUsage.fan`，以及 `fan/EnerCubixHistory.fan` 的依赖加载。前端：`ts/src/types.ts`、`dimensionTree.ts`、`ReportWorkspace.tsx`、`contracts/api.md`。
+后端：`finEnergy.pod/fan/engine/FinEnergyDimension.fan`、`FinEnergyReport.fan`、`FinEnergyBalance.fan`、`FinEnergyFlowOverview.fan`、`FinEnergyLeakUsage.fan`，以及 `fan/FinEnergyHistory.fan` 的依赖加载。前端：`ts/src/types.ts`、`dimensionTree.ts`、`ReportWorkspace.tsx`、`contracts/api.md`。
 
 - [x] 先增加直接验证行为的失败测试：自动合计关闭仍能显式查看自身量／做新口径局部对照；物理边界、别名、父子去重、权限和多主表归属均有独立期望。
 - [x] 给请求／快照增加前后端一致的局部对照依据，使用 `comparisonBasis: 'physicalBoundary'`；自动汇总原语义保持，不能偷偷将所有报告一并改成新对照模式。
-- [x] 对照成员由当前物理边界解析，支持本次临时缩小、不保存回资产；按主表分组：未传该主表名单时默认全部当前有效边界，显式空名单表示不选分表（不退回默认、严格差额不可用），指定名单只能取该主表可用边界的子集，无效成员明确报错。只在现有范围逻辑不能清楚承载时新增小型 `EnerCubixComparisonScope.fan`，不预建框架。
-- [x] 修复实际尚存耦合：`EnerCubixDimension.directChildren` 经 `included` 过滤自动合计资格，`dimensionTree.leakMasterIds` 同样限制主表；`EnerCubixBalance`／`EnerCubixReport`／`EnerCubixLeakUsage` 各自取直属成员。只调整新局部对照路径的解析与消费，不破坏自动汇总及旧快照兼容。
-- [x] 历史读取、`EnerCubixBalance`、泄漏／能流、图表、快照及导出复用同一成员结果；不可读的必要成员明确阻断严格结论，但不泄露ID或名称。
+- [x] 对照成员由当前物理边界解析，支持本次临时缩小、不保存回资产；按主表分组：未传该主表名单时默认全部当前有效边界，显式空名单表示不选分表（不退回默认、严格差额不可用），指定名单只能取该主表可用边界的子集，无效成员明确报错。只在现有范围逻辑不能清楚承载时新增小型 `FinEnergyComparisonScope.fan`，不预建框架。
+- [x] 修复实际尚存耦合：`FinEnergyDimension.directChildren` 经 `included` 过滤自动合计资格，`dimensionTree.leakMasterIds` 同样限制主表；`FinEnergyBalance`／`FinEnergyReport`／`FinEnergyLeakUsage` 各自取直属成员。只调整新局部对照路径的解析与消费，不破坏自动汇总及旧快照兼容。
+- [x] 历史读取、`FinEnergyBalance`、泄漏／能流、图表、快照及导出复用同一成员结果；不可读的必要成员明确阻断严格结论，但不泄露ID或名称。
 - [x] 复核非加法公式不可随意展开、独立实测表边界停止下钻、计算汇总节点不与物理来源重复相加。
 - [x] 前端显式查询与局部对照不再因 `includeInTotals=false` 禁选；服务端重新校验资格，不信任客户端名单，也不把开关改成分支总开关。
 - [x] 更新契约中与新规则冲突的旧时间分段／历史关系描述，保留旧版本证据标签，不让开发继续按旧文案实现。
@@ -161,7 +161,7 @@
 
 ### 任务 4：消息中心集成复核（开发负责，复用现有实现）
 
-后端：`fan/EnerCubixChangeMessages.fan`、`EnerCubixMeterTimeline.fan`、`EnerCubixRepo.fan`、`EnerCubixRest.fan`。前端：`ts/src/MessageCenter.tsx`、`changeMessages.ts`、`App.tsx`、`api.ts`、`messages.ts`。
+后端：`fan/FinEnergyChangeMessages.fan`、`FinEnergyMeterTimeline.fan`、`FinEnergyRepo.fan`、`FinEnergyRest.fan`。前端：`ts/src/MessageCenter.tsx`、`changeMessages.ts`、`App.tsx`、`api.ts`、`messages.ts`。
 
 - [x] 只读接口 `GET messages/changes?offset=0&limit=30`，权限过滤后分页，初始化／同值过滤、历史引用脱敏及缺失操作人处理已实现。
 - [x] 新旧入口、中英文、分页、展开、刷新、错误／空状态、只读权限及原报警显示已有自动化证据。
@@ -202,7 +202,7 @@ LC01–LC17 是业务断言，人工固定数字在本地确定性测试中使�
 
 ### 2026-10-27 最新数据源要求（覆盖本文旧归档约定）
 
-用户在“测试”聊天明确要求：实测表、物理表、虚拟表都只从各自明确指定的主能耗点取数，不再新增额外归档点。因此，本文关于优先读取能源魔方归档／发布批次、缺归档时阻断主点读取，以及保留自动派生归档写入的旧实现约定不再作为后续开发目标。已有点位、历史、批次与日志保留，不执行删除、trash 或历史改写；未绑定主点的对象明确提示缺测，不自动按名称、旧公式或历史归档推定主点。公式引用仍可用于能流图来源说明与可验证的纯加法贡献并集，不能替代对象自身主点历史。
+用户在“测试”聊天明确要求：实测表、物理表、虚拟表都只从各自明确指定的主能耗点取数，不再新增额外归档点。因此，本文关于优先读取FIN Energy 能源管理归档／发布批次、缺归档时阻断主点读取，以及保留自动派生归档写入的旧实现约定不再作为后续开发目标。已有点位、历史、批次与日志保留，不执行删除、trash 或历史改写；未绑定主点的对象明确提示缺测，不自动按名称、旧公式或历史归档推定主点。公式引用仍可用于能流图来源说明与可验证的纯加法贡献并集，不能替代对象自身主点历史。
 
 当前实施与发布状态以 [E08–E12 看板](../team/board.md) 为准。0.12.7 的接口、图形和双语下载证据保留其实际版本与旧取数路径事实，不能直接作为新主点唯一路径的数值验收。旧0.12.8候选未部署，须待新路径完成后形成新候选并重新核对受影响数据。
 
@@ -222,8 +222,8 @@ LC01–LC17 是业务断言，人工固定数字在本地确定性测试中使�
 
 ## 六、执行入口及完成边界
 
-- 前端：在 `enerCubix.pod/ts` 执行 `npx vitest run src --maxWorkers 1`、`npm run build`；按变动执行 `npx playwright test --config playwright.current-relations.config.ts`、`npx playwright test --config playwright.messages.config.ts` 及选择解耦相关场景。浏览器回放可使用临时前端预览端口，这不属于新建 FIN 环境；不能替代8080的真实项目验收。
-- 后端：在工作区执行 `./scripts/build.ps1 -SkipUi -SdkPath .local/sdk`（先有对应前端构建），再设该SDK为 `FAN_HOME` 执行 `.local/sdk/bin/fant.bat enerCubix`；目标为实际匹配候选资源的构建成功、受影响测试通过，不把零测试或仅编译作为业务验收。
+- 前端：在 `finEnergy.pod/ts` 执行 `npx vitest run src --maxWorkers 1`、`npm run build`；按变动执行 `npx playwright test --config playwright.current-relations.config.ts`、`npx playwright test --config playwright.messages.config.ts` 及选择解耦相关场景。浏览器回放可使用临时前端预览端口，这不属于新建 FIN 环境；不能替代8080的真实项目验收。
+- 后端：在工作区执行 `./scripts/build.ps1 -SkipUi -SdkPath .local/sdk`（先有对应前端构建），再设该SDK为 `FAN_HOME` 执行 `.local/sdk/bin/fant.bat finEnergy`；目标为实际匹配候选资源的构建成功、受影响测试通过，不把零测试或仅编译作为业务验收。
 - 真实 FIN：使用第三节两个固定入口和已有授权连接，按FT01–FT09记录实际结果；不再要求隔离 FIN、复制项目或另一个端口。共享 FIN 更新由开发协调，测试等候明确候选而非另找环境。
 - 保留发布版本一致性入口 `node scripts/check-versions.mjs`。依赖干净安装的既有阻塞按实际状态记录，不用已有 node_modules 冒充安装验证。
 - 完成条件：日志不进入任何业务运算；当前关系选表及堆积正确；局部对照与自动合计解耦；虚拟表计算与存储保留；消息中心可读且不影响统计；缺测／单位／权限保护有效；快照与导出一致；两目标项目按实际覆盖验收并披露缺口。

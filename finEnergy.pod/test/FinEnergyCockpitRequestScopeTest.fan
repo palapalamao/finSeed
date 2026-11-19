@@ -1,0 +1,727 @@
+using util
+
+** Controlled request/gate/wire lifetime, not native HTTP authentication proof.
+class FinEnergyCockpitRequestScopeTest : Test
+{
+  Void testCompletedProtectedFactsStaySharedAcrossReportsWithinTheSameQuota()
+  {
+    scope:=FinEnergyCockpitRequestScope("shared-completed-borrows","a");budget:=scope.stream.state
+    pool:=FinEnergyPreparedOwner(budget);first:=FinEnergyPreparedOwner(budget);second:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    rows:=[Str:Obj?][,];(0..<300).each |i| {rows.add(Str:Obj?["index":i,"values":Obj?[0f,null,3f]])}
+    expected:=rows.toImmutable
+    // The original pool keeps its own complete mutable graph and fee.
+    pool.hold(1+rows.size+rows.size*7);pool.watch |->Void| {rows.each |row| {((List)row["values"]).clear;row.clear};rows.clear}
+    a:=Str:Obj?["rows":rows];b:=Str:Obj?[:];b.ordered=true
+    b["direct"]=rows[42];b["rows"]=rows;b["equal"]=rows[42].dup
+    first.hold(64);first.watch |->Void| {a.clear}
+    second.hold(64);second.watch |->Void| {b.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],[rows]);one:=scope.freezeOwnedReport("one",a,first);first.close
+      verifyEq(one["rows"],expected);verifyEq(rows,expected)
+      // Another report references the exact already-finalized pool, not a
+      // second pool copy. Only its small private wrapper needs new storage.
+      peer.hold(budget.remaining-500);held:=peer.entries
+      scope.prepareReportFacts(b,second)
+      verify(b["rows"].isImmutable);verify(b["direct"].isImmutable)
+      two:=scope.freezeOwnedReport("two",b,second)
+      verify(one["rows"]===two["rows"])
+      verify(((List)one["rows"])[42]===two["direct"])
+      verify(two["equal"]!==two["direct"])
+      verifyEq(((Map)two["equal"])["values"],((Map)two["direct"])["values"])
+      verify(((Map)two["equal"])["values"]===((Map)two["direct"])["values"])
+      verifyEq(rows,expected);verify(!rows.isImmutable);verifyEq(peer.entries,held)
+      second.close;scope.releaseReportBorrows;pool.close
+      verifyEq(one["rows"],expected);verifyEq(two["rows"],expected)
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {first.close;second.close;scope.close;pool.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testEqualProtectedFactsRemainDistinctAcrossReports()
+  {
+    scope:=FinEnergyCockpitRequestScope("distinct-protected-facts","a");budget:=scope.stream.state
+    a:=Str:Obj?["values":Obj?[0f,null,3f]];b:=Str:Obj?["values":Obj?[0f,null,3f]]
+    first:=FinEnergyPreparedOwner(budget);second:=FinEnergyPreparedOwner(budget)
+    x:=Str:Obj?["fact":a];y:=Str:Obj?["fact":b]
+    first.hold(32);first.watch |->Void| {x.clear};second.hold(32);second.watch |->Void| {y.clear}
+    try
+    {
+      scope.prepareReportBorrows([a,b],Obj[,]);one:=scope.freezeOwnedReport("a",x,first);two:=scope.freezeOwnedReport("b",y,second)
+      verifyEq(one["fact"],two["fact"]);verify(one["fact"]!==two["fact"])
+      verify(((Map)one["fact"])["values"]!==((Map)two["fact"])["values"])
+      verifyEq(a,Str:Obj?["values":Obj?[0f,null,3f]]);verifyEq(b,a)
+    }
+    finally {first.close;second.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testCleaningFactChargesImmutableDescendantsThroughFinalScopeLifetime()
+  {
+    [false,true].each |immutableRoot|
+    {
+      scope:=FinEnergyCockpitRequestScope("cleaning-fact-ownership","a");budget:=scope.stream.state
+      source:=Str:Obj?["nested":Str:Obj?["values":[1,2,3]].toImmutable]
+      if(immutableRoot) source=(Str:Obj?)source.toImmutable
+      try
+      {
+        owner:=scope.historyOutput;before:=owner.entries
+        result:=(Map)scope->freezeCleaningFact(source)
+        verify(result.isImmutable);verifyEq(result,source);verify(result["nested"]===source["nested"])
+        // Outer map2 + nested map2 + vector4, plus one retained root holder.
+        verify(owner.entries-before>=8+3,"already immutable source containers need their own surviving ownership")
+        frozen:=scope.freezeSnapshot(["fact":result]);verify(frozen["fact"]===result)
+      }
+      finally {scope.close}
+      verifyEq(budget.temporary.val,0)
+    }
+  }
+
+  Void testCleaningFactRejectsCyclesAndQuotaWithoutMutatingItsSource()
+  {
+    scope:=FinEnergyCockpitRequestScope("cleaning-fact-failure","a");budget:=scope.stream.state
+    source:=Str:Obj?[:];source["self"]=source;peer:=FinEnergyPreparedOwner(budget)
+    try
+    {
+      before:=scope.entries;verifyErr(NotImmutableErr#) {scope->freezeCleaningFact(source)}
+      verifyEq(scope.entries,before);verify(source["self"]===source)
+      bad:=Obj:Obj?[:];bad[Str:Obj?["key":1].toImmutable]=0
+      verifyErr(NotImmutableErr#) {scope->freezeCleaningFact(bad)};verifyEq(scope.entries,before)
+      source.clear;source["value"]=0
+      peer.hold(budget.remaining-1);held:=peer.entries
+      verifyErr(FinEnergyHttpErr#) {scope->freezeCleaningFact(source)}
+      verifyEq(peer.entries,held);verifyEq(scope.entries,before);verifyEq(source["value"],0)
+      peer.close;result:=(Map)scope->freezeCleaningFact(source);verifyEq(result["value"],0)
+    }
+    finally {peer.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testConservativePublicGraphCompactionFitsSmallTraversalWorkspace()
+  {
+    scope:=FinEnergyCockpitRequestScope("public-graph-compaction","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    rows:=[Str:Obj?][,];400.times |i| {rows.add(["value":i])};source:=Str:Obj?["rows":rows]
+    producer.hold(2000);scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-96);held:=peer.entries
+    try
+    {
+      verifyEq(scope.publicReportEntries(["value":0],12),12)
+      compact:=scope.publicReportEntries(source,producer.entries)
+      verifyEq(compact,2+401+400*2+32)
+      verifyEq(peer.entries,held);verifyEq(rows.size,400);verifyEq(rows.last["value"],399)
+      verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testPrivateSourceHeadersTransferBeforeReportsWithoutAnExtraDeepCopy()
+  {
+    scope:=FinEnergyCockpitRequestScope("owned-source-headers","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget);rows:=[Str:Obj?][,];stats:=Str:Obj?["nativeReadCount":17]
+    100.times |i|
+    {
+      row:=Str:Obj?["pointId":"p$i","unit":"kWh","sourceIds":["p$i"],"configRefs":[["id":"cfg$i","mod":"version"]],"streaming":stats]
+      20.times |j| {row["metadata$j"]=j};rows.add(row)
+    }
+    expected:=rows.toImmutable;producer.hold(8000);producer.watch |->Void| {rows.clear}
+    peer.hold(budget.remaining-2200);held:=peer.entries
+    try
+    {
+      result:=scope.freezeSourceHeaders(rows,producer)
+      verify(result.isImmutable);verifyEq(result,expected);verify(rows.isEmpty);verify(stats.isEmpty)
+      verify(result.first["streaming"]===result.last["streaming"]);verifyEq(((Map)result.first["streaming"])["nativeReadCount"],17)
+      verify(scope.freezeHistoryHeaders(result.dup)===result)
+      verifyErr(ArgErr#) {scope.freezeHistoryHeaders([result.first.dup])}
+      producer.close;verifyEq(peer.entries,held);scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testImmutablePayloadBorrowingRequiresThisScopesLiveSnapshotAndOutput()
+  {
+    scope:=FinEnergyCockpitRequestScope("payload-source","a");foreign:=FinEnergyCockpitRequestScope("payload-source","b")
+    other:=FinEnergyPreparedOwner(scope.stream.state)
+    try
+    {
+      source:=scope.freezeSnapshot(["rows":[["value":0f]],"diagnostics":["rowBudget":1000]])
+      output:=scope.payloadOutput;verify(scope.canBorrowPayload(source,output))
+      equal:=source.dup.toImmutable;verifyEq(equal,source);verify(!scope.canBorrowPayload(equal,output))
+      verify(!scope.canBorrowPayload(source,other));verify(!foreign.canBorrowPayload(source,output))
+      // A diagnostic projection may construct a new immutable graph. It has
+      // equal business values, but does not carry this scope's admission proof.
+      projected:=(Str:Obj?)source.dup.set("diagnostics",["changed":true]).toImmutable
+      verify(!scope.canBorrowPayload(projected,output))
+      output.close;verify(!scope.canBorrowPayload(source,output))
+    }
+    finally {other.close;scope.close;foreign.close}
+    verifyEq(scope.stream.state.temporary.val,0);verifyEq(foreign.stream.state.temporary.val,0)
+  }
+
+  Void testOwnedReportTransferPreservesAliasesAndEveryBorrowedDescendant()
+  {
+    scope:=FinEnergyCockpitRequestScope("transfer-aliases","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);other:=FinEnergyPreparedOwner(budget)
+    child:=Str:Obj?["values":[7f,null,0f]];sample:=Str:Obj?["quality":"partial","detail":[child]]
+    catalog:=Str:Obj?["nested":[child]];beforeCatalog:=catalog.toImmutable;beforeSample:=sample.toImmutable
+    shared:=Str:Obj?["name":"中文 😀","values":[12.5f,null,0f]];equal:=shared.dup
+    source:=Str:Obj?[:];source.ordered=true
+    source["same"]=[shared,shared];source["equal"]=equal;source["directBorrow"]=child
+    source["sampleBorrow"]=sample["detail"];source["distinctEqualBorrow"]=child.dup
+    expected:=source.toImmutable;producer.hold(512);producer.watch |->Void| {source.clear}
+    second:=Str:Obj?["directBorrow":child,"sampleBorrow":sample]
+    secondExpected:=second.toImmutable;other.hold(128);other.watch |->Void| {second.clear}
+    try
+    {
+      scope.prepareReportBorrows([catalog],[sample])
+      result:=scope.freezeOwnedReport("first",source,producer)
+      verify(result.isImmutable);verify(result.ordered);verifyEq(result,expected)
+      same:=(List)result["same"];verify(same.first===same.last);verify(same.first!==result["equal"])
+      verify(((Map)same.first)["values"]===((Map)result["equal"])["values"])
+      verify(result["directBorrow"]!==result["distinctEqualBorrow"])
+      verify(source.isEmpty);verify(shared.isEmpty);verify(equal.isEmpty)
+      verifyEq(catalog,beforeCatalog);verifyEq(sample,beforeSample);verifyEq(child["values"],[7f,null,0f])
+      verify(scope.frozenReport("first")===result);producer.close
+      next:=scope.freezeOwnedReport("second",second,other);verifyEq(next,secondExpected)
+      verifyEq(catalog,beforeCatalog);verifyEq(sample,beforeSample);other.close
+      verifyEq(result,expected);verifyEq(next,secondExpected)
+    }
+    finally {producer.close;other.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedWideReportTransfersParentLinksBeforeCopyingItsChildren()
+  {
+    scope:=FinEnergyCockpitRequestScope("wide-report-transfer","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    rows:=(0..<2000).map |i->Str:Obj?| {["index":i,"value":i.toFloat]}
+    source:=Str:Obj?["rows":rows];expected:=source.toImmutable
+    // Root, row vector, 2000 distinct three-entry maps and cleanup/control.
+    producer.hold(32+2+2001+6000);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-11000);held:=peer.entries
+      frozen:=scope.freezeOwnedReport("daily",source,producer)
+      verify(frozen.isImmutable);verifyEq(frozen,expected);verifyEq(((List)frozen["rows"]).size,2000)
+      verify(source.isEmpty);verify(rows.isEmpty);verifyEq(peer.entries,held)
+      verify(budget.peak.val<=200000);echo("OWNED_WIDE rows=2000 peak="+budget.peak.val+" producerRemaining="+producer.entries);producer.close
+      snapshot:=scope.freezeSnapshot(["report":frozen]);verifyEq(snapshot["report"],expected)
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedSourceVectorsShareAliasesAndTransferTheirRealCharge()
+  {
+    scope:=FinEnergyCockpitRequestScope("owned-source-vectors","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);history:=scope.historyOutput;ids:=["p","q"];borrowed:=["protected"]
+    catalog:=Str:Obj?["sourceIds":borrowed];source:=Str:Obj?[:];source.ordered=true
+    source["aliasBefore"]=ids;source["row"]=Str:Obj?["sourceIds":ids,"value":12f];source["protected"]=catalog
+    expected:=source.toImmutable;producer.hold(64);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,[catalog],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows([catalog],Obj[,]);before:=budget.temporary.val;p:=producer.entries;h:=history.entries
+      scope.prepareReportFacts(source,producer)
+      vector:=(List)((Map)source["row"])["sourceIds"]
+      verify(vector.isImmutable);verifyEq(vector,Str["p","q"]);verify(vector===source["aliasBefore"])
+      verifyEq(vector.typeof,ids.typeof);verify(ids.isEmpty);verify(!borrowed.isImmutable);verifyEq(borrowed,["protected"])
+      verifyEq(producer.entries,p-6);verifyEq(history.entries,h+6);verifyEq(budget.temporary.val,before)
+      scope.prepareReportFacts(source,producer);verifyEq(budget.temporary.val,before);verify(vector===((Map)source["row"])["sourceIds"])
+      frozen:=scope.freezeOwnedReport("vectors",source,producer);producer.close;scope.releaseReportBorrows
+      verifyEq(frozen,expected);verify(((Map)frozen["row"])["sourceIds"]===frozen["aliasBefore"])
+      snapshot:=scope.freezeSnapshot(["report":frozen]);verifyEq(snapshot["report"],expected)
+      verifyEq(vector,Str["p","q"]);verify(history.entries>0)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testSourceVectorPreparationMakesACompleteTightReportTransferPossible()
+  {
+    scope:=FinEnergyCockpitRequestScope("source-vector-capacity","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    points:=[Str:Obj?][,];rows:=[Str:Obj?][,]
+    500.times |i| {ids:=["p$i","q$i"];points.add(["value":i.toFloat,"sourceIds":ids]);rows.add(["value":i.toFloat,"sourceIds":ids])}
+    source:=Str:Obj?["points":points,"rows":rows];expected:=source.toImmutable
+    producer.hold(64+5505);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-2400);held:=peer.entries
+      scope.prepareReportFacts(source,producer);frozen:=scope.freezeOwnedReport("daily",source,producer)
+      verifyEq(frozen,expected);verifyEq(((List)frozen["rows"]).size,500)
+      500.times |i| {verify(((Map)((List)frozen["rows"])[i])["sourceIds"]===((Map)((List)frozen["points"])[i])["sourceIds"])}
+      verify(budget.peak.val<=200000);verifyEq(peer.entries,held);producer.close
+      scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testPublicCleanupDropsLinksWithoutClearingImmutableOwnedFacts()
+  {
+    vector:=Str["p","q"].toImmutable;row:=Str:Obj?["sourceIds":vector,"value":0f];source:=Str:Obj?["rows":[row]]
+    FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])
+    verify(source.isEmpty);verify(row.isEmpty);verifyEq(vector,Str["p","q"])
+  }
+  Void testOwnedLeafFactsRetainOrderedMapsAndAllDistinctAndSharedAliases()
+  {
+    scope:=FinEnergyCockpitRequestScope("owned-leaf-facts","a");producer:=FinEnergyPreparedOwner(scope.stream.state);history:=scope.historyOutput
+    ids:=["p","q"];row:=Str:Obj?[:];row.ordered=true;row["sourceIds"]=ids;row["value"]=12f;row["quality"]="ok"
+    equal:=row.dup;source:=Str:Obj?[:];source.ordered=true;source["before"]=row;source["rows"]=[row,equal]
+    expected:=source.toImmutable;producer.hold(128);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=scope.stream.state.temporary.val;p:=producer.entries;h:=history.entries
+      scope.prepareReportFacts(source,producer)
+      frozenRow:=(Map)source["before"];list:=(List)source["rows"]
+      verify(frozenRow.isImmutable);verify(frozenRow.ordered);verify(!source.isImmutable)
+      verify(frozenRow===list[0]);verify(frozenRow!==list[1]);verify(frozenRow["sourceIds"]===((Map)list[1])["sourceIds"])
+      verifyEq(source,expected);verifyEq(JsonOutStream.writeJsonToStr(source),JsonOutStream.writeJsonToStr(expected))
+      verify(row.isEmpty);verify(equal.isEmpty);verify(ids.isEmpty)
+      verifyEq(producer.entries,p-14);verifyEq(history.entries,h+14);verifyEq(scope.stream.state.temporary.val,before)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testOwnedLeafListsKeepTheirGenericTypeAliasesAndExactCharges()
+  {
+    scope:=FinEnergyCockpitRequestScope("owned-leaf-lists","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);history:=scope.historyOutput;peer:=FinEnergyPreparedOwner(budget)
+    rows:=Obj?[0f,null,"NA",2f];equal:=rows.dup;borrowed:=[7f];borrowedEmpty:=Obj?[,]
+    source:=Str:Obj?[:];source.ordered=true;source["aliasBefore"]=rows;source["rows"]=rows
+    source["nested"]=Str:Obj?["values":Obj?[rows]];source["equal"]=equal;source["borrowed"]=borrowed;source["borrowedEmpty"]=borrowedEmpty
+    expected:=source.toImmutable;producer.hold(128);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,[borrowed,borrowedEmpty],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows([borrowed,borrowedEmpty],Obj[,]);peer.hold(budget.remaining-1500)
+      before:=budget.temporary.val;p:=producer.entries;h:=history.entries;held:=peer.entries
+      scope.prepareReportFacts(source,producer);list:=(List)source["rows"]
+      verify(list.isImmutable);verifyEq(list.typeof,rows.typeof);verifyEq(list.of,Obj?#)
+      verifyEq(list,Obj?[0f,null,"NA",2f]);verify(source["aliasBefore"]===list);verify(((List)((Map)source["nested"])["values"])[0]===list)
+      verify(source["equal"]!==list);verifyEq(source["equal"],list);verify(rows.isEmpty);verify(equal.isEmpty)
+      verify(!borrowed.isImmutable);verifyEq(borrowed,[7f]);verify(source["borrowedEmpty"]===borrowedEmpty);verify(!borrowedEmpty.isImmutable)
+      // Two five-slot lists, a two-slot wrapper and two nested-map slots move,
+      // without reducing total
+      // live charges or changing the unrelated peer's reservation.
+      verifyEq(producer.entries,p-14);verifyEq(history.entries,h+14);verifyEq(budget.temporary.val,before);verifyEq(peer.entries,held)
+      frozen:=scope.freezeOwnedReport("lists",source,producer);verifyEq(frozen,expected)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testLeafListBatchesPreserveFiveHundredSharedPayloadsUnderTightQuota()
+  {
+    scope:=FinEnergyCockpitRequestScope("leaf-list-batches","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    points:=[Str:Obj?][,];rows:=[Str:Obj?][,]
+    500.times |i| {payload:=Obj?[i.toFloat,0f,null];points.add(["value":i.toFloat,"payload":payload]);rows.add(["value":i.toFloat,"payload":payload])}
+    source:=Str:Obj?[:];source.ordered=true;source["before"]=points.first["payload"];source["points"]=points;source["rows"]=rows
+    expected:=source.toImmutable;producer.hold(64+6006);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-2400);held:=peer.entries
+      scope.prepareReportFacts(source,producer);frozen:=scope.freezeOwnedReport("batch",source,producer);verifyEq(frozen,expected)
+      500.times |i| {verify(((Map)((List)frozen["points"])[i])["payload"]===((Map)((List)frozen["rows"])[i])["payload"])}
+      verify(frozen["before"]===((Map)((List)frozen["rows"])[0])["payload"]);verifyEq(peer.entries,held);verify(budget.peak.val<=200000)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testLeafListPartialAdmissionFailurePreservesPeerAndPublishesNothing()
+  {
+    scope:=FinEnergyCockpitRequestScope("leaf-list-failure","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    first:=Obj?[0f,null];second:=(0..<100).map |i->Obj?| {i.toFloat};source:=Str:Obj?[:];source.ordered=true;source["first"]=first;source["second"]=second
+    producer.hold(512);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,])}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);peer.hold(budget.remaining-100);held:=peer.entries
+      verifyErr(FinEnergyHttpErr#) {scope.prepareReportFacts(source,producer)}
+      verify(first.isEmpty);verify(source["first"].isImmutable);verifyEq(second.size,100);verifyEq(peer.entries,held)
+      verifyNull(scope.frozenReport("unpublished"));verify(!scope.responseStarted);verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testSourceVectorPreparationRejectsCyclesAndBalancesPartialQuotaFailure()
+  {
+    scope:=FinEnergyCockpitRequestScope("source-vector-errors","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget)
+    cycle:=Str:Obj?[:];cycle["self"]=cycle
+    first:=["p","q"];second:=(0..<100).map |i->Str| {"p$i"};source:=Str:Obj?[:];source.ordered=true
+    source["first"]=Str:Obj?["sourceIds":first];source["second"]=Str:Obj?["sourceIds":second]
+    producer.hold(256);producer.watch |->Void| {FinEnergyReportConsumer.clearPublic(source,Obj[,],Obj[,]);cycle.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=budget.temporary.val
+      verifyErr(NotImmutableErr#) {scope.prepareReportFacts(cycle,producer)}
+      verify(cycle["self"]===cycle);verifyEq(budget.temporary.val,before)
+      peer.hold(budget.remaining-100);held:=peer.entries
+      verifyErr(FinEnergyHttpErr#) {scope.prepareReportFacts(source,producer)}
+      verify(first.isEmpty);verify(((Map)source["first"])["sourceIds"].isImmutable);verifyEq(second.size,100)
+      verifyEq(peer.entries,held);verifyNull(scope.frozenReport("unpublished"));verify(!scope.responseStarted)
+      verifyEq(budget.temporary.val,scope.entries+producer.entries+peer.entries)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testVectorPreparationValidatesTheWholePrivateGraphBeforeChangingAnyAlias()
+  {
+    scope:=FinEnergyCockpitRequestScope("source-vector-validation","a");producer:=FinEnergyPreparedOwner(scope.stream.state)
+    ids:=["p","q"];source:=Str:Obj?[:];source.ordered=true;source["first"]=Str:Obj?["sourceIds":ids]
+    producer.hold(128);producer.watch |->Void| {source.clear;ids.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,]);before:=scope.stream.state.temporary.val
+      loop:=Obj?[,];loop.add(loop)
+      invalid:=Obj?[Str:Obj?["sourceIds":ids].ro,Obj?[0f].ro,loop,Int:Obj?[1:"badKey"],StrBuf().add("opaque")]
+      invalid.each |value|
+      {
+        source["invalid"]=value
+        verifyErr(NotImmutableErr#) {scope.prepareReportFacts(source,producer)}
+        verifyEq(ids,Str["p","q"]);verify(((Map)source["first"])["sourceIds"]===ids)
+        verifyEq(scope.stream.state.temporary.val,before)
+      }
+      source.remove("invalid");empty:=Obj?[,];source["empty"]=Str:Obj?["sourceIds":empty]
+      scope.prepareReportFacts(source,producer)
+      generic:=(List)((Map)source["empty"])["sourceIds"];verify(generic.isImmutable);verifyEq(generic.typeof,empty.typeof);verifyEq(generic.of,Obj?#);verify(empty.isEmpty)
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testOwnedReportTransferFailurePublishesNothingAndPreservesPeerAndBorrowedInputs()
+  {
+    scope:=FinEnergyCockpitRequestScope("transfer-failure","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget);peer.hold(31);held:=peer.entries
+    borrowed:=Str:Obj?["rows":[["value":0f]]];expected:=borrowed.toImmutable
+    source:=Str:Obj?[:];source.ordered=true;first:=Str:Obj?["data":[1,2,3]]
+    source["first"]=first;source["borrowed"]=borrowed;source["invalid"]=StrBuf().add("opaque")
+    producer.hold(128);producer.watch |->Void| {source.clear}
+    try
+    {
+      scope.prepareReportBorrows([borrowed],Obj[,])
+      verifyErr(NotImmutableErr#) {scope.freezeOwnedReport("failed",source,producer)}
+      verify(first.isEmpty,"The fixture fails after consuming one owned child")
+      verifyNull(scope.frozenReport("failed"));verify(!scope.responseStarted);verifyEq(borrowed,expected)
+      verifyEq(peer.entries,held);producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+  Void testOwnedEarlyCycleRejectsAfterRetiringParentsWithoutReleasingPeer()
+  {
+    scope:=FinEnergyCockpitRequestScope("early-cycle","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);peer:=FinEnergyPreparedOwner(budget);peer.hold(31);held:=peer.entries
+    cycle:=Str:Obj?[:];cycle["self"]=cycle;source:=Str:Obj?["cycle":cycle]
+    producer.hold(64);producer.watch |->Void| {source.clear;cycle.clear}
+    try
+    {
+      scope.prepareReportBorrows(Obj[,],Obj[,])
+      verifyErr(NotImmutableErr#) {scope.freezeOwnedReport("cyclic",source,producer)}
+      verify(source.isEmpty);verify(cycle.isEmpty);verifyNull(scope.frozenReport("cyclic"))
+      verifyEq(peer.entries,held);verify(!scope.responseStarted)
+      producer.close;scope.close;verifyEq(budget.temporary.val,held)
+    }
+    finally {producer.close;scope.close;peer.close}
+    verifyEq(budget.temporary.val,0)
+  }
+
+  Void testOwnedEarlyTransferKeepsReadOnlyBorrowedViewsAndTheirDescendants()
+  {
+    scope:=FinEnergyCockpitRequestScope("early-readonly","a");producer:=FinEnergyPreparedOwner(scope.stream.state)
+    child:=Str:Obj?["values":[0f,null,3f]];catalog:=Str:Obj?["nested":[child]].ro
+    expectedCatalog:=catalog.toImmutable;source:=Str:Obj?[:];source.ordered=true
+    ids:=[1,2,3];equal:=child.dup
+    source["catalog"]=catalog;source["direct"]=child;source["alias"]=child
+    source["collisions"]=Str:Obj?["Aa":child,"BB":equal,"AaAa":ids,"BBBB":ids]
+    expected:=source.toImmutable
+    producer.hold(128);producer.watch |->Void| {source.clear}
+    try
+    {
+      scope.prepareReportBorrows([catalog],Obj[,]);frozen:=scope.freezeOwnedReport("readonly",source,producer)
+      verify(frozen.ordered);verifyEq(frozen,expected);verify(frozen["direct"]===frozen["alias"])
+      verify(((List)((Map)frozen["catalog"])["nested"]).first===frozen["direct"])
+      verifyEq(catalog,expectedCatalog);verifyEq(child["values"],[0f,null,3f])
+      collision:=(Map)frozen["collisions"]
+      verify(collision["Aa"]!==collision["BB"]);verify(collision["AaAa"]===collision["BBBB"])
+      verifyEq(collision["AaAa"].typeof,ids.typeof);verifyEq(collision["AaAa"],[1,2,3])
+      verifyEq(JsonOutStream.writeJsonToStr(frozen),JsonOutStream.writeJsonToStr(expected))
+      producer.close;scope.releaseReportBorrows;verifyEq(frozen,expected);scope.close
+    }
+    finally {producer.close;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testOwnedReportTransferRejectsUnpreparedCrossRequestAndClosedProducers()
+  {
+    scope:=FinEnergyCockpitRequestScope("transfer-context","a");budget:=scope.stream.state
+    producer:=FinEnergyPreparedOwner(budget);foreign:=FinEnergyPreparedOwner(FinEnergyStreamBudget().state)
+    source:=Str:Obj?["value":1];producer.hold(16)
+    try
+    {
+      verifyErr(ArgErr#) {scope.freezeOwnedReport("not-ready",source,producer)}
+      scope.prepareReportBorrows(Obj[,],Obj[,]);verifyErr(ArgErr#) {scope.prepareReportBorrows(Obj[,],Obj[,])}
+      verifyErr(ArgErr#) {scope.freezeOwnedReport("foreign",source,foreign)}
+      producer.close;verifyErr(ArgErr#) {scope.freezeOwnedReport("closed",source,producer)}
+      verifyEq(source,Str:Obj?["value":1]);verifyNull(scope.frozenReport("foreign"));verifyNull(scope.frozenReport("closed"))
+    }
+    finally {producer.close;foreign.close;scope.close}
+    verifyEq(budget.temporary.val,0);verifyEq(foreign.budget.temporary.val,0)
+  }
+
+  Void testExactInputModelFactsShareOneFrozenCopyWithinTheOriginalBudget()
+  {
+    rs:=[Str:Obj?][,];500.times |i| {r:=Str:Obj?["id":"r$i","kind":"meter"];18.times |j| {r["field$j"]="value$j"};rs.add(r)}
+    model:=rs.map |r->Str:Obj?| {r.dup};scope:=FinEnergyCockpitRequestScope("input-facts","a");peer:=FinEnergyPreparedOwner(scope.stream.state);peer.hold(177000)
+    try
+    {
+      frozen:=scope.freezeInputs([:],["modelRecords":model],rs);rows:=(List)frozen["records"];models:=(List)((Map)frozen["owned"])["modelRecords"]
+      verifyEq(rows.typeof,rs.typeof);verifyEq(models.typeof,model.typeof);verify(rows!==models)
+      500.times |i| {verify(rows[i]===models[i])}
+      verifyEq(rs.size,500);verifyEq(model.size,500);verifyEq(budgetValue(scope),scope.entries+peer.entries)
+      scope.close;verifyEq(budgetValue(scope),peer.entries)
+    }
+    finally {scope.close;peer.close}
+  }
+  private Int budgetValue(FinEnergyCockpitRequestScope scope) {scope.stream.state.temporary.val}
+  Void testInputFactsWithDifferentFieldsOrContainerOrderingStaySeparate()
+  {
+    record:=Str:Obj?["id":"m","kind":"meter","name":"original"]
+    changed:=record.dup.set("name","changed");ordered:=Str:Obj?[:];ordered.ordered=true;ordered.setAll(record)
+    scope:=FinEnergyCockpitRequestScope("different-input-facts","a")
+    try
+    {
+      frozen:=scope.freezeInputs([:],["modelRecords":[changed,ordered]],[record]);row:=((List)frozen["records"]).first;models:=(List)((Map)frozen["owned"])["modelRecords"]
+      verify(row!==models.first);verify(row!==models.last);verifyEq(((Map)models.first)["name"],"changed");verify(((Map)models.last).ordered)
+    }
+    finally {scope.close}
+  }
+  Void testPreparationLivesUntilTheCompositeInputIsFrozen()
+  {
+    scope:=FinEnergyCockpitRequestScope("preparation","a");peer:=FinEnergyPreparedOwner(scope.stream.state);peer.hold(31)
+    work:=scope.preparationWorkspace;rows:=[Str:Obj?][["id":"m","name":"原表名"]]
+    work.hold(5);work.watch |->Void| {rows.clear}
+    try
+    {
+      frozen:=scope.freezeInputs(["key":"value"],["modelRecords":rows],rows)
+      verify(rows.isEmpty);verifyEq(work.entries,0)
+      verifyEq(((Map)((List)frozen["records"]).first)["name"],"原表名")
+      verify(((Map)frozen["owned"])["modelRecords"]===frozen["records"])
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testPreparationFailureDoesNotDropAnotherOwnersCharge()
+  {
+    scope:=FinEnergyCockpitRequestScope("preparation-limit","a");work:=scope.preparationWorkspace;peer:=FinEnergyPreparedOwner(scope.stream.state)
+    peer.hold(scope.stream.state.remaining-3);held:=peer.entries
+    try {verifyErr(FinEnergyHttpErr#) {work.hold(4)};scope.close;verifyEq(scope.stream.state.temporary.val,held)}
+    finally {scope.close;peer.close}
+  }
+  Void testSourcePlanReusesOnlyExactFrozenInputFacts()
+  {
+    scope:=FinEnergyCockpitRequestScope("source-plan-facts","a");baseline:=FinEnergyPreparedOwner(scope.stream.state)
+    record:=Str:Obj?["id":"meter","kind":"meter","name":"原始表名","pointId":"point"]
+    plainA:=Str:Obj?["value":1];plainB:=Str:Obj?["value":1]
+    source:=Str:Obj?["same":[record.dup,record.dup],"changed":record.dup.set("name","modified"),"plain":[plainA,plainB]]
+    before:=JsonOutStream.writeJsonToStr(source)
+    try
+    {
+      expected:=FinEnergyCockpitFreeze.value(source,baseline)
+      bundle:=scope.freezeInputs(["schemaVersion":1],[:],[record]);fact:=((List)bundle["records"]).first
+      frozen:=scope.freezeSourcePlan(source)
+      verify(((List)frozen["same"]).all |row| {row===fact})
+      verify(frozen["changed"]!==fact);verifyEq(((Map)frozen["changed"])["name"],"modified")
+      verify(((List)frozen["plain"]).first!==((List)frozen["plain"]).last)
+      // Unordered Map copies may use a different bucket iteration order. The
+      // existing freeze, rather than the mutable input's JSON, is the baseline.
+      verifyEq(JsonOutStream.writeJsonToStr(frozen),JsonOutStream.writeJsonToStr(expected))
+      verifyEq(JsonOutStream.writeJsonToStr(source),before);baseline.close
+      record["name"]="later edit";plainA["value"]=99
+      verifyEq(((Map)((List)frozen["same"]).first)["name"],"原始表名")
+      verifyEq(((Map)((List)frozen["plain"]).first)["value"],1)
+      verifyErr(ArgErr#) {scope.freezeSourcePlan(source)}
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {scope.close;baseline.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testHistoryProofSurvivesMetadataWorkspaceAndRawHeaderCleanup()
+  {
+    scope:=FinEnergyCockpitRequestScope("history-proof","a");peer:=FinEnergyPreparedOwner(scope.stream.state);peer.hold(31)
+    stats:=Str:Obj?["nativeReadCount":2]
+    raw:=Str:Obj?["pointId":"p","configRefs":[["id":"profile","mod":"2026-10-01T00:00:00Z"]],"cleaning":["profileId":"profile","profileVersion":1,"parameters":["deltaMin":0f]],"streaming":stats,"sourceLastObservedAt":"2026-10-01T01:00:00Z"]
+    try
+    {
+      headers:=scope.freezeHistoryHeaders([raw,["pointId":"other","streaming":stats]])
+      verify(headers.first["streaming"]===headers.last["streaming"])
+      work:=scope.metadataWorkspace(1)
+      meta:=FinEnergyCockpitHistoryMeta(["p"],DateTime.fromIso("2026-10-01T02:00:00Z"),work,scope.historyOutput)
+      headers.each |header| {meta.observe(header)}
+      proof:=meta.snapshot;scope.finishMetadata
+      verifyEq(work.entries,0);verifyErr(ArgErr#) {meta.observe(headers.first)}
+      ((Map)((Map)raw["cleaning"])["parameters"])["deltaMin"]=99f;stats["nativeReadCount"]=999;raw.clear
+      verifyEq(((Map)((List)proof["streaming"]).first)["nativeReadCount"],2)
+      verifyEq(((Map)((Map)((List)proof["appliedCleaning"]).first)["parameters"])["deltaMin"],0f)
+      verifyEq(((Map)((List)proof["configRefs"]).first)["id"],"profile")
+      verifyEq(proof["sourceLastObservedAt"],"2026-10-01T01:00:00Z")
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.deliver(proof,|Buf bytes| {verify(bytes.size>0)})
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testThinHeaderCopyCannotBePublishedBeforeItsAdmission()
+  {
+    scope:=FinEnergyCockpitRequestScope("history-header-limit","a");peer:=FinEnergyPreparedOwner(scope.stream.state)
+    peer.hold(scope.stream.state.remaining-24);held:=peer.entries
+    headers:=[Str:Obj?][["pointId":"p","configRefs":[["id":"profile","mod":"version"]]]]
+    try
+    {
+      verifyErr(FinEnergyHttpErr#) {scope.freezeHistoryHeaders(headers)}
+      verifyEq(headers.first["pointId"],"p");verify(!scope.responseStarted)
+      scope.close;verifyEq(scope.stream.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testPlanningCatalogCanReleaseItsOwnersWithoutClearingInputRecords()
+  {
+    scope:=FinEnergyCockpitRequestScope("planning-scope","a");peer:=FinEnergyPreparedOwner(scope.stream.state);peer.hold(31)
+    records:=[Str:Obj?][["id":"c","kind":"category","unit":"kWh"],["id":"s","kind":"space"],["id":"m","kind":"meter","pointId":"p","categoryId":"c","spaceId":"s"]].toImmutable
+    try
+    {
+      context:=scope.planningContext(records,TimeZone.utc,"space",false)
+      verifyErr(ArgErr#) {scope.sourceCatalog(records.dup.toImmutable,TimeZone.utc,[:])}
+      catalog:=scope.sourceCatalog(records,TimeZone.utc,["p":"kWh"])
+      verifyEq(catalog.primaryUnit("p"),"kWh")
+      verifyErr(ArgErr#) {scope.sourceCatalog(records,TimeZone.utc,["p":"Wh"])}
+      verifyEq(context.scopeMeters("s","c").first["id"],"m")
+      verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      scope.finishPlanning;scope.finishPlanning
+      verifyEq(((Map)records.last)["pointId"],"p");verifyEq(scope.stream.state.temporary.val,scope.entries+peer.entries)
+      verifyErr(ArgErr#) {scope.planningContext(records,TimeZone.utc,"space",false)}
+      scope.close;verifyEq(scope.stream.state.temporary.val,peer.entries)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testPlanningCatalogAdmissionFailureDoesNotReleasePeerOrTheGate()
+  {
+    scope:=FinEnergyCockpitRequestScope("planning-limit","a");peer:=FinEnergyPreparedOwner(scope.stream.state)
+    records:=[Str:Obj?][,];(0..<300).each |i| {records.add(["id":"m$i","kind":"meter"])};records=records.toImmutable
+    peer.hold(scope.stream.state.remaining-100);held:=peer.entries
+    try
+    {
+      verifyErr(FinEnergyHttpErr#) {scope.planningContext(records,TimeZone.utc,"metering",false)}
+      verifyEq(peer.entries,held);verifyEq(scope.stream.nativeReads,0)
+      verifyErr(FinEnergyHttpErr#) {FinEnergyCockpitGate.enter("planning-limit","a")}
+      scope.close;verifyEq(scope.stream.state.temporary.val,held)
+    }
+    finally {scope.close;peer.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testFinalSnapshotBorrowsFrozenInputsAndKeepsItsCopyOwnedThroughTheSender()
+  {
+    scope:=FinEnergyCockpitRequestScope("request-snapshot","a");Map? frozen
+    try
+    {
+      inputs:=scope.freezeInputs(["schemaVersion":1],[:],[["id":"m","kind":"meter"]])
+      inputRecord:=(Map)((List)inputs["records"]).first;shared:=Str:Obj?["value":12.5f,"source":inputRecord]
+      frozen=scope.freezeSnapshot(["schemaVersion":1,"left":shared,"right":shared])
+      verify(frozen.isImmutable);verify(frozen["left"]===frozen["right"]);verify(((Map)frozen["left"])["source"]===inputRecord)
+      shared["value"]=999f;verifyEq(((Map)frozen["left"])["value"],12.5f)
+      scope.deliver((Str:Obj?)frozen,|Buf bytes| {verify(scope.stream.state.temporary.val>scope.entries)})
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {frozen=null;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testInputBundleSharesFrozenModelRecordsAndKeepsTheirOwnerThroughSending()
+  {
+    record:=Str:Obj?["id":"m","name":"Original 中文","kind":"meter"]
+    records:=[record];owned:=Str:Obj?["modelRecords":records,"modelComplete":true]
+    scope:=FinEnergyCockpitRequestScope("request-inputs","a");Map? inputs
+    try
+    {
+      inputs=scope.freezeInputs(["schemaVersion":1],owned,records)
+      verify(inputs.isImmutable);model:=(List)((Map)inputs["owned"])["modelRecords"]
+      verify(model===inputs["records"]);verify(model.first===((List)inputs["records"]).first)
+      record["name"]="later edit";verifyEq(((Map)model.first)["name"],"Original 中文")
+      scope.deliver(["schemaVersion":1],|Buf bytes| {verify(scope.stream.state.temporary.val>scope.entries);verify(inputs.isImmutable)})
+      verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {inputs=null;scope.close}
+    verifyEq(scope.stream.state.temporary.val,0);verify(!records.isImmutable)
+  }
+  Void testGateRemainsHeldThroughWireSendingAndAnOldCloseCannotReleaseANewRequest()
+  {
+    project:="request-scope-success";user:="a";scope:=FinEnergyCockpitRequestScope(project,user);calls:=0
+    try
+    {
+      scope.deliver(["schemaVersion":1,"name":"中文 EN 😀"],|Buf bytes|
+      {
+        calls++;verify(scope.responseStarted);verify(!scope.canSendError)
+        verifyErr(ArgErr#) {scope.close}
+        verifyErr(FinEnergyHttpErr#) {unexpected:=FinEnergyCockpitRequestScope(project,user);unexpected.close}
+        verifyErr(FinEnergyHttpErr#) {FinEnergyCockpitGate.enter(project,user)}
+        parsed:=(Map)JsonInStream(bytes.in).readJson
+        verifyEq(parsed["ok"],true);verifyEq(((Map)parsed["data"])["name"],"中文 EN 😀")
+      })
+      verifyEq(calls,1);verifyEq(scope.stream.state.temporary.val,scope.entries)
+    }
+    finally {scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+    next:=FinEnergyCockpitRequestScope(project,user)
+    try {scope.close;verifyErr(FinEnergyHttpErr#) {FinEnergyCockpitGate.enter(project,user)}}
+    finally {next.close}
+    FinEnergyCockpitGate.enter(project,user);FinEnergyCockpitGate.leave(project,user)
+  }
+  Void testSerializationFailureAllowsAnErrorButSendingFailureNeverAllowsASecondResponse()
+  {
+    project:="request-scope-failure";scope:=FinEnergyCockpitRequestScope(project,"a");calls:=0
+    try
+    {
+      payloadBytes:=8388608
+      try {scope.deliver(["text":"x".padl(payloadBytes,'x')],|Buf bytes| {calls++});fail("Expected complete-envelope limit")}
+      catch(FinEnergyHttpErr e) {verifyEq(e.status,413)}
+      verify(!scope.responseStarted);verify(scope.canSendError);verifyEq(calls,0)
+      verifyErr(FinEnergyHttpErr#) {FinEnergyCockpitGate.enter(project,"a")}
+    }
+    finally {scope.close}
+    scope=FinEnergyCockpitRequestScope(project,"a");original:=IOErr("controlled socket write failure");Err? observed
+    try
+    {
+      try {scope.deliver(["value":12.5f],|Buf bytes| {calls++;throw original})}
+      catch(Err e) {observed=e}
+      verify(observed===original);verifyEq(calls,1);verify(scope.responseStarted);verify(!scope.canSendError)
+      verifyErr(ArgErr#) {scope.deliver(["value":99f],|Buf bytes| {calls++})}
+      verifyEq(calls,1)
+    }
+    finally {scope.close}
+    verifyEq(scope.stream.state.temporary.val,0)
+  }
+  Void testRejectedScopeDoesNotReleaseAnotherRequestOrItsBudget()
+  {
+    project:="request-scope-admission";scope:=FinEnergyCockpitRequestScope(project,"a")
+    stream:=FinEnergyStreamBudget();peer:=FinEnergyPreparedOwner(stream.state);peer.hold(stream.state.remaining);held:=peer.entries
+    try
+    {
+      verifyErr(FinEnergyHttpErr#) {unexpected:=FinEnergyCockpitRequestScope(project,"a",stream);unexpected.close}
+      verifyErr(FinEnergyHttpErr#) {FinEnergyCockpitGate.enter(project,"a")}
+      verifyErr(FinEnergyHttpErr#) {unexpected:=FinEnergyCockpitRequestScope(project,"b",stream);unexpected.close}
+      verifyEq(peer.entries,held);verifyEq(stream.state.temporary.val,held)
+      // Failed b construction entered and then rolled back only b's gate slot.
+      FinEnergyCockpitGate.enter(project,"b");FinEnergyCockpitGate.leave(project,"b")
+    }
+    finally {peer.close;scope.close}
+    verifyEq(stream.state.temporary.val,0)
+  }
+}

@@ -35,9 +35,9 @@ node scripts/check-versions.mjs
 前端改动，使用当前目录（旧版工作区为 `finSeed.pod/ts`） / Frontend changes; older checkouts use `finSeed.pod/ts`:
 
 ```powershell
-npm --prefix enerCubix.pod/ts ci
-npm --prefix enerCubix.pod/ts test
-npm --prefix enerCubix.pod/ts run build
+npm --prefix finEnergy.pod/ts ci
+npm --prefix finEnergy.pod/ts test
+npm --prefix finEnergy.pod/ts run build
 ```
 
 浏览器只运行受影响场景；新增界面覆盖中英文与手机。不要在其他开发者正在使用的工作区重新安装依赖或覆盖构建输出。

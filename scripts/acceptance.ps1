@@ -1,45 +1,45 @@
-param([string]$PodPath = (Join-Path $PSScriptRoot '..\out\enerCubix.pod'))
+param([string]$PodPath = (Join-Path $PSScriptRoot '..\out\finEnergy.pod'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$enerCubixArtifact = (Resolve-Path -LiteralPath $PodPath).Path
-$enerCubixRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$enerCubixVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $enerCubixRoot 'enerCubix.pod\build.fan')), 'version\s*=\s*Version\("([^"]+)"\)').Groups[1].Value
-if (-not $enerCubixVersion) { throw 'Build version is missing.' }
-foreach ($enerCubixManifest in @('package.json', 'enerCubix.pod\ts\package.json', 'enerCubix.pod\ts\package-lock.json')) {
+$finEnergyArtifact = (Resolve-Path -LiteralPath $PodPath).Path
+$finEnergyRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$finEnergyVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $finEnergyRoot 'finEnergy.pod\build.fan')), 'version\s*=\s*Version\("([^"]+)"\)').Groups[1].Value
+if (-not $finEnergyVersion) { throw 'Build version is missing.' }
+foreach ($finEnergyManifest in @('package.json', 'finEnergy.pod\ts\package.json', 'finEnergy.pod\ts\package-lock.json')) {
     # Windows PowerShell 5 cannot decode npm's empty packages[""] key.
-    $enerCubixManifestVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $enerCubixRoot $enerCubixManifest)), '(?m)^  "version":\s*"([^"]+)"').Groups[1].Value
-    if ($enerCubixManifestVersion -ne $enerCubixVersion) { throw "Version mismatch in $enerCubixManifest : expected $enerCubixVersion, got $enerCubixManifestVersion." }
+    $finEnergyManifestVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $finEnergyRoot $finEnergyManifest)), '(?m)^  "version":\s*"([^"]+)"').Groups[1].Value
+    if ($finEnergyManifestVersion -ne $finEnergyVersion) { throw "Version mismatch in $finEnergyManifest : expected $finEnergyVersion, got $finEnergyManifestVersion." }
 }
-$enerCubixZip = [IO.Compression.ZipFile]::OpenRead($enerCubixArtifact)
+$finEnergyZip = [IO.Compression.ZipFile]::OpenRead($finEnergyArtifact)
 try {
-    $enerCubixEntries = @($enerCubixZip.Entries | ForEach-Object FullName)
-    $enerCubixRequired = @('meta.props', 'index.props', 'lib/menu.trio', 'locale/en.props', 'locale/zh.props', 'res/web/enerCubix/index.html')
-    foreach ($enerCubixEntry in $enerCubixRequired) {
-        if ($enerCubixEntry -notin $enerCubixEntries) { throw "Pod missing required entry: $enerCubixEntry" }
+    $finEnergyEntries = @($finEnergyZip.Entries | ForEach-Object FullName)
+    $finEnergyRequired = @('meta.props', 'index.props', 'lib/menu.trio', 'locale/en.props', 'locale/zh.props', 'res/web/finEnergy/index.html')
+    foreach ($finEnergyEntry in $finEnergyRequired) {
+        if ($finEnergyEntry -notin $finEnergyEntries) { throw "Pod missing required entry: $finEnergyEntry" }
     }
-    $enerCubixReader = [IO.StreamReader]::new($enerCubixZip.GetEntry('meta.props').Open())
-    try { $enerCubixMeta = $enerCubixReader.ReadToEnd() } finally { $enerCubixReader.Dispose() }
-    if ($enerCubixMeta -notmatch '(?m)^pod.name=enerCubix\s*$' -or $enerCubixMeta -notmatch ('(?m)^pod.version=' + [regex]::Escape($enerCubixVersion) + '\s*$')) { throw 'Pod name/version mismatch.' }
-    $enerCubixReader = [IO.StreamReader]::new($enerCubixZip.GetEntry('index.props').Open())
-    try { $enerCubixIndex = $enerCubixReader.ReadToEnd() } finally { $enerCubixReader.Dispose() }
-    foreach ($enerCubixRegistration in @('skyarc.ext=enerCubix::EnerCubixExt', 'skyarc.lib=enerCubix::EnerCubixLib', 'fin.lang=enerCubix')) {
-        if (-not $enerCubixIndex.Contains($enerCubixRegistration)) { throw "Missing registration: $enerCubixRegistration" }
+    $finEnergyReader = [IO.StreamReader]::new($finEnergyZip.GetEntry('meta.props').Open())
+    try { $finEnergyMeta = $finEnergyReader.ReadToEnd() } finally { $finEnergyReader.Dispose() }
+    if ($finEnergyMeta -notmatch '(?m)^pod.name=finEnergy\s*$' -or $finEnergyMeta -notmatch ('(?m)^pod.version=' + [regex]::Escape($finEnergyVersion) + '\s*$')) { throw 'Pod name/version mismatch.' }
+    $finEnergyReader = [IO.StreamReader]::new($finEnergyZip.GetEntry('index.props').Open())
+    try { $finEnergyIndex = $finEnergyReader.ReadToEnd() } finally { $finEnergyReader.Dispose() }
+    foreach ($finEnergyRegistration in @('skyarc.ext=finEnergy::FinEnergyExt', 'skyarc.lib=finEnergy::FinEnergyLib', 'fin.lang=finEnergy')) {
+        if (-not $finEnergyIndex.Contains($finEnergyRegistration)) { throw "Missing registration: $finEnergyRegistration" }
     }
-    $enerCubixResult = [ordered]@{
-        artifact = $enerCubixArtifact
-        version = $enerCubixVersion
-        sha256 = (Get-FileHash -LiteralPath $enerCubixArtifact -Algorithm SHA256).Hash.ToLowerInvariant()
+    $finEnergyResult = [ordered]@{
+        artifact = $finEnergyArtifact
+        version = $finEnergyVersion
+        sha256 = (Get-FileHash -LiteralPath $finEnergyArtifact -Algorithm SHA256).Hash.ToLowerInvariant()
         checkedAt = [DateTime]::UtcNow.ToString('o')
         targetFin = '5.3.0.2761'
         archiveChecks = 'passed'
-        requiredEntries = $enerCubixRequired
-        resourceEntries = @($enerCubixEntries | Where-Object { $_ -match '^(lib/|locale/|res/)' })
+        requiredEntries = $finEnergyRequired
+        resourceEntries = @($finEnergyEntries | Where-Object { $_ -match '^(lib/|locale/|res/)' })
         runtimeVerified = $false
     }
-    $enerCubixJson = $enerCubixResult | ConvertTo-Json -Depth 6
-    $enerCubixReport = Join-Path (Split-Path -Parent $enerCubixArtifact) 'acceptance.json'
-    [IO.File]::WriteAllText($enerCubixReport, $enerCubixJson, [Text.UTF8Encoding]::new($false))
-    Write-Output $enerCubixJson
+    $finEnergyJson = $finEnergyResult | ConvertTo-Json -Depth 6
+    $finEnergyReport = Join-Path (Split-Path -Parent $finEnergyArtifact) 'acceptance.json'
+    [IO.File]::WriteAllText($finEnergyReport, $finEnergyJson, [Text.UTF8Encoding]::new($false))
+    Write-Output $finEnergyJson
 }
-finally { $enerCubixZip.Dispose() }
+finally { $finEnergyZip.Dispose() }

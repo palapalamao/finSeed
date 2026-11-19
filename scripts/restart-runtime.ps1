@@ -1,40 +1,40 @@
 param([string]$ExpectedSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$enerCubixRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$enerCubixSdk = Join-Path $enerCubixRoot '.local\sdk'
-$enerCubixRuntimeSdk = Join-Path $enerCubixRoot '.local\runtime-sdk'
-$enerCubixVar = Join-Path $enerCubixRoot '.local\runtime-var'
-$enerCubixLauncher = Join-Path $enerCubixRoot '.local\run-native.ps1'
-if (-not (Test-Path -LiteralPath $enerCubixLauncher)) { throw 'Isolated runtime launcher is missing.' }
-$enerCubixPodSource = Join-Path $enerCubixSdk 'lib\fan\enerCubix.pod'
-$enerCubixPodTarget = Join-Path $enerCubixRuntimeSdk 'lib\fan\enerCubix.pod'
-if (-not (Test-Path -LiteralPath (Join-Path $enerCubixRuntimeSdk 'bin\fan.bat'))) { throw 'Prepare the separate runtime SDK before restarting.' }
-$enerCubixSourceHash = (Get-FileHash -LiteralPath $enerCubixPodSource -Algorithm SHA256).Hash
-if ($ExpectedSha256 -and $enerCubixSourceHash -ne $ExpectedSha256) { throw 'Candidate Pod hash differs from the requested stable artifact.' }
-$enerCubixListeners = @(Get-NetTCPConnection -State Listen -LocalPort 38085 -ErrorAction SilentlyContinue)
-if ($enerCubixListeners.Count -ne 1 -or $enerCubixListeners[0].LocalAddress -ne '127.0.0.1') {
+$finEnergyRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$finEnergySdk = Join-Path $finEnergyRoot '.local\sdk'
+$finEnergyRuntimeSdk = Join-Path $finEnergyRoot '.local\runtime-sdk'
+$finEnergyVar = Join-Path $finEnergyRoot '.local\runtime-var'
+$finEnergyLauncher = Join-Path $finEnergyRoot '.local\run-native.ps1'
+if (-not (Test-Path -LiteralPath $finEnergyLauncher)) { throw 'Isolated runtime launcher is missing.' }
+$finEnergyPodSource = Join-Path $finEnergySdk 'lib\fan\finEnergy.pod'
+$finEnergyPodTarget = Join-Path $finEnergyRuntimeSdk 'lib\fan\finEnergy.pod'
+if (-not (Test-Path -LiteralPath (Join-Path $finEnergyRuntimeSdk 'bin\fan.bat'))) { throw 'Prepare the separate runtime SDK before restarting.' }
+$finEnergySourceHash = (Get-FileHash -LiteralPath $finEnergyPodSource -Algorithm SHA256).Hash
+if ($ExpectedSha256 -and $finEnergySourceHash -ne $ExpectedSha256) { throw 'Candidate Pod hash differs from the requested stable artifact.' }
+$finEnergyListeners = @(Get-NetTCPConnection -State Listen -LocalPort 38085 -ErrorAction SilentlyContinue)
+if ($finEnergyListeners.Count -ne 1 -or $finEnergyListeners[0].LocalAddress -ne '127.0.0.1') {
     throw 'Expected one loopback-only isolated FIN listener on port 38085.'
 }
-$enerCubixProcessId = $enerCubixListeners[0].OwningProcess
-$enerCubixProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$enerCubixProcessId"
-$enerCubixKnownHome = $enerCubixProcess -and ($enerCubixProcess.CommandLine -match ([regex]::Escape("-Dfan.home=$enerCubixSdk") + '(?=["\s])') -or $enerCubixProcess.CommandLine -match ([regex]::Escape("-Dfan.home=$enerCubixRuntimeSdk") + '(?=["\s])'))
-if (-not $enerCubixKnownHome -or $enerCubixProcess.CommandLine -notmatch ([regex]::Escape("-var $enerCubixVar") + '(?=["\s]|$)') -or $enerCubixProcess.CommandLine -notmatch 'fanx\.tools\.Fan\s+finStackHost') {
+$finEnergyProcessId = $finEnergyListeners[0].OwningProcess
+$finEnergyProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$finEnergyProcessId"
+$finEnergyKnownHome = $finEnergyProcess -and ($finEnergyProcess.CommandLine -match ([regex]::Escape("-Dfan.home=$finEnergySdk") + '(?=["\s])') -or $finEnergyProcess.CommandLine -match ([regex]::Escape("-Dfan.home=$finEnergyRuntimeSdk") + '(?=["\s])'))
+if (-not $finEnergyKnownHome -or $finEnergyProcess.CommandLine -notmatch ([regex]::Escape("-var $finEnergyVar") + '(?=["\s]|$)') -or $finEnergyProcess.CommandLine -notmatch 'fanx\.tools\.Fan\s+finStackHost') {
     throw 'Refusing to stop a process outside the isolated FIN home and var directory.'
 }
-Stop-Process -Id $enerCubixProcessId -Force
-for ($enerCubixAttempt = 0; $enerCubixAttempt -lt 20; $enerCubixAttempt++) {
-    if (-not (Get-Process -Id $enerCubixProcessId -ErrorAction SilentlyContinue)) { break }
+Stop-Process -Id $finEnergyProcessId -Force
+for ($finEnergyAttempt = 0; $finEnergyAttempt -lt 20; $finEnergyAttempt++) {
+    if (-not (Get-Process -Id $finEnergyProcessId -ErrorAction SilentlyContinue)) { break }
     Start-Sleep -Milliseconds 250
 }
-if (Get-Process -Id $enerCubixProcessId -ErrorAction SilentlyContinue) { throw 'Isolated process did not stop; Pod was not replaced.' }
-Copy-Item -LiteralPath $enerCubixPodSource -Destination $enerCubixPodTarget -Force
-if ((Get-FileHash -LiteralPath $enerCubixPodTarget -Algorithm SHA256).Hash -ne $enerCubixSourceHash) { throw 'Candidate Pod changed during restart; leave runtime stopped and select a stable artifact.' }
-$enerCubixStamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss')
-foreach ($enerCubixLog in @('native-out.log', 'native-err.log')) {
-    $enerCubixLogPath = Join-Path $enerCubixRoot ".local\$enerCubixLog"
-    if (Test-Path -LiteralPath $enerCubixLogPath) { Copy-Item -LiteralPath $enerCubixLogPath -Destination "$enerCubixLogPath.$enerCubixStamp" }
+if (Get-Process -Id $finEnergyProcessId -ErrorAction SilentlyContinue) { throw 'Isolated process did not stop; Pod was not replaced.' }
+Copy-Item -LiteralPath $finEnergyPodSource -Destination $finEnergyPodTarget -Force
+if ((Get-FileHash -LiteralPath $finEnergyPodTarget -Algorithm SHA256).Hash -ne $finEnergySourceHash) { throw 'Candidate Pod changed during restart; leave runtime stopped and select a stable artifact.' }
+$finEnergyStamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss')
+foreach ($finEnergyLog in @('native-out.log', 'native-err.log')) {
+    $finEnergyLogPath = Join-Path $finEnergyRoot ".local\$finEnergyLog"
+    if (Test-Path -LiteralPath $finEnergyLogPath) { Copy-Item -LiteralPath $finEnergyLogPath -Destination "$finEnergyLogPath.$finEnergyStamp" }
 }
-$enerCubixChild = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-File', $enerCubixLauncher) -WorkingDirectory $enerCubixRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $enerCubixRoot '.local\native-out.log') -RedirectStandardError (Join-Path $enerCubixRoot '.local\native-err.log') -PassThru
-[IO.File]::WriteAllText((Join-Path $enerCubixRoot '.local\runtime-host.pid'), $enerCubixChild.Id.ToString())
-Write-Output "Restarted isolated FIN only; stopped Java PID $enerCubixProcessId; new launcher PID $($enerCubixChild.Id); runtime Pod SHA256=$enerCubixSourceHash."
+$finEnergyChild = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-File', $finEnergyLauncher) -WorkingDirectory $finEnergyRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $finEnergyRoot '.local\native-out.log') -RedirectStandardError (Join-Path $finEnergyRoot '.local\native-err.log') -PassThru
+[IO.File]::WriteAllText((Join-Path $finEnergyRoot '.local\runtime-host.pid'), $finEnergyChild.Id.ToString())
+Write-Output "Restarted isolated FIN only; stopped Java PID $finEnergyProcessId; new launcher PID $($finEnergyChild.Id); runtime Pod SHA256=$finEnergySourceHash."

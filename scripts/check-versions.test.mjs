@@ -8,8 +8,8 @@ import test from 'node:test';
 
 const checker = fileURLToPath(new URL('./check-versions.mjs', import.meta.url));
 
-function withProject(run, directory = 'enerCubix.pod', version = '1.2.3') {
-  const root = mkdtempSync(join(tmpdir(), 'enercubix-version-gate-'));
+function withProject(run, directory = 'finEnergy.pod', version = '1.2.3') {
+  const root = mkdtempSync(join(tmpdir(), 'finenergy-version-gate-'));
   const write = (path, value) => writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value));
   mkdirSync(join(root, directory, 'ts'), {recursive: true});
   write('package.json', {version});
@@ -22,7 +22,7 @@ function withProject(run, directory = 'enerCubix.pod', version = '1.2.3') {
   try { run({root, write, check, directory}); }
   finally {
     assert.equal(dirname(resolve(root)), resolve(tmpdir()));
-    assert.ok(basename(root).startsWith('enercubix-version-gate-'));
+    assert.ok(basename(root).startsWith('finenergy-version-gate-'));
     rmSync(root, {recursive: true, force: true});
   }
 }
@@ -40,7 +40,7 @@ test('accepts the committed legacy source directory', () => withProject(({check}
 test('accepts four-component Fantom versions and JSON with a BOM', () => withProject(({check, write}) => {
   write('package.json', '\ufeff{"version":"1.2.3.4"}');
   assert.equal(check().status, 0);
-}, 'enerCubix.pod', '1.2.3.4'));
+}, 'finEnergy.pod', '1.2.3.4'));
 
 for (const target of ['package.json', 'build.fan', 'ui', 'lock', 'lock-root']) {
   test(`rejects version drift in ${target}`, () => withProject(({write, check, directory}) => {

@@ -3,7 +3,7 @@ import {resolve,dirname} from 'node:path';
 import {gzipSync} from 'node:zlib';
 
 // Compare production dependency closures, not just the renamed entry chunk.
-const root=resolve(process.argv[2]||'enerCubix.pod/res/web/enerCubix');
+const root=resolve(process.argv[2]||'finEnergy.pod/res/web/finEnergy');
 const manifest=JSON.parse(readFileSync(resolve(root,'.vite/manifest.json'),'utf8'));
 const closure=(keys,seen=new Set())=>{for(const key of keys){if(seen.has(key)||!manifest[key])continue;seen.add(key);closure(manifest[key].imports||[],seen);}return seen;};
 const files=keys=>[...new Set([...closure(keys)].map(key=>manifest[key].file))].filter(file=>file.endsWith('.js'));

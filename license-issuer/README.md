@@ -1,8 +1,8 @@
-# EnerCubix license issuer
+# FinEnergy license issuer
 
 [简体中文](README.zh-CN.md)
 
-The issuer is a standalone service for signing EnerCubix activation files. It runs on Node.js 22.22 and uses SQLite for issuer accounts and signed artifacts. FIN customers can import the files offline.
+The issuer is a standalone service for signing FinEnergy activation files. It runs on Node.js 22.22 and uses SQLite for issuer accounts and signed artifacts. FIN customers can import the files offline.
 
 ## Set up the issuer
 
@@ -34,17 +34,17 @@ Account names use lowercase letters, digits, dots, underscores and hyphens. Pass
 
 ## Issue and renew
 
-1. Sign in. For a **machine-bound** license, paste the FIN Host ID or select the activation request exported by EnerCubix. For a **training** license, select Training. Training licenses use the signed validity period on any FIN host.
+1. Sign in. For a **machine-bound** license, paste the FIN Host ID or select the activation request exported by FinEnergy. For a **training** license, select Training. Training licenses use the signed validity period on any FIN host.
 2. Enter the start and expiry in the displayed browser time zone. Review the UTC values before signing. The expiry is the first instant at which the license is no longer valid.
 3. Choose **Sign license**. The server records the account and issuance time and saves the signed file before offering it for download.
-4. Provide the downloaded `.enercubix-license` file to the FIN host superuser. They import it in **Settings → License management**. Import a license during its validity period.
+4. Provide the downloaded `.finenergy-license` file to the FIN host superuser. They import it in **Settings → License management**. Import a license during its validity period.
 5. Use **Issuance history** to download the original file or renew it. To reissue a machine-bound license for a different host, enter the new Host ID after selecting **Renew or reissue**. The new record links to the previous one.
 
 Back up the SQLite database and signing key through the issuer's protected storage. Stop the issuer before copying the database so the backup contains complete transactions.
 
 ## File format and verification
 
-An activation request contains `version` (1), `product` (`enerCubix`), `hostId` and `requestedAt`. A signed license contains `keyId`, `payload` and `signature`. Both payload and signature use standard Base64. The signature covers the exact UTF-8 JSON payload using RSA PKCS#1 v1.5 and SHA-256. The signed payload contains `version`, `product`, `type`, `licenseId`, `issuedAt`, `notBefore` and `expiresAt`. A `host` license also contains `hostId`. A `training` license omits `hostId`. All signed timestamps use UTC ISO 8601.
+An activation request contains `version` (1), `product` (`finEnergy`), `hostId` and `requestedAt`. A signed license contains `keyId`, `payload` and `signature`. Both payload and signature use standard Base64. The signature covers the exact UTF-8 JSON payload using RSA PKCS#1 v1.5 and SHA-256. The signed payload contains `version`, `product`, `type`, `licenseId`, `issuedAt`, `notBefore` and `expiresAt`. A `host` license also contains `hostId`. A `training` license omits `hostId`. All signed timestamps use UTC ISO 8601.
 
 The keyring export maps key IDs to Base64 DER SubjectPublicKeyInfo public keys.
 

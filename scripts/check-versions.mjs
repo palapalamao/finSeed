@@ -6,8 +6,8 @@ const root = resolve(process.argv[2] || join(dirname(fileURLToPath(import.meta.u
 const json = path => JSON.parse(readFileSync(join(root, path), 'utf8').replace(/^\ufeff/, ''));
 
 try {
-  const directories = ['enerCubix.pod', 'finSeed.pod'].filter(path => existsSync(join(root, path)));
-  if (directories.length !== 1) throw new Error('Expected exactly one source directory: enerCubix.pod or finSeed.pod');
+  const directories = ['finEnergy.pod', 'finSeed.pod'].filter(path => existsSync(join(root, path)));
+  if (directories.length !== 1) throw new Error('Expected exactly one source directory: finEnergy.pod or finSeed.pod');
   const source = directories[0];
   const ui = `${source}/ts`;
   const podVersion = readFileSync(join(root, source, 'build.fan'), 'utf8')

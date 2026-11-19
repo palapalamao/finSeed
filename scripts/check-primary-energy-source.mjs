@@ -6,8 +6,8 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const violations=[];
 const rules=[
  [/\.his\.(?:write|remove|delete|clear)\s*\(|\b(?:hisWrite|hisRemove|hisDelete|hisClear)\s*\(/,'runtime history mutation'],
- [/\bEnerCubixMeterGeneration\.(?:update|ensure|publish|recalculate)\s*\(/,'retired archive generation'],
- [/\bEnerCubixMeterHistory\.(?:load|loadDb|legacyConfig)\s*\(/,'retired archive source']
+ [/\bFinEnergyMeterGeneration\.(?:update|ensure|publish|recalculate)\s*\(/,'retired archive generation'],
+ [/\bFinEnergyMeterHistory\.(?:load|loadDb|legacyConfig)\s*\(/,'retired archive source']
 ];
 let checked=0;
 function check(directory){
@@ -20,6 +20,6 @@ function check(directory){
   for(const [pattern,reason] of rules)if(pattern.test(source))violations.push(`${relative(root,path)}: ${reason}`);
  }
 }
-check(join(root,'enerCubix.pod','fan'));
+check(join(root,'finEnergy.pod','fan'));
 if(violations.length)throw new Error(violations.join('\n'));
 console.log(`Primary energy source guard passed: ${checked} runtime source files.`);

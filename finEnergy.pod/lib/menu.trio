@@ -1,0 +1,38 @@
+// One entry in FIN's native application launcher. Authentication stays in FIN.
+---
+name: finEnergyApp
+finStackMobileMenu
+func
+overridable
+doc: "FIN Energy building energy analytics"
+src:
+  () => do
+    rootUri: finEnergyAppUri()
+    [{
+      displayName: toLocale("finEnergy::finEnergyMenuGroup"),
+      appId: "",
+      isDivider: true,
+      level: 0,
+      order: -20,
+      ui: "mobile"
+    }, {
+      displayName: toLocale("finEnergy::finEnergyApp"),
+      appId: "finEnergyApp",
+      link: "",
+      icon: "finenergy-launcher-cube",
+      iconType: "class",
+      ui: "mobile",
+      minUiTarget: "phone",
+      order: -19,
+      action: "top.app.LoadApplication('" + rootUri + "', null, null, {app: '_finEnergy'});top.app.ToggleCollapse(true);",
+      keepOpen: true
+    }].toGrid
+  end
+---
+name: finEnergyMobileSettings
+func
+stackMobileSettings
+doc: "Register the FIN Energy native launcher icon styles"
+src:
+  () => {styles: ["/pod/finEnergy/res/finenergy-launcher.css"]}
+---

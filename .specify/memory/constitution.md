@@ -1,4 +1,4 @@
-# EnerCubix Constitution
+# FinEnergy Constitution
 
 ## Core Principles
 

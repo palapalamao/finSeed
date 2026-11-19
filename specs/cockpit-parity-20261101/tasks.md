@@ -17,7 +17,7 @@
 
 ## 冻结依据
 
-- 原 PRD：`D:/mygithub/finSeed/output/requirements/EnerCubix_楼宇能源经营驾驶舱_产品需求文档_V1.1_逐项原型版.docx`。
+- 原 PRD：`D:/mygithub/finSeed/output/requirements/FinEnergy_楼宇能源经营驾驶舱_产品需求文档_V1.1_逐项原型版.docx`。
 - 详细设计：`C:/Users/11607/.codex/worktrees/current-relations/finSeed/docs/design/cockpit-20261030/detailed-design.md`；Linear 文档 `e94beee1-a4dd-4f4c-aab8-8dee2663a91b`。
 - 核对材料：同 current-relations 工作区 `out/cockpit-design-audit-20261101/`，含评审、原型与图片映射。
 - 适配保留：真实 FIN 结构、每设备自身主点历史、当前关系、同集合统计一致、缺测/NA/真实零、FIN 用户语言、本月至今；不硬编码演示数据，不重建时序事实库。
@@ -316,7 +316,7 @@
 ## 0.14.30 实机与 0.14.31 标量清洗候选（2026-11-05 07:35）
 
 - 0.14.30 / d90dc6d64fc99bf96524603c6a07459de97bb3f2 / Pod `64CDEEB73EFA6A0E77D965C8F1EE8ABDDB62054C326E63FE9210D65A99FAFF14` 已正常安装，唯一 -noAuth Java22404/launcher18088，FIN5停止。原生九查询仍8/9：zeda全站年度504/30.047秒，水位10-27 19:00，3757次读取/648373条扫描/103窗口，峰193834；未到最终清洗元数据冻结，不宣称030共享元数据已通过年度实机。其余八组经本版生产TS解码通过，固定4816/2799.549228及中英Excel回读通过；24个HTTP资源与030包一致。原响应、失败census和该PID观察独立保留在 `out/cockpit/parity-20261101/live-0.14.30-20261105/`。
-- 0.14.31 仅优化同一清洗算术核的投影：`EnerCubixCleanStep`保留原始item/previous和标量结果；native cursor正常行不再提前生成诊断Map、日期字符串及原值JSON；仅原事件准入允许时物化完整原9字段，再走原nativeDetail/捕获。bulk clean/cursorDetail仍提供原完整接口，旧block仅包装已有标准detail。原previous更新、各质量计数、interval、诊断访问顺序及cap不变。
+- 0.14.31 仅优化同一清洗算术核的投影：`FinEnergyCleanStep`保留原始item/previous和标量结果；native cursor正常行不再提前生成诊断Map、日期字符串及原值JSON；仅原事件准入允许时物化完整原9字段，再走原nativeDetail/捕获。bulk clean/cursorDetail仍提供原完整接口，旧block仅包装已有标准detail。原previous更新、各质量计数、interval、诊断访问顺序及cap不变。
 - RED是旧Step确实持有Map的对象图断言失败；不是缺少API或伪造超时。新增固定独立期望覆盖单位换算、NA/null、替代数值/NA、移除NA、回绕、timeMax、非正间隔和非有限差值。保留诊断value的JSON-null语义，通用detailQuality仍采用原Obj?谓词优先级。原32条row工作空间和事件50条工作空间保持；Step/Map均不跨原始行保留，不新增历史或缓存。
 - 最终全量122类985方法298797检查通过（`candidate-01431-final-fantom-r1.log`，140.061秒），239个后端文件与测试开始清单一致。前端284个src/test文件与022完全相同，显式复用437单测/33个不同受控浏览器用例；031类型/Vite构建新执行20.53秒，不能称031新原生浏览器通过。
 - Q1/年度完整快照、报告、警告、质量、覆盖、原来源数组顺序及生产TS解码与冻结030等价；仍按原始固定观察时刻与103窗口/82源向量，不是FIN实机性能。Q1 12.005秒、峰191545；年度28.089秒、峰188670。临时所有权和raw关闭后归零；824条prepared描述计费按原定义保留。另与改造前独立bulk二进制结果比较32组/7520条明细、values/units、summary/previous完整JSON一致，SHA均 `EE241D1B71B61700FE024521E70833FB61774A93430D162A82E6C9290801802D`，见 `cleaning-step-031-independent-equivalence.json`。

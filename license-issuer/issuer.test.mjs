@@ -79,7 +79,7 @@ test('validates the exported request, training scope and license period on the s
   const { request, login } = await fixture(t);
   const session = await login();
   const parseRequest = (requestFile) => request('/api/requests/parse', { ...session, body: { requestFile } });
-  const valid = await parseRequest({ version: 1, product: 'enerCubix', hostId: 'HID-EXAMPLE', requestedAt: '2026-11-13T10:00:00.123456Z' });
+  const valid = await parseRequest({ version: 1, product: 'finEnergy', hostId: 'HID-EXAMPLE', requestedAt: '2026-11-13T10:00:00.123456Z' });
   assert.equal(valid.status, 200);
   assert.equal((await valid.json()).hostId, 'HID-EXAMPLE');
   assert.equal((await parseRequest({ version: 1, product: 'wrong' })).status, 400);
@@ -94,7 +94,7 @@ test('validates the exported request, training scope and license period on the s
 });
 
 test('signs machine-bound and time-only licenses, persists exact files and links renewals', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'enercubix-issuer-test-'));
+  const directory = await mkdtemp(join(tmpdir(), 'finenergy-issuer-test-'));
   const dbPath = join(directory, 'issuer.sqlite');
   // Cleanup runs after the fixture closes its Windows file handles.
   const fixtureTest = { after: (cleanup) => t.after(async () => { await cleanup(); await rm(dbPath, { force: true }); await rmdir(directory); }) };
@@ -124,7 +124,7 @@ test('signs machine-bound and time-only licenses, persists exact files and links
   assert.equal(hostFile.payload.hostId, 'HID-EXAMPLE');
   assert.equal(hostFile.payload.type, 'host');
   assert.equal(hostFile.payload.version, 1);
-  assert.equal(hostFile.payload.product, 'enerCubix');
+  assert.equal(hostFile.payload.product, 'finEnergy');
   assert.equal(hostFile.payload.licenseId, host.licenseId);
   assert.equal(hostFile.payload.issuedAt, '2026-11-13T09:00:00.000Z');
   assert.equal(hostFile.payload.customer, undefined);

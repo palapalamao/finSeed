@@ -160,7 +160,7 @@ block/density split是合法重复callback尝试，原计数如实记录，不�
 
 工作时段/工作日私有消费缝已接：每对象只有两个分类桶，保留严格/已有量各自LineFold、原小时顺序、传感器时长权重与COP操作数归约；全区间四fold独立，空分类为真实0，非空缺测不补零。日历工作日例外、手动空时段、缺日历与面积口径复用原输出。working不保留无用逐小时period；输出value/source图及finish临时图在复制前准入，state/output分离关闭。普通入口/隐藏菜单/安装包不切换。
 
-功能RED为reportConsumerPlan；修正执行参数后的专项5类65方法3991校验通过（working-consumer-final-tests.log），覆盖25h DST、重复小时、非整小时、NA、零分母、失败peer隔离；首次执行误带不存在EnerCubixWorkingTest，记录为无效整套执行，未计通过。18设备+1000无关catalog点的工作日输出保留图下界16868、输出准入25776、联合峰106657。此前完整91类718方法260672校验仍对应39b03c00，本增量未重复完整套件。
+功能RED为reportConsumerPlan；修正执行参数后的专项5类65方法3991校验通过（working-consumer-final-tests.log），覆盖25h DST、重复小时、非整小时、NA、零分母、失败peer隔离；首次执行误带不存在FinEnergyWorkingTest，记录为无效整套执行，未计通过。18设备+1000无关catalog点的工作日输出保留图下界16868、输出准入25776、联合峰106657。此前完整91类718方法260672校验仍对应39b03c00，本增量未重复完整套件。
 
 捕获main另用独立budget的原整段计算作oracle，带工作日/时段与例外配置；workingHours和workingDays各9个必需顶层及6个extra组完全一致，来源诊断采样不同未作相等声明。私有计算峰90803/raw691、385回调/12094捕获样本、unprepared0，关闭raw/temporary0，有限元数据35继续计账，无FIN I/O。默认整包8必需provenance/12报告60槽59实有组仍相等，原缺省coverage保留，仅periodsCaptureId归一化。working-consumer-evidence.json与working-consumer-native-parity.json；离线冻结包working-consumer-offline-test.pod SHA9B3C52C66CF3DCCF5D97D8F8F59ADBC9F9898FF748ED02124BFE48BE34678C61。全局联合读取/公平1000诊断、空间仅摘要、热图、flow/COP/规则和实机全站年度仍待，未提升为实机验收。
 
@@ -327,7 +327,7 @@ Root在带requestScope的私有路径将input/ownedConfig/records作为一个复
 
 配置冻结回调的全局错误边界（补测修正）
 
-RED复现currentConfig回调抛出的401/403/409/422/429/504被原catch Err吞掉并转为空清洗配置；这也会掩盖后续配置创建时准入的限额异常。仅先透传EnerCubixHttpErr原实例，普通已有配置错误继续原质量路径，不泛化改写所有Err。源码也确认原生CleaningRepo.readable确实使用403 HttpErr，故不是虚构接口类型。3类25方法586检查通过，7069ms（cockpit-config-global-tests.log），含6类错误均第一回调即原样抛出、不继续第二点配置，以及原准备/SourceSession/局部投影回归。正常账号权限仍未作为实机通过；只读按用户暂缓，未部署。
+RED复现currentConfig回调抛出的401/403/409/422/429/504被原catch Err吞掉并转为空清洗配置；这也会掩盖后续配置创建时准入的限额异常。仅先透传FinEnergyHttpErr原实例，普通已有配置错误继续原质量路径，不泛化改写所有Err。源码也确认原生CleaningRepo.readable确实使用403 HttpErr，故不是虚构接口类型。3类25方法586检查通过，7069ms（cockpit-config-global-tests.log），含6类错误均第一回调即原样抛出、不继续第二点配置，以及原准备/SourceSession/局部投影回归。正常账号权限仍未作为实机通过；只读按用户暂缓，未部署。
 
 最终业务快照及报告所有权（私有路径，未部署）
 
