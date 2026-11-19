@@ -1,0 +1,3 @@
+# Preserve archived originals and their byte-level provenance.
+archive/** -text
+docs/archive/** -text

@@ -1,55 +1,57 @@
-# FIN Energy 能源管理授权 / FinEnergy licensing
+# FIN Energy 原生授权说明
+
+FIN Energy 0.16.0 候选版将激活、到期与功能授权交由 FIN 原生授权系统管理。本说明适用于 FIN 5.3.0.2761 开发基线。正式交付前，必须取得总部确认的功能标识和含该功能的开发／测试许可证，完成运行验收。
 
 ## 中文
 
-### 申请与激活
+### 授权流程
 
-1. 项目管理员打开 **设置 → 授权管理**，复制 FIN 机器码或下载 `finenergy-request.json`。机器码可在 FIN 的 **Host → Licenses → Host Info** 核对。申请文件包含产品、格式版本、机器码和申请时间。
-2. 签发人员登录[独立签发后台](../license-issuer/README.md)，选择授权类型。机器绑定授权需要上传申请或粘贴机器码。培训授权只需填写有效期。确认时区和时间后签发，并下载已保存的授权文件。续期或换机均签发新文件，后台保留原签发记录。
-3. FIN 超级用户在 **授权管理 → 添加授权** 选择并导入文件。有效文件会替换当前授权并即时生效，覆盖同一 FIN 实例的全部项目。页面显示授权类型、有效期和当前项目表计数。到期时间按 FIN 服务器时钟判断。
-4. FIN 超级用户可选择 **删除授权** 并确认。删除后，各项目立即恢复各自的免费额度。可从签发后台重新下载原文件，并在有效期内重新导入。
+1. FIN 管理员在原生 **Host → Licenses → Host Info** 核对机器码及实例信息，向 J2 授权团队申请能源功能。
+2. 总部在原生 Licensing Server 中配置产品和对应功能，并把功能加入客户的 FIN 许可证。Pod 不负责签发 FIN 许可证。
+3. 管理员使用 FIN 原生授权界面安装或更新许可证，按 FIN 要求停止／重启服务后，再启用 `finEnergy` 扩展。
+4. 扩展正常运行后，项目管理员可在 **设置 → 授权管理** 查看功能状态、功能标识与 FIN 机器码。授权更新、删除和恢复均在 FIN 原生界面操作；FIN Energy 不提供删除整个 FIN 许可证的按钮。
 
-两种授权有效期间均无表计、点位或设备数量上限。机器绑定授权还会检查本机机器码。培训授权可在不同机器上导入，适合期限明确的培训环境。两种文件都需使用受信任的签发密钥签名，FIN 可离线校验。
+候选代码声明 `@FinExtMeta { licFeature="fin energy" }`，扩展继承 `fin::FinExt`。`fin energy` 目前是总部邮件中的建议标识，尚待授权团队确认。功能名必须与原生许可证精确匹配，包含大小写；修改标识须同步修改扩展元数据和状态服务并重新构建。
 
-### 免费额度与恢复
+### 不可访问时如何处理
 
-未激活、授权失效或到期时，每个 FIN 项目有 10 块表计额度。各能源类型共用额度，实体表、总表和虚拟总表均计入，有效别名合并计数。参考点、传感器与未纳管的原生设备不计入。
+缺少对应功能时，FIN 会使整个扩展保持停用。此时不能假定 FIN Energy 的页面、状态接口、迁移函数或清洗回调可用；请直接从 FIN 原生 Host 授权入口处理。项目内的设置页只有在原生扩展可用时才能作为辅助查看入口。
 
-已有超过 10 块的项目可查看设置、配置及历史报警。项目的新查询、当前值合计和能耗报警扫描会暂停。导入有效授权，或将纳管表减至 10 块以内即可恢复。FIN 的原生采集与历史访问继续运行。
+原生授权变化可能影响 `hisFunc` 的解析和调用。原始历史仍由 FIN 持有，不能把“源历史保留”解释为“停用后所有清洗历史查询均已证明可用”。有效、缺失、到期和重启场景的清洗查询行为，列入真实 FIN 验收。
 
-### 生成可验签的 Pod
+### 旧版机制与商业规则
 
-签发后台在签发主机读取 RSA 3072 位私钥。将 `export-key` 导出的公钥 JSON 交给 Pod 构建人员，在 Windows 仓库根目录运行：
+旧版独立 RSA 签发文件不为 FIN 原生能源功能授权。原签发源码保存在 [历史归档](../archive/enercubix-license-issuer/ARCHIVE.md)，只用于现有旧版本追溯及回滚，不包含签发密钥。此次源码更新不改变正在运行的旧签发服务或已安装授权。
 
-```powershell
-./scripts/build.ps1 -LicenseKeyring C:\release\public-keyring.json
-```
-
-构建输出为 `out/finEnergy.pod`。发布前核对 Pod 公钥的 `keyId` 和后台配置一致。测试与正式构建分别使用对应的公钥。省略 `-LicenseKeyring` 会生成只支持免费额度的开发包。实例授权文件存放在 FIN 实例 `var/finEnergy/license.json`，可随实例备份。
+每项目免费 10 块表和不绑定机器码的培训授权仍属提交总部的商业建议，0.16.0 原生候选不启用这些规则。培训、试用、续期、有效期及实例覆盖范围由总部原生授权方案确定。不得通过应用开关、旧授权文件或自建签发器绕开原生功能检查。
 
 ## English
 
-### Request and activate
+FIN Energy 0.16.0 delegates activation, expiry and feature validation to FIN's native licensing system. The development baseline is FIN 5.3.0.2761. Customer release requires HQ confirmation of the exact feature identifier, a genuine development/test license and native runtime acceptance.
 
-1. A project administrator opens **Settings → License management**, copies the FIN machine code, or downloads `finenergy-request.json`. Compare the code with **Host → Licenses → Host Info** in FIN. The request contains the product, format version, machine code, and request time.
-2. An issuer signs in to the [standalone issuance service](../license-issuer/README.md) and selects a license type. For a machine-bound license, upload the request or paste the machine code. For a training license, enter a validity period. Verify the time zone and dates, issue the license, and download the saved file. Renewal and machine replacement create new signed files and preserve the previous records.
-3. A FIN superuser selects and imports the file in **License management → Add license**. A valid file replaces the current license and takes effect immediately for all projects on that FIN instance. The page displays its type and validity period alongside the current project's meter count. FIN uses the server clock to determine expiry.
-4. A FIN superuser can select **Delete license** and confirm. Each project immediately returns to its free allowance. The issuer can download the original file again for reimport during its validity period.
+### Activation workflow
 
-Both license types allow unlimited meters, points, and equipment during their validity period. A machine-bound license also checks the local machine code. A training license can be imported on different machines for a time-limited training session. Both types require a signature from a trusted issuer and can be verified offline.
+1. The FIN administrator checks the machine identity in **Host → Licenses → Host Info** and requests the energy feature from J2's licensing team.
+2. HQ configures the product and feature in its native Licensing Server and adds it to the customer's FIN license. The Pod does not issue FIN licenses.
+3. The administrator installs or updates that license through FIN's native interface restarts FIN as required by its licensing workflow, and enables the `finEnergy` extension.
+4. Once the extension is running, project administrators can inspect the native feature state and machine identity in **Settings → License management**. License replacement, deletion and recovery remain FIN administration operations.
 
-### Free allowance and recovery
+The candidate extends `fin::FinExt` and declares `@FinExtMeta { licFeature="fin energy" }`. The proposed token `fin energy` comes from HQ's email and still requires confirmation. The token is case-sensitive and must exactly match the native license. Any change requires updating both the facet and status service and rebuilding the Pod.
 
-Each FIN project has a free allowance of 10 meters whenever there is no valid active license. All energy types share the allowance. Physical meters, total meters, and virtual total meters count, with valid aliases counted once. Reference points, sensors, and native equipment outside FinEnergy are excluded.
+### When the extension is unavailable
 
-An existing project above 10 meters can open settings, read its configuration, and access existing alarms. New queries, current-value rollups, and energy alarm scans pause. Import a valid license or reduce the enrolled meter count to 10 or fewer to resume. Native FIN collection and history access continue.
+FIN keeps an extension inactive if the required feature is absent. Do not assume that the application's license page, status route, migration functions or cleaning callbacks remain callable. Use FIN's native Host licensing interface directly.
 
-### Build a Pod with signature verification
+FIN retains the original history. This does not prove that every history query using an application `hisFunc` continues to work after native deactivation. Cleaning callback availability must be checked with genuine active, missing, expired and restarted native-license scenarios.
 
-The issuance service reads the RSA 3072-bit private key on the signing host. Pass the public JSON produced by `export-key` to the Pod builder, and run this command from the repository root on Windows:
+### Legacy files and commercial proposals
 
-```powershell
-./scripts/build.ps1 -LicenseKeyring C:\release\public-keyring.json
-```
+Legacy RSA files do not activate the native FIN energy feature. The original issuer source is retained in the [historical archive](../archive/enercubix-license-issuer/ARCHIVE.md) for existing deployments and rollback, without private keys. This source update does not alter a running legacy issuer service or an installed license.
 
-The build writes `out/finEnergy.pod`. Check that the Pod's public `keyId` matches the issuer configuration. Build test and production packages with their respective public keys. Omitting `-LicenseKeyring` produces a development package with the free allowance only. The instance license lives in `var/finEnergy/license.json` and can be included in the FIN instance backup.
+The ten-meter free allowance and host-independent training license remain proposals awaiting HQ agreement. They are not enabled in this native candidate. Trial, training, renewal, expiry and instance coverage follow the native licensing solution agreed with HQ. There is no application bypass.
+
+## 实现与依据 Implementation and evidence
+
+- [Extension facet](../finEnergy.pod/fan/FinEnergyExt.fan) and [native status service](../finEnergy.pod/fan/FinEnergyNativeLicense.fan).
+- [Giovanni Casagrande — OEM Custom Pod License Feature Gating](https://finproducts.atlassian.net/wiki/spaces/FINFramework/pages/34410561552/OEM%2BCustom%2BPod%2B-%2BLicense%2BFeature%2BGating).
+- SDK compilation and unit tests establish a candidate; they do not establish licensed native runtime acceptance. See the [delivery plan](../specs/fin-energy-hq-20261120/plan.md).

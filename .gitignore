@@ -12,3 +12,6 @@ finEnergy.pod/res/web/finEnergy/modules/
 finEnergy.pod/res/web/finEnergy/.vite/
 finEnergy.pod/res/license-keys.json
 finEnergy.pod/ts/validation-logs/
+output/
+archive/prior-documentation.local-preserved/
+__pycache__/

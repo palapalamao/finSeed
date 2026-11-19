@@ -1,132 +1,62 @@
-# 能源魔方（EnerCubix）
+# FIN Energy 能源管理
 
-当前研发以 `developer` 为唯一集成基线，`main` 用于稳定发布。具体版本读取 `enerCubix.pod/build.fan` 与包清单；下方按版本列出的记录保留原适用范围。当前接口、架构和历史能力边界见 [接口契约](contracts/api.md) 与[功能账本](docs/feature-parity.md)；干净安装和 CI 的实际执行结果见 [工程验证记录](docs/team/verification.md)。
+FIN Energy is a native FIN Framework Pod for building energy analysis in new projects and retrofits. 中文品牌为 **FIN Energy 能源管理**，英文为 **FIN Energy**。它复用 FIN 的设备、主点历史、身份和报警服务，提供经营驾驶舱、分析工作台、数据清洗、费用、面积强度及事件核查。
 
-## 驾驶舱开发候选
+当前为 **0.16.0 候选版**。`developer` 是唯一开发与集成基线，`main` 用于稳定发布。总部原生能源功能标识与测试许可证、比利时客户完整 FIN 构建号及操作系统尚待确认；候选构建、受控界面验证与实际 FIN 发布分别记录。此次准备没有替换当前运行的 FIN。
 
-新版首页沿用 FIN 会话，提供空间、时间、用途、组织、能效、计量平衡六种视图。先选择统计范围、能源和时间再应用；点选焦点只定位对象，只有“设为统计范围”才重新统计。视图、图表、明细与专业报告优先使用同一查询快照，已有用量、完整区间、缺测、NA 和真实零分别保留。
+## 现行文档 Current documentation
 
-能源去向按对象独立展示，精简图先显示8个直属分支，其余可展开，不生成无法证明的“其他”合计。COP 使用同覆盖范围的供能总量除以输入能耗总量；未配置、缺测或分母为零时说明原因。重点事项只读现有事件和本次质量证据，确认不表示已恢复；跨月小时证据独立打开，消息中心按事件编号定位。
+- [中文与英文文档索引](docs/CURRENT.md)
+- [中文架构设计](docs/finenergy-architecture-design.md) · [Architecture](docs/finenergy-architecture-design.en.md)
+- [中文接口契约](contracts/api.zh-CN.md) · [API contract](contracts/api.md)
+- [中文系统要求](docs/finenergy-system-requirements.md) · [System requirements](docs/finenergy-system-requirements.en.md)
+- [中文升级与回滚](docs/finenergy-upgrade.md) · [Upgrade and rollback](docs/finenergy-upgrade.en.md)
+- [原生授权说明 Native licensing](docs/finenergy-licensing.md)
+- [功能与验证边界](docs/feature-parity.md) · [本次交付计划](specs/fin-energy-hq-20261120/plan.md)
 
-原生入口使用带版本号的首页资源，旧 `#/dashboard` 继续可用。驾驶舱请求与数据时刻、资源限制及验证边界见[接口契约](contracts/api.md#cockpit-snapshot-development-candidate-not-an-installed-version-claim)。当前功能以 `developer` 源码和 Linear 驾驶舱项目为准；SDK/受控浏览器通过不表示新版已部署或正常认证、现场性能已验收。安装版本须单独回读。
+Brochure、Onepage、图文操作手册、技术资料及两版三分钟宣传片统一整理到本次交付目录，实际文件、源码和包哈希以该目录清单为准。旧资料保留在历史归档，不作为新版实机证明。
 
-## 数据架构原则
+## 数据与业务原则
 
-面积维护：进入“设置 → 计量资产 → 空间”，在楼宇或楼层点击“编辑面积”，直接保存到该 FIN 记录的 `area` 标签（m²）。表计“面积来源”可引用实际服务的楼宇／楼层，或填写自定义服务面积。单位面积查询按统计对象选取分母；共用服务空间和父子空间不重复计面积。未知的多个自定义边界不合算单位面积指标。图表下方及导出列出冻结的用量、面积来源和公式；未配置面积仍可查询普通能耗。
+FIN 负责点位采集、原始历史存储和访问。FIN Energy 负责业务配置、只读查询、计算和展示，不另建时序事实库。物理表、实测表及虚拟表都只读取各自明确绑定的主能耗点历史；缺测保持缺测，不以分表合计、公式输入或旧批次替代。
 
-设备明确绑定的主能耗点历史是该设备能耗的唯一事实来源，实测表、物理表和虚拟表采用相同规则。FIN 负责原生点位采集、历史存储与访问；能源魔方复用这些能力，负责业务配置、只读查询、计算和展示，不另建一套能耗时序事实库。
+所有查询采用当前生效的空间、计量和组织关系。选定范围先解析有效表计和统计边界，同源和父子边界不重复合计。分项查询按当前关系展开合资格成员；驾驶舱用途面沿用其已冻结的规范集合。已有量、完整区间、NA、零值和规则替代分别说明。
 
-查询链路为：设备配置与主点绑定 → FIN 主点原生历史 → 按读数类型计算用量及质量 → 按空间、计量或组织分组 → 图表、明细与导出。累计读数仍需计算差值，区间用量仍需按其语义汇总；直接读取主点不等于直接把累计表底当作用量。清洗和统计只产生查询结果，不回写源历史。
+经营驾驶舱默认按 FIN 项目时区查询本月，支持今日、本年和自定义，提供同比与环比选择。焦点定位与明确应用统计范围分开。六面观察、趋势、能流、明细和导出使用同一成功快照。报警需满足启用、阈值、完整小时历史和扫描条件；持续超限合并并同步原生报警。
 
-主点缺失或历史不足时保留缺测，不读取旧辅助归档点、派生分钟批次或公式输入历史作为替代。虚拟表也必须有自己的主点历史；贡献分析中各设备的用量分别取自各自主点，不以分表合计替代虚拟表自身用量。查询快照及可丢弃缓存不是新的事实来源，不得反向写入点位历史。
+清洗方案按读取时规则过滤、替代或修正已知周期回卷，显示覆盖和处理诊断，保留 FIN 原始历史。楼宇和楼层面积在应用中编辑，保存到原生 `area`；表计支持引用服务空间或自定义面积。单位面积结果保留分母来源，普通能耗不要求面积。
 
-借鉴 SEED 的业务功能与规则，不直接搬用其重复历史存储模型。该决策基于 FIN 已具备的原生历史能力，不以“关系型数据库不能存储时序数据”为前提。停用旧归档机制不自动删除、打 trash、迁移或重绑既有点位与历史。
+## 品牌与语言
 
-计量对象管理直接从 FIN 原生设备树纳入设备及其历史点，无需先执行设备模型迁移。已有点位绑定保留原表计 ID、点位与计量关系，也支持显式开启“按分表计算当前值”：按项目设置的间隔更新绑定主点的当前累计读数与连续性状态，不写入历史，不覆盖带采集连接器的实测点；历史采集仍由 FIN 管理。
+UI 使用 J2 Deep Blue、Blue、Aqua 与品牌辅助色，随包提供 Manrope，中文采用微软雅黑等系统回退。正式产品 logo 到达前使用可替换的临时图标和普通字体名称。原生菜单通过 `toLocale` 和 `locale/*.props` 跟随 FIN 用户语言；应用默认跟随当前用户，保留手动中文／English 切换。用户输入名称保持原文。
 
-0.8.0 新增能流图：在“构成与排名”中按单一能源查看项目总表、分表和计量差额，可沿计量树下钻。图表、明细、模板及导出共用查询快照，支持中英文；缺测、负差额和计量关系不完整时保留实际读数，并停止绘制对应分叉的流线。此功能沿用当前计量关系解释历史数据，不修改源点或历史；安装与实机验收另行进行。
+## 授权与升级
 
-面向楼宇设施的多维能源分析平台。界面采用顶部导航和空间、计量、组织视角切换；对外品牌统一为能源魔方。从 0.9.0 起，Pod、源码目录、标签、Axon 函数和资源统一使用 `enerCubix` 命名。升级时通过显式预览和备份迁移活动标签，保留既有设备、历史点和报警身份。
+技术名统一为 `finEnergy`：Pod、`FinEnergy*` 类型、`finEnergy*` Axon、业务标签及 `/api/{project}/ext/finEnergy/v1`。新项目直接使用新名，既有项目通过管理员预览、冲突检查、备份、明确应用、原日志续作及保护回滚迁移。保留原对象 ID、主点历史和报警确认；维护期间停用旧任务及配置写入，结束后只运行一套任务。
 
-`0.6.0` 启用能源魔方 / EnerCubix 品牌和立方体标识，重构顶部导航、分析工作台及移动布局。对象选择与表计详情改为抽屉，分析主题分组展示；保留现有报表、模板和导出能力。
-
-`0.12.17` 保留右上角手动语言切换按钮，提供“跟随 FIN 用户语言、中文、English”。默认按当前登录 FIN 用户的有效语言显示；手动选择按用户分别记忆在当前浏览器，选择“跟随 FIN 用户语言”恢复默认。切换会刷新当前页面，保留项目、页面及模板地址；当前未保存的编辑请先完成。中文区域语言使用简体中文，尚未支持的其他语言回退英文。浏览器禁止站点存储时，会提示无法保存并保留当前界面。
-
-应用仍先读取当前项目的认证会话及用户名，再加载导航、表单、日期控件、图表和导出，保持同一语言。浏览器语言、旧的全局偏好及 `enerCubixLang` 地址参数不覆盖 FIN 默认；FIN 原生分组和入口始终跟随 FIN 用户设置。设备名称、能源分类、项目名称和用户输入仍保留原文。
-
-语言注册集中在 `enerCubix.pod/ts/src/i18n.ts` 的 `languageDefinitions`。后续增加法文时，补齐界面与服务提示的法文词库、注册 Day.js 法文语言包，并在 `App.tsx` 的 `componentLocales` 中增加 Ant Design 法文语言包；FIN 会话语言匹配按语言注册表扩展，原生菜单还需补充对应 Pod 语言资源。目前提供中文和英文。
-
-`0.4.0` 统一能源对象为 FIN 原生设备。主能耗点、计量上级、能源、用途、组织和计量范围直接存为设备的 `enerCubix` 业务标签；三个视图共用设备 ID，不再维护物理表计副本。设备本身与原始历史保留，“删除表计”改为取消纳入，复制配置需要指定已有目标设备。迁移先预览和备份，核对报告后清理旧物理档案；保留旧 ID 映射、只读分组口径和冲突保护回滚。以下旧版本说明属于升级前行为，接口差异见 [contracts/api.md](contracts/api.md)。
-
-`0.4.0.1` 限制空间目录为开启历史的点位，非空间报告直接读取能源设备配置；日常查询不解码迁移恢复材料，以减少内存占用。
-
-FIN 5.3.0.2761 的单 Pod 能源管理扩展，后端 Fantom、前端 React/TypeScript。扩展名与 Pod 均为 `enerCubix`。当前 `0.9.2` 的日均负荷默认按表计配色，可切换峰谷平配色；支持泄漏分析的总表与分表堆叠对照、周汇总。空间树直接读取 FIN 原生设备树，每次加载或刷新同步名称、层级、设备与点位；计量与组织仍独立配置，页面底部显示版本号。构建版本以 `enerCubix.pod/build.fan` 为准。使用 FIN 原生登录身份，写操作限管理员；没有独立账号系统。
-
-本地构建产物为 `out/enerCubix.pod`，源码位于本仓库；本次已安装包的固定路径及哈希记录在 `out/native-space-0.2.6-validation.json`。[三树验收与安装说明](docs/three-tree-validation.md) 记录 0.2.2 的独立 FIN 实机验收及 zeda 部署结果；本次同步验证见 `out/native-space-0.2.6-validation.json`，0.2.5 界面证据见 `out/three-only-0.2.5-validation.json`，旧版本验收见 [docs/validation.md](docs/validation.md)。0.1.1 起支持在 EnerCubix 内配置历史读数类型，不修改原点位和历史。
-
-## 三树与旧配置
-
-能源魔方直接操作 FIN 原生设备记录。表计 ID 就是设备 ID，主点、计量上级、组织及各项设备属性写为该设备上可见的 `enerCubix*` 标签；`enerCubixMeterParentRef` 指向上级原生设备，不再新增独立表计档案。FIN 直接修改这些标签后，能源魔方刷新即读取新值。空间导航、设备名称、采集点和历史继续使用 FIN 原有记录；点位树仅显示已开启历史（his）的项。历史独立档案在首次编辑时校验并写回原生设备，保留恢复材料，不要求用户操作迁移页面。物理位置与计量上下级、组织归属分别维护，新空间报表使用实时归属，旧模板引用通过兼容映射保留。
-
-`0.2.2` 将空间覆盖、计量上下级与组织核算分开：空间和组织分别建立同类父子关系，表计通过 `spaceId`、`meterParentId`、`organizationId` 关联，均保存为项目中的原生 Folio Ref。多个旧对象绑定同一物理点时，以一个计量主档案和 `canonicalId` 兼容引用保留历史配置。移动某个维度只改变该维度的归属；复制表计会清除数据绑定并默认不计入合计。
-
-旧分组仅保留在后台兼容历史报表，页面不再提供旧分析树入口。报表请求不传 `dimension` 或传入 `legacy`，继续使用原来的 `parentId`、总分表与合计规则；已有报表和模板无需强制迁移。新报表只能选择空间、计量和组织；历史模板使用原口径，退出模板或切换报表后恢复空间视图。选择新维度后，按确认的空间、组织和计量关系统计，同源兼容引用与已包含总表的下级表不会重复加入同一范围。覆盖关系或核算归属不完整时，汇总返回空值与质量原因，明细仍保留各表读数和原始来源。
-
-管理员可先预览迁移，再明确接受建筑/楼层和批量上下级建议，或为功能分组选择实际空间。原生楼层名称可能是功能分组，不会直接当作真实楼层；空分组保持未绑定。应用时同时检查配置与来源版本，在一次提交中保存变更和迁移前后快照。回滚要求当前记录仍符合迁移后快照，并检查新增引用，迁移任务和快照持续保留。迁移只调整 EnerCubix 配置，不改写原始 FIN 点位、设备或历史。完整字段、维度操作与迁移接口见 [contracts/api.md](contracts/api.md)。
+扩展继承 `fin::FinExt`，使用 `@FinExtMeta.licFeature`。拟定功能键 `fin energy` 尚待总部确认，必须与原生许可证精确匹配。原生缺功能可使整个扩展停用，因此不能承诺无授权时应用授权页、Axon 或清洗回调仍可用。10 块免费表和培训授权仍是商业建议，不在此候选中启用。旧独立签发代码保留在 [历史归档](archive/enercubix-license-issuer/ARCHIVE.md)，不会签发 FIN 原生许可证。
 
 ## 本地构建
 
-计量对象管理采用左树、中央列表、右侧表计详情；手机使用详情抽屉。显示父级路径、直接子级或全部下级，支持三步新增向导、拖动移动、批量分配，以及带外部引用和并发检查的删除预览。空间、上级表和组织独立维护，能源与分项作为属性和筛选条件。
-
-需要 Node.js/npm、Java 11 与已安装的 FIN SDK。首次在 `enerCubix.pod/ts` 安装前端依赖：
+SDK 基线为 FIN 5.3.0.2761。客户侧不需要 Node.js 或独立数据库；从源码构建需要 Node.js/npm、匹配的 FIN SDK 与其 Java 环境。
 
 ```powershell
-npm --prefix enerCubix.pod/ts install
+npm --prefix finEnergy.pod/ts ci
 .\scripts\build.ps1
-.\scripts\test.ps1 -SkipBuild
+node scripts/check-versions.mjs
 .\scripts\acceptance.ps1
 ```
 
-可传 `-SdkPath 'D:\FIN-SDK'`，或设置 `ENERCUBIX_SDK`；默认读取 `C:\Program Files (x86)\FIN\FIN 5.3.0.2761`。脚本只复制编译所需静态文件到 `.local/sdk`，不复制 `var`、项目库、用户认证或许可文件，不写入源 FIN 安装目录。SDK 源代码版本变化时，使用新的本地工作目录重新建立副本。
+构建生成 `out/finEnergy.pod`。可用 `-SdkPath` 或 `FINENERGY_SDK` 指定静态 SDK 源；构建只复制允许的静态代码，不复制实例项目、用户库或许可证。`scripts/test.ps1` 执行后端、前端及构建检查。版本入口和包结构检查不能替代原生 FIN 运行验收。
 
-`build.ps1` 先构建前端，再用 `finBuild::BuildFinPod` 编译，生成 `out/enerCubix.pod`。`test.ps1` 执行 Pod 测试、前端测试与类型/生产构建。`acceptance.ps1` 核对 Pod 名称、版本、入口索引、菜单/语言/UI 资源，输出 `out/acceptance.json`（SHA-256 和资源清单）。该报告不代表 FIN 运行验收通过。
+## 验证与交付
 
-## 安装与打开
+本次合并后 SDK 后端全量通过 124 类、1,026 方法、300,163 验证；前端类型和正式构建通过。中英文桌面／手机、原生授权呈现、分项能流、清洗及冻结导出的浏览器证据与新界面截图，分别注明受控数据和保存的 FIN 响应来源。完整证据、剩余运行验收与包哈希见本次交付记录。
 
-先在有可用测试许可、独立 `var`/项目库与独立监听端口的 FIN 测试实例安装 `out/enerCubix.pod`，按 FIN 标准扩展管理流程启用 `enerCubix`，重新登录后从 FIN 应用菜单打开。仓库提供下述隔离实例更新脚本；生产安装、服务重启与回滚仍须另行安排，脚本不操作生产 FIN 服务。
+正式发布前，使用真实许可证验证功能有效、缺失、到期、重启、多项目、原生菜单、普通/raw 历史与清洗回调，并按冻结条件核对迁移前后统计一致。Linux、Desigo Optic 及其他 FIN 构建的兼容范围须以目标环境验收为准。
 
-升级旧项目时，先备份原 `enerCubix.pod` 和扩展配置，在 FIN 中停用 `enerCubix`，停服后将旧包移出 `lib/fan`，再安装 `enerCubix.pod`、重启并启用 `enerCubix`；禁止同时加载两个包。旧页面书签须更新为下述新地址。已有树宽度偏好保持兼容；界面语言以当前 FIN 用户设置为准。
+## English overview
 
-接口使用 `/api/{project}/ext/enerCubix/v1`，页面资源为 `/pod/enerCubix/res/web/enerCubix/index.html`。项目标识保留在页面 hash 参数中；直接打开资源时需使用 `#/profile?project=项目名`。配置写入项目 Folio，历史读取原始 FIN 历史，计算结果只写 enerCubix 自有派生点。源点历史不被改写。
+FIN Energy reuses FIN's native equipment, designated primary histories, identity and alarms. The operations cockpit and analysis workspace cover trends, reference curves, shares, end uses, energy flow, meter differences, tariffs, intensity and data-quality diagnostics. Queries use current relationships and preserve missing data.
 
-已配置 FIN Expert 的环境可用 `scripts/register-fin-expert.ps1` 注册本机隔离验收连接。它经官方 CLI 的隐藏输入读取 `.local/runtime-credentials.json`，不把密码放进命令参数，并校验旧连接保持不变。随后只通过 `fin_live_*` 或 `scripts/audited-fin.ps1` 执行验收；后者调用与 MCP 相同的 FIN Expert `ToolRegistry`，固定目标为 `127.0.0.1:38085 / enerCubix_acceptance`，输出审计 ID。请求 JSON 的 `operation` 为 `test`、`read` 或 `axon`；其他字段遵循对应 `fin_live_*` 工具参数。发生 `outcome_unknown` 时先用只读操作核对，不重试写入。
-
-## 范围与验证边界
-
-接口与计算约定见 [contracts/api.md](contracts/api.md)，逐项迁移/验收账本见 [docs/feature-parity.md](docs/feature-parity.md)。无数据、缺失历史和权限错误应明确显示，不使用演示数据兜底。编译、离线测试、静态包检查与 FIN 运行验收分别记录，未获实机证据的项目保持待验证。
-
-`scripts/prepare-runtime.ps1` 可准备独立测试目录所需的静态品牌资源；不会启动服务。构建 home 为 `.local/sdk`，运行 home 为静态快照 `.local/runtime-sdk`，项目数据为 `.local/runtime-var`。原生启动参数为 `finStackHost -var <独立绝对目录>`，端口与回环地址使用原生 HTTP 设置记录。启动前仍需通过 FIN 原生 setup 创建新的管理员身份并取得测试实例可用许可。FIN bootstrap 在处理 `-var` 前会读取 home 的 `var/brand/brand.zip` 与 `var/lic`，因此仅更换 `-var` 并不足以隔离原安装。
-
-更新隔离测试实例时，先完成构建，再用 `scripts/restart-runtime.ps1 -ExpectedSha256 <稳定包SHA256>`。脚本核验回环端口、进程 home/var 后只停止隔离进程，将稳定 Pod 复制到运行快照并启动。后续构建不会覆盖运行 home；该脚本不会操作 Windows FIN 服务。
-
-独立运行 FIN 还需要发行版匹配的原生库、静态品牌资源和按授权正常接受的测试许可。项目库与认证数据库保持独立，不复制生产项目或用户，不降低安全配置或绕过许可校验。
-
-## 分层验收
-
-离线测试与 `acceptance.ps1` 只验证代码及包结构。独立 FIN 运行验收要求 `127.0.0.1:38085` 上的 `enerCubix_acceptance` 项目已初始化、稳定 Pod 已安装并启用，且官方 FIN Expert 已注册管理员连接 `enerCubix-acceptance-local` 与原生只读连接 `enerCubix-acceptance-reader`：
-
-```powershell
-.\scripts\runtime-acceptance.ps1
-```
-
-该脚本经官方审计通路依次执行 `enerCubixAcceptance()`、`enerCubixThreeTreeAcceptance()`、`enerCubixEngineeringAcceptance()`、`enerCubixTransportAcceptance()`、`enerCubixPermissionAcceptance()`，会写入隔离项目的测试配置、历史及任务等数据。它检查计算、三树关系、迁移回滚、原子操作、持久化、原生 HTTP 业务路由与读权限；全部步骤通过后才生成 `out/runtime-acceptance.json`，分步响应保存在 `out/native/`。报告关联运行 Pod 的 SHA-256，不能将旧包结果当作新包验收。
-
-普通浏览器测试使用受控接口数据验证界面交互、导出与错误状态；未设置 `ENERCUBIX_NATIVE=1` 时，原生业务测试会跳过：
-
-```powershell
-npm --prefix enerCubix.pod/ts run build
-npm --prefix enerCubix.pod/ts run test:e2e
-```
-
-要让真实 Edge 页面使用隔离 FIN 的业务响应，先完成上述运行验收，再在另一终端启动桥。以下路径需指向已配置连接的 FIN Expert 环境：
-
-```powershell
-& 'D:\FINExpert-Export\fin-expert2.1\FINExpert\finprofile\.venv\Scripts\python.exe' .\scripts\native-ui-bridge.py --origin http://127.0.0.1:4178
-```
-
-桥只监听 `127.0.0.1:4179`，限定测试项目、账号与业务路由，所有 FIN 操作均经官方 `ToolRegistry.live_execute_axon` 审计；桥不直接请求 FIN HTTP，不返回认证头，遇到 `outcome_unknown` 显示失败且不自动重试。审计元数据写入 `out/native-browser-audit.jsonl`。隔离 FIN 重启后需重启桥以更新其认证会话。
-
-```powershell
-$env:ENERCUBIX_NATIVE = '1'
-try {
-    npm --prefix enerCubix.pod/ts run test:e2e -- native-fin.spec.ts
-} finally {
-    Remove-Item Env:ENERCUBIX_NATIVE -ErrorAction SilentlyContinue
-}
-```
-
-Playwright 自动启动 `127.0.0.1:4178` 的生产构建预览，该端口须空闲；本机需安装 Edge。原生业务用例检查真实报表及导出、配置增删与刷新后的持久化、只读账号的禁用控件与写入拒绝，响应证据保存在测试附件中。页面认证入口由测试拦截，业务请求经审计桥转发，因此这层不能证明原生浏览器 Cookie 登录、CSRF/attest 握手或完整菜单入口已通过；这些须单独记录原生 HTTP 与浏览器证据。上述命令与测试范围也不代表用户手册全部功能或生产环境已验收，逐项状态以功能账本为准。
-
-对比分析默认本月至今对比上月同期，日期包含结束日；自定义区间联动保持等长，按周从各自起点每 7 天对齐。上月天数不足时同时取两期共有天数并提示。整月模式保留各月实际天数，以月份为一组。不同能源与单位分别绘制本期／对比期并排柱，缺测留空；旧模板保留原始区间口径。
-
-同一时段的对象对比统一在对象树勾选，再从已选对象中明确指定基准；差值为对象用量减基准用量，变化率以基准用量为分母。基准不随勾选顺序改变，移除基准需重新选择。模板保存基准，旧模板的额外表计对象合并显示，原始参考点按旧口径保留并提示。
+The 0.16.0 candidate introduces the `finEnergy` namespace, J2 branding and native FIN feature gating, with explicit recoverable migration. HQ's exact feature token, genuine test grant and the Belgian customer's full environment remain release prerequisites. SDK, controlled browser, package and native runtime evidence are kept distinct. See the English documents above for deployment and operational details.

@@ -1,0 +1,30 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "1f73c07d309d75beceda7494271cf170aa26f5f23eb7a03af987a7317c5e9eb3"
+  },
+  {
+    "path": "contracts/api.md",
+    "sha256": "94b14a640bda4d2282497a79e6ff39b727a9c337c47ae430ced036f94e3586ef"
+  },
+  {
+    "path": "contracts/api.zh-CN.md",
+    "sha256": "05c01170fed6286c60b2ee741035cf37fef2d76cd7e5345cad6d0e099ad8ac41"
+  },
+  {
+    "path": "docs/feature-parity.md",
+    "sha256": "29f9999ceab688d88a306dbd5f739d4e87607f9a7b0a56842d2d7ea1df7263b4"
+  },
+  {
+    "path": "docs/enercubix-architecture-design.md",
+    "sha256": "2c014457597a1b08d5a52b7b034d9a5671422a2eef18828ab2f67fb442561e2f"
+  },
+  {
+    "path": "docs/enercubix-architecture-design.en.md",
+    "sha256": "448b4cc1d62f4d27617d3d68980464fb8e115877de30d840cb524f162ecba763"
+  },
+  {
+    "path": "docs/enercubix-system-requirements.md",
+    "sha256": "55a476c732c794f7a7f9a376c23823e351cb9028573464aad7ee6e3d063c0196"
+  }
+]
