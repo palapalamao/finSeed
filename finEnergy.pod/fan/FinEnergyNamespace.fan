@@ -29,6 +29,7 @@ class FinEnergyNamespace
     out:=Str:Obj?[:]
     original.each |v,name|
     {
+      if (runtimeTag(name)) return
       target:=name.startsWith(from) ? to+name[from.size..-1] : name
       value:=rewrite(v,from,to)
       if ([from+"Config",from+"EpochConfig",from+"LegacyData"].contains(name) && v is Str)
@@ -120,7 +121,7 @@ class FinEnergyNamespace
     administrator
     migrationDirection(from,to)
     if (apply) FinEnergyNamespaceFence.requireAvailable(cx.db)
-    records:=cx.db.readAllList(Filter.has("id")).dup.sort |a,b->Int| { a.id.toStr <=> b.id.toStr }
+    records:=persistentRecords(cx.db).sort |a,b->Int| { a.id.toStr <=> b.id.toStr }
     originals:=Dict[,]; updated:=Dict[,]; diffs:=Diff[,]
     records.each |r|
     {
@@ -192,10 +193,10 @@ class FinEnergyNamespace
     {
       current:=cx.db.readById(prior.id,false)
       patch:=safeRestore(current,after[i],prior)
-      projected[prior.id.id]=merge(current,patch)
+      projected[prior.id.id]=merge(cx.db.readByIdPersistentTags(prior.id),patch)
       if (!patch.isEmpty) diffs.add(Diff(current,patch))
     }
-    graph:=cx.db.readAllList(Filter.has("id")).map |r->Dict| {projected[r.id.id] ?: r}
+    graph:=persistentRecords(cx.db).map |r->Dict| {projected[r.id.id] ?: r}
     validateGraph(graph,to)
     if (graph.any |r| {!changes(r,from,to).isEmpty}) throw ArgErr("Namespace source configuration changed after backup; backup="+backup)
     alarmUpdates:=resumeAlarms(alarmBefore,alarmAfter)
@@ -395,7 +396,7 @@ class FinEnergyNamespace
     names:=Etc.dictToMap(current).keys.addAll(Etc.dictToMap(target).keys).unique
     names.each |key|
     {
-      if (key == "id" || key == "mod") return
+      if (key == "id" || key == "mod" || runtimeTag(key)) return
       if (!target.has(key)) patch[key]=Remove.val
       else if (!current.has(key) || !sameValue(current[key],target[key])) patch[key]=target[key]
     }
@@ -435,6 +436,23 @@ class FinEnergyNamespace
     return false
   }
   private static Bool same(Dict a,Dict b) { restoreChanges(a,b).isEmpty }
+
+  ** Persistent migration never publishes or deletes a transient cache. Read
+  ** Folio's authoritative projection rather than guessing from tag spelling.
+  internal static Dict[] persistentRecords(Folio db)
+  { db.readAllList(Filter.has("id")).map |r->Dict| {db.readByIdPersistentTags(r.id)} }
+
+  ** Both supported legacy MeterRollup implementations write exactly these four
+  ** product tags with Diff.transient (plus native curVal/curStatus/curErr).
+  ** Ignore them in old journals too; runtime refresh regenerates the new tags.
+  private static Bool runtimeTag(Str name)
+  {
+    return ["enerCubix","enercubix","finEnergy"].any |prefix|
+    {
+      name.startsWith(prefix) && ["RollupRef","RollupAt","RollupStatus","RollupHasGap"].contains(name[prefix.size..-1])
+    }
+  }
+
   internal static Bool needsMigration(Folio db)
   {
     if (FinEnergyNamespaceFence.blocked(db)) return true
@@ -445,7 +463,11 @@ class FinEnergyNamespace
     }
     filter:=Filter.has(names.first)
     names[1..-1].each |name| {filter=filter.or(Filter.has(name))}
-    return db.read(filter,false) != null
+    return db.readAllList(filter).any |r|
+    {
+      persistent:=db.readByIdPersistentTags(r.id)
+      return names.any |name| {persistent.has(name)}
+    }
   }
   ** Restart reconciliation only releases a verified terminal journal. Missing,
   ** changed or incomplete recovery materials keep every business entry paused.

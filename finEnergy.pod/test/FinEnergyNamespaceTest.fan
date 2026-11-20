@@ -330,4 +330,43 @@ class FinEnergyNamespaceTest : Test
       "finEnergyCleaningOriginal":changed["finEnergyCleaningOriginal"]])
     verifyErr(ArgErr#) {FinEnergyNamespace.changes(conflict,"enerCubix","finEnergy")}
   }
+
+  Void testPersistentMigrationDoesNotPublishOrRestoreTransientRollupState()
+  {
+    home:=Env.cur.tempDir+("finEnergy-transient-migration-"+Uuid()+"/").toUri
+    db:=Folio3.open(FolioConfig {it.dir=home;it.idPrefix="p:test:r:"})
+    try
+    {
+      before:=db.commit(Diff.makeAdd(Etc.makeDict(["point":Marker.val,"enerCubixCleaningOwnerRef":Ref("p:test:r:owner")]),Ref("rollup-point"))).newRec
+      transient:=Etc.makeDict(["enerCubixRollupRef":Ref("p:test:r:meter"),"enerCubixRollupAt":DateTime.now,
+        "enerCubixRollupStatus":"ok","enerCubixRollupHasGap":false,"curVal":Number(123),"curStatus":"ok"])
+      db.commit(Diff(before,transient,Diff.transient))
+      live:=db.readById(before.id)
+      edits:=FinEnergyNamespace.changes(live,"enerCubix","finEnergy")
+      // This used to fail atomically: a persistent remove of a transient tag
+      // is forbidden, even if that tag is owned by the application.
+      db.commitAll([Diff(live,edits)])
+      applied:=db.readById(before.id)
+      after:=db.readByIdPersistentTags(before.id)
+      verifyEq(applied["finEnergyCleaningOwnerRef"],Ref("p:test:r:owner"))
+      transient.each |v,k| {verifyEq(applied[k],v);verify(!edits.has(k))}
+      ["Ref","At","Status","HasGap"].each |suffix|
+      {
+        verify(!applied.has("finEnergyRollup"+suffix))
+        verify(!db.readByIdPersistentTags(before.id).has("enerCubixRollup"+suffix))
+      }
+      verify(!FinEnergyNamespace.needsMigration(db))
+      verify(FinEnergyNamespace.changes(applied,"enerCubix","finEnergy").isEmpty)
+      later:=Etc.makeDict(["enerCubixRollupStatus":"missing","enerCubixRollupHasGap":true,"curVal":Number(456)])
+      db.commit(Diff(applied,later,Diff.transient))
+      current:=db.readById(before.id)
+      undo:=FinEnergyNamespace.safeRestore(current,before,after)
+      db.commitAll([Diff(current,undo)])
+      restored:=db.readById(before.id)
+      verifyEq(restored["enerCubixCleaningOwnerRef"],Ref("p:test:r:owner"))
+      later.each |v,k| {verifyEq(restored[k],v);verify(!undo.has(k))}
+      verify(FinEnergyNamespace.needsMigration(db))
+    }
+    finally {db.close}
+  }
 }
