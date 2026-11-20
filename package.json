@@ -1,6 +1,6 @@
 {
   "name": "finenergy",
-  "version": "0.16.5",
+  "version": "0.16.7",
   "private": true,
   "description": "FIN Energy building energy analytics",
   "scripts": {
