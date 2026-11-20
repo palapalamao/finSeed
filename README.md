@@ -2,7 +2,7 @@
 
 FIN Energy is a native FIN Framework Pod for building energy analysis in new projects and retrofits. 中文品牌为 **FIN Energy 能源管理**，英文为 **FIN Energy**。它复用 FIN 的设备、主点历史、身份和报警服务，提供经营驾驶舱、分析工作台、数据清洗、费用、面积强度及事件核查。
 
-当前为 **0.16.0 候选版**。`developer` 是唯一开发与集成基线，`main` 用于稳定发布。总部原生能源功能标识与测试许可证、比利时客户完整 FIN 构建号及操作系统尚待确认；候选构建、受控界面验证与实际 FIN 发布分别记录。此次准备没有替换当前运行的 FIN。
+当前为 **FIN Energy 双发行**，中国版采用自有授权，总部版采用 FIN 原生授权。`developer` 是唯一开发与集成基线，`main` 用于稳定发布。总部原生能源功能标识与测试许可证、比利时客户完整 FIN 构建号及操作系统尚待确认；候选构建、受控界面验证与实际 FIN 发布分别记录。运行状态以各发行的验收记录为准。
 
 ## 现行文档 Current documentation
 
@@ -34,7 +34,7 @@ UI 使用 J2 Deep Blue、Blue、Aqua 与品牌辅助色，随包提供 Manrope�
 
 技术名统一为 `finEnergy`：Pod、`FinEnergy*` 类型、`finEnergy*` Axon、业务标签及 `/api/{project}/ext/finEnergy/v1`。新项目直接使用新名，既有项目通过管理员预览、冲突检查、备份、明确应用、原日志续作及保护回滚迁移。保留原对象 ID、主点历史和报警确认；维护期间停用旧任务及配置写入，结束后只运行一套任务。
 
-扩展继承 `fin::FinExt`，使用 `@FinExtMeta.licFeature`。拟定功能键 `fin energy` 尚待总部确认，必须与原生许可证精确匹配。原生缺功能可使整个扩展停用，因此不能承诺无授权时应用授权页、Axon 或清洗回调仍可用。10 块免费表和培训授权仍是商业建议，不在此候选中启用。旧独立签发代码保留在 [历史归档](archive/enercubix-license-issuer/ARCHIVE.md)，不会签发 FIN 原生许可证。
+总部版继承 `fin::FinExt`，由 `@FinExtMeta.licFeature` 声明 `fin energy`。匹配的正式标识和真实 FIN 测试许可证仍需总部确认。中国版使用实例级自有授权，兼容现有签名文件，支持导入、删除、机器绑定、限时培训和每项目 10 表免费额度。发行版在构建时确定，安装后的授权页显示当前模式。
 
 ## 本地构建
 
@@ -54,7 +54,7 @@ node scripts/check-versions.mjs
 
 本次合并后 SDK 后端全量通过 124 类、1,026 方法、300,163 验证；前端类型和正式构建通过。中英文桌面／手机、原生授权呈现、分项能流、清洗及冻结导出的浏览器证据与新界面截图，分别注明受控数据和保存的 FIN 响应来源。完整证据、剩余运行验收与包哈希见本次交付记录。
 
-正式发布前，使用真实许可证验证功能有效、缺失、到期、重启、多项目、原生菜单、普通/raw 历史与清洗回调，并按冻结条件核对迁移前后统计一致。Linux、Desigo Optic 及其他 FIN 构建的兼容范围须以目标环境验收为准。
+总部版正式发布前，使用真实许可证验证功能有效、缺失、到期、重启、多项目、原生菜单、普通/raw 历史与清洗回调，并按冻结条件核对迁移前后统计一致。Linux、Desigo Optic 及其他 FIN 构建的兼容范围须以目标环境验收为准。
 
 ## English overview
 
