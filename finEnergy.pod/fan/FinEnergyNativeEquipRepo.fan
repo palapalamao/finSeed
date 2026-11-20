@@ -49,6 +49,7 @@ class FinEnergyNativeEquipRepo
       kind:=repo.stored(legacy.first["id"].toStr)["finEnergyKind"]
       pending=input.dup.add(["id":copyTarget,"kind":kind])
     }
+    FinEnergyEditionLicense.checkMigration(cx,pending,plan)
     migrate(["action":"apply","revision":plan["revision"],"sourceRevision":plan["sourceRevision"]])
     aliases:=mapping
     return input.map |r->[Str:Obj?]|

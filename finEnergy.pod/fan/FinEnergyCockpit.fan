@@ -241,6 +241,8 @@ class FinEnergyCockpit
     cutoff:=DateTime.fromIso(request["asOf"].toStr)
     context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
     provenance:=Str:Obj?["configFingerprint":requestScope==null ? FinEnergyCockpitDigest.json(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning],deadline).sha256 : requestScope.configurationFingerprint(config,canonicalConfig,refs,appliedCleaning),"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
+    provenance["edition"]=FinEnergyEditionLicense.edition
+    provenance["licenseMode"]=FinEnergyEditionLicense.licenseMode
     budget:=(requestMeta["preparedBudget"] as FinEnergyPreparedBudget) ?: (histories.find |h| {h["_preparedBudget"] is FinEnergyPreparedBudget}?.get("_preparedBudget") as FinEnergyPreparedBudget)
     if(budget != null) provenance["preparedRuntime"]=budget.evidence
     limitations:=Str[,]

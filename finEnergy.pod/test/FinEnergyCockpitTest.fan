@@ -24,6 +24,10 @@ class FinEnergyCockpitTest : Test
     report:=(Str:Obj?)((Map)result["reports"])["profile-energy"]
     legacy:=FinEnergyHistory.report(flat,recs,histories)
     verifyEq(report,legacy)
+    verifyEq(legacy["edition"],FinEnergyEditionLicense.edition)
+    verifyEq(legacy["licenseMode"],FinEnergyEditionLicense.licenseMode)
+    verifyEq(((Map)result["provenance"])["edition"],FinEnergyEditionLicense.edition)
+    verifyEq(((Map)result["provenance"])["licenseMode"],FinEnergyEditionLicense.licenseMode)
     fixture:=Env.cur.vars["FINENERGY_COCKPIT_FIXTURE"]
     if (fixture != null) File.os(fixture).out.writeChars(JsonOutStream.writeJsonToStr(result)).close
   }

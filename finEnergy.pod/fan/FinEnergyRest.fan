@@ -16,12 +16,12 @@ const class FinEnergyRest : WebMod
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
       readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
-      if (route != "session" && route != "license/status") repo.requireLicensedCalculation
+      if (!["session","license/status","license/import","license/delete"].contains(route)) repo.requireConfigurationAccess
       if (req.method != (readOnly ? "GET" : "POST")) throw FinEnergyHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
       if (req.method == "POST")
       {
-        if (!readPost(route)) repo.mustWrite
+        if (!readPost(route) && route!="license/import" && route!="license/delete") repo.mustWrite
         if (!req.headers.get("Content-Type","").lower.startsWith("application/json")) throw ArgErr("请求必须使用 application/json")
         raw := readBody(req.in,bodyLimit(route),route == "cockpit/assets/upload")
         parsed := JsonInStream(raw.in).readJson
@@ -46,8 +46,10 @@ const class FinEnergyRest : WebMod
         case "cockpit/assets/image":
           image:=FinEnergyCockpitAssets(repo).image(req.uri.query["id"] ?: "",req.uri.query["hash"] ?: "")
           sendImage(image); return
-        case "session": data=["locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
+        case "session": data=["edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
         case "license/status": data=repo.licenseStatus
+        case "license/import": data=repo.licenseImport(body["license"])
+        case "license/delete": data=repo.licenseDelete(body["token"])
         case "catalog": data=repo.catalog
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
@@ -124,6 +126,8 @@ const class FinEnergyRest : WebMod
 
   internal static Int bodyLimit(Str route)
   {
+    if (route=="license/import") return 32768
+    if (route=="license/delete") return 1024
     return route=="cockpit/assets/upload" ? 3145728 : 2097152
   }
 

@@ -24,23 +24,35 @@ class FinEnergyRepo
   {
     mustRead
     if (!cx.user.isAdmin) throw FinEnergyHttpErr(403, "PERMISSION", "当前 FIN 用户没有配置写入权限")
-    requireLicensedCalculation
+    requireConfigurationAccess
   }
 
   internal Bool licenseAllowsCalculation()
-  { FinEnergyNativeLicense.allowed(cx) && !FinEnergyNamespace.needsMigration(cx.db) }
+  { FinEnergyEditionLicense.allowed(cx) && !FinEnergyNamespace.needsMigration(cx.db) }
 
   internal Void requireLicensedCalculation()
   {
     if (FinEnergyNamespace.needsMigration(cx.db)) throw FinEnergyHttpErr(409,"NAMESPACE_MIGRATION_REQUIRED","namespaceMigrationRequired")
-    if (!licenseAllowsCalculation) throw FinEnergyHttpErr(409,"LICENSE_REQUIRED","nativeLicenseRequired")
+    if (!licenseAllowsCalculation) throw FinEnergyHttpErr(409,"LICENSE_REQUIRED",FinEnergyEditionLicense.calculationReason)
+  }
+
+  internal Void requireConfigurationAccess()
+  {
+    if (FinEnergyNamespace.needsMigration(cx.db)) throw FinEnergyHttpErr(409,"NAMESPACE_MIGRATION_REQUIRED","namespaceMigrationRequired")
+    if (!FinEnergyEditionLicense.configurationAllowed(cx)) throw FinEnergyHttpErr(409,"LICENSE_REQUIRED",FinEnergyEditionLicense.calculationReason)
   }
 
   internal [Str:Obj?] licenseStatus()
   {
     mustRead
-    return FinEnergyNativeLicense.status(cx)
+    return FinEnergyEditionLicense.status(cx)
   }
+
+  internal Str:Obj? licenseImport(Obj? raw)
+  { mustRead;FinEnergyEditionLicense.install(cx,raw);return licenseStatus }
+
+  internal Str:Obj? licenseDelete(Obj? token)
+  { mustRead;FinEnergyEditionLicense.remove(cx,token);return licenseStatus }
 
   private Void readRevision()
   {
@@ -55,7 +67,7 @@ class FinEnergyRepo
   [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false)
   {
     mustRead
-    requireLicensedCalculation
+    requireConfigurationAccess
     readRevision
     rows:=cx.db.readAllList(Filter.has("finEnergyKind").and(Filter.has("finEnergy").or(Filter.has("equip"))))
     cockpitPreparation?.hold(1);out:=[Str:Obj?][,]
@@ -92,7 +104,7 @@ class FinEnergyRepo
     projected=FinEnergyMeterOrigin.decorate(projected,readSource,|Ref ref->Dict?| { readSource(ref.id) })
     owned:=ownedSnapshot
     refs:=FinEnergyMath.maps(owned["budgets"]).dup.addAll(FinEnergyMath.maps(owned["rules"])).findAll |r| {r["validation"] != "invalid"}.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
-    return ["version":FinEnergyRepo#.pod.version.toStr, "project":cx.proj.name, "projectRef":cx.proj.id.id,"cockpitConfigRefs":refs,"user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
+    return ["edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"version":FinEnergyRepo#.pod.version.toStr, "project":cx.proj.name, "projectRef":cx.proj.id.id,"cockpitConfigRefs":refs,"user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
   }
 
   Bool nativeModel() { FinEnergyNativeEquipRepo(this).active }
@@ -834,9 +846,11 @@ class FinEnergyRepo
   internal Void commit(Diff[] changes, Bool event := false)
   {
     FinEnergyHistorySafety.metadata(cx.db,changes)
-    if (!event)
+    guardConfiguration:=!event || FinEnergyEditionLicense.requiresRevision(cx,changes)
+    if (guardConfiguration)
     {
       readRevision
+      FinEnergyEditionLicense.checkWrite(cx,changes)
       FinEnergyCleaningRepo(this).validateSaves(changes)
       changes.addAll(FinEnergyMeterTimeline.capture(cx.db,changes,DateTime.now,cx.user.username))
       // A shared optimistic revision serializes uniqueness/cycle checks across requests.

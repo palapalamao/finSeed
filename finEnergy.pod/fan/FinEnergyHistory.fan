@@ -27,6 +27,8 @@ class FinEnergyHistory
         }
       }
     }
+    result["edition"]=FinEnergyEditionLicense.edition
+    result["licenseMode"]=FinEnergyEditionLicense.licenseMode
     return result
   }
 
