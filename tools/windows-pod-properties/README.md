@@ -26,6 +26,8 @@ This loads the trusted handler DLL and uses its actual COM `IClassFactory`, `IIn
 
 ## Install and verify Explorer
 
+These Markdown files are internal documentation sources. Customer explanations are distributed separately as PDFs. Installation needs only the six runtime files and has no Markdown or PDF dependency.
+
 The release owner reviews the scripts and runs the following from an administrator **64-bit PowerShell** window. The install and uninstall scripts support `-WhatIf`.
 
 ```powershell

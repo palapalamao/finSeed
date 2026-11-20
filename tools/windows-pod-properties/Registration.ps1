@@ -83,7 +83,7 @@ function Save-State($state) {
     $temporary = Join-Path $stateFolder ('registration-' + [Guid]::NewGuid().ToString('N') + '.tmp')
     try {
         [IO.File]::WriteAllText($temporary, $text, [Text.UTF8Encoding]::new($false))
-        if (Test-Path -LiteralPath $stateFile) { [IO.File]::Replace($temporary, $stateFile, $null) }
+        if (Test-Path -LiteralPath $stateFile) { [IO.File]::Replace($temporary, $stateFile, [System.Management.Automation.Language.NullString]::Value) }
         else { [IO.File]::Move($temporary, $stateFile) }
     } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
 }

@@ -26,6 +26,8 @@ SDK 库未安装到标准目录时，传入 `-SdkLibraries <包含um/x64和ucrt/
 
 ## 安装与验收
 
+本目录 Markdown 保留为内部维护源文件，客户说明独立交付 PDF。运行时安装只需要六个工具文件，无须复制 Markdown 或 PDF 到程序目录。
+
 发布负责人审阅脚本后，在 **64 位管理员 PowerShell** 中运行。安装和卸载均支持 `-WhatIf`：
 
 ```powershell

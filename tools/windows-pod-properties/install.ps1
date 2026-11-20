@@ -18,7 +18,7 @@ try {
         if ([FinEnergyPropertyRegistration]::PSGetPropertyKeyFromName($name, $keyBuffer) -eq 0) { throw "Custom property $name is already registered. Resolve the existing schema first." }
     }
 } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($keyBuffer) }
-$files = @('fin_energy_properties.dll','inspect.exe','FinEnergy.propdesc','Registration.ps1','install.ps1','uninstall.ps1','README.md','README.zh-CN.md')
+$files = @('fin_energy_properties.dll','inspect.exe','FinEnergy.propdesc','Registration.ps1','install.ps1','uninstall.ps1')
 foreach ($file in $files) { if (!(Test-Path -LiteralPath (Join-Path $PSScriptRoot $file) -PathType Leaf)) { throw "Missing installation file $file. Run build.ps1 and install from dist." } }
 $priorDetails = Registry-Snapshot $detailsPath 'FullDetails' ''
 $fullDetails = if ($priorDetails.existed -and $priorDetails.before) { $priorDetails.before } else { 'prop:System.PropGroup.Description' }
@@ -39,13 +39,16 @@ New-Item -ItemType Directory -Path $stateFolder | Out-Null
 Protect-Folder $stateFolder
 New-Item -ItemType Directory -Path $installFolder | Out-Null
 Protect-Folder $installFolder
-$state = [ordered]@{ owner=$handlerId; schemaId=$schemaId; version=1; status='prepared'; schemaRegistered=$false; files=@(); entries=$entries }
+$plannedFiles = @($files | ForEach-Object { [ordered]@{ name=$_; sha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $_) -Algorithm SHA256).Hash } })
+$state = [ordered]@{ owner=$handlerId; schemaId=$schemaId; version=1; status='prepared'; schemaRegistered=$false; files=$plannedFiles; copiedFiles=0; entries=$entries }
 Save-State $state
 try {
     foreach ($file in $files) {
         $target = Join-Path $installFolder $file
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $target
-        $state.files += [ordered]@{ name=$file; sha256=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash }
+        $expected = $plannedFiles | Where-Object name -EQ $file
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -cne $expected.sha256) { throw "Copied installation file $file changed." }
+        $state.copiedFiles++
         Save-State $state
     }
     $schema = Join-Path $installFolder 'FinEnergy.propdesc'

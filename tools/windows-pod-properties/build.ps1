@@ -20,6 +20,8 @@ try {
     $env:LIB = (Join-Path $sdk 'um\x64') + ';' + (Join-Path $sdk 'ucrt\x64') + ';' + (Join-Path $vc.FullName 'lib\x64')
     Push-Location $root
     try {
+        & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -File (Join-Path $root 'tests\state-powershell51.ps1')
+        if ($LASTEXITCODE) { throw 'Windows PowerShell state persistence checks failed.' }
         cargo test --locked --jobs 1
         if ($LASTEXITCODE) { throw 'Native tests failed.' }
         cargo build --release --locked --jobs 1
@@ -28,11 +30,12 @@ try {
         foreach ($file in @('fin_energy_properties.dll','inspect.exe')) {
             Copy-Item -LiteralPath (Join-Path $root "target\release\$file") -Destination (Join-Path $root "dist\$file") -Force
         }
-        foreach ($file in @('FinEnergy.propdesc','Registration.ps1','install.ps1','uninstall.ps1','README.md','README.zh-CN.md')) {
+        foreach ($file in @('FinEnergy.propdesc','Registration.ps1','install.ps1','uninstall.ps1')) {
             Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $root "dist\$file") -Force
         }
-        Get-ChildItem -LiteralPath (Join-Path $root 'dist') -File | Where-Object Name -NE 'sha256.json' | ForEach-Object {
-            [ordered]@{ name=$_.Name; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+        @('fin_energy_properties.dll','inspect.exe','FinEnergy.propdesc','Registration.ps1','install.ps1','uninstall.ps1') | ForEach-Object {
+            $file = Get-Item -LiteralPath (Join-Path $root "dist\$_")
+            [ordered]@{ name=$file.Name; sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash }
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'dist\sha256.json') -Encoding UTF8
     } finally { Pop-Location }
 } finally { $env:PATH=$previousPath; $env:LIB=$previousLib }
