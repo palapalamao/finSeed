@@ -42,12 +42,13 @@ SDK 基线为 FIN 5.3.0.2761。客户侧不需要 Node.js 或独立数据库；�
 
 ```powershell
 npm --prefix finEnergy.pod/ts ci
-.\scripts\build.ps1
+.\scripts\build.ps1 -Edition HQ
+.\scripts\build.ps1 -Edition China -LicenseKeyring <公开验签密钥JSON>
 node scripts/check-versions.mjs
-.\scripts\acceptance.ps1
+.\scripts\acceptance.ps1 -Edition China
 ```
 
-构建生成 `out/finEnergy.pod`。可用 `-SdkPath` 或 `FINENERGY_SDK` 指定静态 SDK 源；构建只复制允许的静态代码，不复制实例项目、用户库或许可证。`scripts/test.ps1` 执行后端、前端及构建检查。版本入口和包结构检查不能替代原生 FIN 运行验收。
+构建生成 `out/china/finEnergy.pod` 或 `out/hq/finEnergy.pod`。每次构建使用独立目录及静态 FIN SDK。对于单独递增版本的发行包，可传 `-ReleaseVersion`，同次构建的所有版本保持一致。使用 `scripts/test.ps1 -Edition China -SkipBuild` 或 `-Edition HQ -SkipBuild` 验证对应冻结构建。FIN 原生运行验收单独记录。
 
 ## 验证与交付
 

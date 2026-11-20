@@ -351,7 +351,7 @@ export const serverMessages:Record<string,string>={
 // Core validation and source errors originate in English; Chinese sessions
 // resolve these at the same service boundary as Chinese-owned API messages.
 export const chineseServerMessages:Record<string,string>={
- namespaceMigrationRequired:'请先由 FIN 管理员迁移原产品配置，再运行查询与定时任务。FIN 原生授权状态仍可查看。',
+ namespaceMigrationRequired:'请先由 FIN 管理员迁移原产品配置，再运行查询与定时任务。授权状态仍可查看。',
  nativeLicenseRequired:'需要有效的 FIN 原生能源功能授权，请联系 FIN 授权管理员。',
  "legacyTopologyInvalidProof":"历史关系恢复资料无效。",
  "legacyTopologyUnobservedRange":"恢复范围超出备份或业务修订时间的证据范围。",
@@ -478,3 +478,32 @@ Object.assign(chineseServerMessages,{cockpitHistoryReadFailed:'历史读取失�
 
 Object.assign(serverMessages,{cockpitCategoryScope:"The report energy scope is inconsistent. Refresh and select the energy category again."});
 Object.assign(chineseServerMessages,{cockpitCategoryScope:"能源范围不一致，请刷新后重新选择关注能源。"});
+
+Object.assign(serverMessages,{
+ licenseMeterLimit:'This project can enroll up to 10 meters with the free allowance. Open Settings → License management to activate FIN Energy.',
+ licenseProjectOverLimit:'This project exceeds 10 enrolled meters. Open Settings → License management to activate FIN Energy, or reduce the number of enrolled meters.',
+ licenseInvalid:'The license file or its signature is invalid.',
+ licenseInvalidPeriod:'The license contains an invalid validity period. Ask the issuer to check its dates.',
+ licenseHostMismatch:'This license belongs to a different FIN machine code.',
+ licenseHostUnavailable:'The FIN machine code is unavailable.',
+ licenseExpired:'This license has expired.',
+ licenseNotYetValid:'This license has not taken effect yet.',
+ licenseImportForbidden:'A FIN superuser must import the license.',
+ licenseDeleteForbidden:'A FIN superuser must delete the license.',
+ licenseChanged:'The installed license has changed. Review the current license before deleting it.',
+ licenseStoreFailed:'FIN could not save the license. Check the instance storage and try again.',
+});
+Object.assign(chineseServerMessages,{
+ licenseMeterLimit:'免费额度允许本项目纳入最多 10 块表。请在设置 → 授权管理中激活FIN Energy 能源管理。',
+ licenseProjectOverLimit:'本项目已纳入超过 10 块表。请在设置 → 授权管理中激活，或减少本项目纳管表计。',
+ licenseInvalid:'授权文件或签名无效。',
+ licenseInvalidPeriod:'授权文件中的有效期有误。请联系签发人员核对日期。',
+ licenseHostMismatch:'授权文件的机器码与当前 FIN 不一致。',
+ licenseHostUnavailable:'无法读取 FIN 机器码。',
+ licenseExpired:'此授权已到期。',
+ licenseNotYetValid:'此授权尚未生效。',
+ licenseImportForbidden:'只有 FIN 超级用户可导入授权。',
+ licenseDeleteForbidden:'只有 FIN 超级用户可删除授权。',
+ licenseChanged:'当前授权已发生变化。请核对更新后的授权再删除。',
+ licenseStoreFailed:'FIN 无法保存授权。请检查实例存储后重试。',
+});

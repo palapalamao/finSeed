@@ -8,6 +8,7 @@ playwright-report/
 finEnergy.pod/res/web/finEnergy/assets/
 finEnergy.pod/res/web/finEnergy/index.html
 finEnergy.pod/res/web/finEnergy/index-*.html
+finEnergy.pod/res/web/finEnergy/build-info.json
 finEnergy.pod/res/web/finEnergy/modules/
 finEnergy.pod/res/web/finEnergy/.vite/
 finEnergy.pod/res/license-keys.json

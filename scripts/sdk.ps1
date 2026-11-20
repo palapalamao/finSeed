@@ -30,7 +30,7 @@ function Get-FinEnergySdk {
         }
         # SDK Pod and JVM archives are static code only; compiled finEnergy is local.
         Get-ChildItem -LiteralPath (Join-Path $finEnergySource 'lib\fan') -Filter '*.pod' -File |
-            Where-Object { $_.Name -notin @('finEnergy.pod') } | ForEach-Object {
+            Where-Object { $_.Name -notin @('finEnergy.pod', 'enerCubix.pod') } | ForEach-Object {
                 $finEnergyTarget = Join-Path $finEnergyDestination "lib\fan\$($_.Name)"
                 if (-not (Test-Path -LiteralPath $finEnergyTarget)) { Copy-Item -LiteralPath $_.FullName -Destination $finEnergyTarget }
             }

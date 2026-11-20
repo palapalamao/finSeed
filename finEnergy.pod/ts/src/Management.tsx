@@ -16,6 +16,8 @@ import {MeterManager} from './MeterManager';
 import {OtherSettings} from './OtherSettings';
 import {SpaceAssets} from './SpaceAssets';
 import {LicenseSettings} from './LicenseSettings';
+import {LocalLicenseSettings} from './LocalLicenseSettings';
+import {chinaBuild} from './edition';
 import {manageTitles,type ManageView} from './managementNavigation';
 export {manageTitles,type ManageView} from './managementNavigation';
 export const manageKinds:Record<ManageView,Kind[]>= {license:[],budgets:[],ruleProfiles:[],spaceAssets:[],tree:nodeKinds,categories:['category','subcategory','utility'],tariffs:['tariff'],calendars:['calendar'],expressions:['expression'],copConfig:['cop'],templates:['template'],settings:['settings'],otherSettings:['settings'],bindings:['binding'],tasks:['job']};
@@ -28,7 +30,9 @@ export function treeData(records:FinEnergyRecord[],query=''):DataNode[]{
 }
 interface Props {onOpenTemplate?:(record:FinEnergyRecord)=>void;view:ManageView;api:FinEnergyApi;catalog:Catalog;reload:()=>Promise<void>}
 export function Management(props:Props){
- if(props.view==='license')return <LicenseSettings key={props.catalog.project} api={props.api}/>;
+ if(props.view==='license')return chinaBuild
+  ? <LocalLicenseSettings key={props.catalog.project} api={props.api}/>
+  : <LicenseSettings key={props.catalog.project} api={props.api}/>;
  return props.view==='budgets'||props.view==='ruleProfiles'?<CockpitConfiguration type={props.view==='budgets'?'budget':'rule'} api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='spaceAssets'?<SpaceAssets api={props.api} catalog={props.catalog}/>:props.view==='tree'?<MeterManager api={props.api} catalog={props.catalog} reload={props.reload}/>:props.view==='otherSettings'?<OtherSettings api={props.api} catalog={props.catalog} reload={props.reload}/>:<ConfigurationManagement {...props}/>;
 }
 function ConfigurationManagement({view,api,catalog,reload,onOpenTemplate}:Props){

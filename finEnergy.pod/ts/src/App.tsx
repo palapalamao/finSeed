@@ -1,6 +1,6 @@
 import {locale,t,serverMessage,subscribeLocale,localeSnapshot,type Locale} from './i18n';
 import {lazy,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {Alert,Button,ConfigProvider,Drawer,Empty,Layout,Space,Spin,Tabs,Tag} from 'antd';
+import {Alert,Button,ConfigProvider,Descriptions,Drawer,Empty,Layout,Modal,Space,Spin,Tabs,Tag} from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import {BarChartOutlined,BellOutlined,DashboardOutlined,FileTextOutlined,MenuOutlined,ReloadOutlined,SettingOutlined,UserOutlined} from '@ant-design/icons';
@@ -16,6 +16,7 @@ import {cockpitEnabled} from './cockpitTypes';
 import {CockpitReturnStore,createNavigation,decodeNavigation,encodeNavigation,readableNavigation,projectCockpitReport,type NavigationContextV1,type CockpitViewState} from './cockpitNavigation';
 import type {CockpitSnapshot} from './cockpitTypes';
 import {buildReportDisplay} from './reportDisplay';
+import {chinaBuild,editionLabel,licenseModeLabel} from './edition';
 
 const startupLocale=locale;
 // Share Vite's CSS dependency wait and errors as well as the module itself.
@@ -36,6 +37,7 @@ function readView():View{const view=location.hash.slice(1).split('?')[0].replace
 export function App(){
  useSyncExternalStore(subscribeLocale,localeSnapshot,localeSnapshot);
  const [exportLocked,setExportLocked]=useState(false);
+ const [aboutOpen,setAboutOpen]=useState(false);
  const productName=t('FIN Energy 能源管理'),productTagline=t('楼宇能源分析');
  const[project,setProject]=useState(()=>projectFromLocation(location));
  const[view,setView]=useState<View>(readView);
@@ -73,6 +75,7 @@ export function App(){
  const returnToCockpit=()=>{if(context)location.hash=navigationHash('cockpit',context);};
  const version=uiVersion;
  const versionMismatch=!!catalog?.version&&catalog.version!==uiVersion;
+ const editionMismatch=!!catalog?.edition&&catalog.edition!==(chinaBuild?'china':'hq');
  const destinations=[
   {key:'dashboard',label:t('总览'),icon:<DashboardOutlined/>,target:(cockpitEnabled?'cockpit':'dashboard') as View},
   {key:'analysis',label:t('分析工作台'),icon:<BarChartOutlined/>,target:(analysisView?view:lastAnalysis.current) as View},
@@ -101,6 +104,7 @@ export function App(){
     {!project?<div className="connection-state"><Empty description={t('尚未指定 FIN 项目')}/><Alert type="info" showIcon message={t('请从 FIN 项目打开能源管理，或在地址中指定 #/dashboard?project=项目名。')}/></div>:!catalog?<div className="connection-state">{loading?<Spin tip={t('正在读取 FIN 项目配置…')}/>:<><Alert type="error" showIcon message={(errorSource?serverMessage(errorSource):error)||t('项目配置尚未加载')}/><Button onClick={()=>void reload()}>{t('重新连接')}</Button></>}</div>:<>
      {error&&<Alert banner type="error" message={errorSource?serverMessage(errorSource):error}/>}
      {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开FIN Energy 能源管理以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/finEnergy/`)}>{t('加载新版界面')}</Button>}/>}
+     {editionMismatch&&<Alert banner type="warning" showIcon message={t('界面与服务器的发行版不一致，请重新打开应用。')} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/finEnergy/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame" inert={exportLocked}>
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}
       <PageBoundary key={view}>
@@ -109,7 +113,14 @@ export function App(){
      </div>
     </>}
    </Layout.Content>
-   <Layout.Footer className="app-footer"><span>{productName} · <span className="nav-version" aria-label={t('当前版本')}>v{version}</span></span><span>{t('数据、权限与历史由 FIN 项目提供')}</span></Layout.Footer>
+   <Layout.Footer className="app-footer"><Button type="link" size="small" disabled={exportLocked} onClick={()=>setAboutOpen(true)} aria-label={t('关于 {0}',productName)}>{productName} · v{version} · {t(editionLabel)}</Button><span>{t('数据、权限与历史由 FIN 项目提供')}</span></Layout.Footer>
+   <Modal open={aboutOpen} title={t('关于 {0}',productName)} footer={null} onCancel={()=>setAboutOpen(false)}>
+    <Descriptions column={1} size="small">
+     <Descriptions.Item label={t('当前版本')}>{version}</Descriptions.Item>
+     <Descriptions.Item label={t('发行版')}>{t(editionLabel)}</Descriptions.Item>
+     <Descriptions.Item label={t('授权方式')}>{t(licenseModeLabel)}</Descriptions.Item>
+    </Descriptions>
+   </Modal>
   </Layout>
  </ConfigProvider>;
 }

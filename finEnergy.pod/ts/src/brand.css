@@ -3,7 +3,7 @@
 body,.finenergy-app{font-family:Manrope,"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;}
 .app-header{border-top:3px solid var(--j2-aqua);}
 .brand-wordmark strong{font-weight:650;letter-spacing:-.025em;}
-.brand-mark{flex-shrink:0;}
+.brand-mark{flex-shrink:0;object-fit:contain;}
 .license-native-path{display:inline-block;padding:10px 14px;background:#edf5f9;border-left:3px solid var(--j2-aqua);border-radius:0 6px 6px 0;color:var(--j2-deep-blue);}
 :focus-visible{outline:2px solid var(--j2-purple);outline-offset:3px;}
 @media(max-width:600px){.brand-wordmark strong{font-size:17px;}.license-settings .workspace-title{align-items:flex-start;}}
