@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema xmlns="http://schemas.microsoft.com/windows/2006/propertydescription" schemaVersion="1.0">
+  <propertyDescriptionList publisher="FIN Energy" product="FIN Energy Pod Properties">
+    <propertyDescription name="FinEnergy.Edition" formatID="{36CE443D-5BF0-4C59-A51F-8337390063A1}" propID="2">
+      <searchInfo inInvertedIndex="false" isColumn="false" />
+      <labelInfo label="发行版 / Edition" />
+      <typeInfo type="String" isInnate="true" isViewable="true" />
+      <displayInfo defaultColumnWidth="24" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="FinEnergy.LicenseMode" formatID="{36CE443D-5BF0-4C59-A51F-8337390063A1}" propID="3">
+      <searchInfo inInvertedIndex="false" isColumn="false" />
+      <labelInfo label="授权方式 / Licensing" />
+      <typeInfo type="String" isInnate="true" isViewable="true" />
+      <displayInfo defaultColumnWidth="30" displayType="String" />
+    </propertyDescription>
+  </propertyDescriptionList>
+</schema>
