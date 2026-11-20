@@ -37,10 +37,10 @@ class FinEnergyNamespace
       if (name == "jobExpr" && v == from+"Scheduled()") value=to+"Scheduled()"
       if (target != name)
       {
-        if (original.has(target) && original[target] != value) throw ArgErr("Namespace target collision: "+target)
+        if (original.has(target) && !sameValue(original[target],value)) throw ArgErr("Namespace target collision: "+target)
         out[name]=Remove.val; out[target]=value
       }
-      else if (value != v) out[name]=value
+      else if (!sameValue(value,v)) out[name]=value
     }
     if (original.has(from+"TaskLock")) out["dis"]="FIN Energy shared calculation lock"
     if (original["jobExpr"] == from+"Scheduled()") out["dis"]="FIN Energy hourly calculation and alarms"
@@ -66,7 +66,7 @@ class FinEnergyNamespace
         converted:=name == "hisFunc" && v == from+"CleanHis" ? to+"CleanHis" : rewrite(v,from,to)
         if (name == "snapshot" && m["action"] == "nativeEquipSnapshot" && v is Map)
           converted=rewriteEquipmentSnapshot((Map)v,from,to)
-        if (result.containsKey(target) && result[target] != converted) throw ArgErr("Namespace snapshot collision: "+target)
+        if (result.containsKey(target) && !sameValue(result[target],converted)) throw ArgErr("Namespace snapshot collision: "+target)
         result[target]=converted
       }
       return result
@@ -381,8 +381,8 @@ class FinEnergyNamespace
         if (!nested.isEmpty) patch[key]=merge(current[key],nested)
         return
       }
-      wasPrior:=current.has(key) == prior.has(key) && current[key] == prior[key]
-      wasNext:=current.has(key) == next.has(key) && current[key] == next[key]
+      wasPrior:=current.has(key) == prior.has(key) && sameValue(current[key],prior[key])
+      wasNext:=current.has(key) == next.has(key) && sameValue(current[key],next[key])
       if (!wasPrior && !wasNext) throw ArgErr("Namespace rollback conflicts with a later tag edit: "+key)
       if (!wasPrior) patch[key]=prior.has(key) ? prior[key] : Remove.val
     }
@@ -397,9 +397,42 @@ class FinEnergyNamespace
     {
       if (key == "id" || key == "mod") return
       if (!target.has(key)) patch[key]=Remove.val
-      else if (!current.has(key) || current[key] != target[key]) patch[key]=target[key]
+      else if (!current.has(key) || !sameValue(current[key],target[key])) patch[key]=target[key]
     }
     return Etc.makeDict(patch)
+  }
+
+  ** Haystack Dict equality is identity-based. A persisted Zinc journal rebuilds
+  ** Dicts (including those nested in lists), so compare their exact values and
+  ** presence instead of rejecting an unchanged configuration after restart.
+  private static Bool sameValue(Obj? a,Obj? b)
+  {
+    if (a == b) return true
+    if (a == null || b == null) return false
+    if (a is Dict && b is Dict)
+    {
+      left:=(Dict)a;right:=(Dict)b;equal:=true
+      left.each |v,k| {if (v != null && (!right.has(k) || !sameValue(v,right[k]))) equal=false}
+      right.each |v,k| {if (v != null && !left.has(k)) equal=false}
+      return equal
+    }
+    if (a is Map && b is Map)
+    {
+      left:=(Map)a;right:=(Map)b
+      if (left.size != right.size) return false
+      equal:=true
+      left.each |v,k| {if (!right.containsKey(k) || !sameValue(v,right[k])) equal=false}
+      return equal
+    }
+    if (a is List && b is List)
+    {
+      left:=(List)a;right:=(List)b
+      if (left.size != right.size) return false
+      equal:=true
+      left.each |v,i| {if (!sameValue(v,right[i])) equal=false}
+      return equal
+    }
+    return false
   }
   private static Bool same(Dict a,Dict b) { restoreChanges(a,b).isEmpty }
   internal static Bool needsMigration(Folio db)

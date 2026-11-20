@@ -265,4 +265,69 @@ class FinEnergyNamespaceTest : Test
     verify(!forward.has("curVal"))
     verify(FinEnergyNamespace.safeRestore(after,after,before).isEmpty)
   }
+
+  Void testZincJournalResumesAndRollsBackMovedNestedConfiguration()
+  {
+    home:=Env.cur.tempDir+("finEnergy-zinc-resume-"+Uuid()+"/").toUri
+    db:=Folio3.open(FolioConfig {it.dir=home;it.idPrefix="p:test:r:"})
+    try
+    {
+      config:=Etc.makeDict(["enerCubixProfileVersion":Number(1),"defNull":Marker.val,
+        "timeMax":Number(1,Unit("h")),"enerCubixMode":"drop","deltaMin":Number(0,Unit("kWh")),
+        "enerCubixProfileRef":Ref("p:test:r:profile")])
+      unrelated:=Etc.makeDict(["nativeLabel":"keep","mode":"auto"])
+      original:=db.commit(Diff.makeAdd(Etc.makeDict(["enerCubixMeterGeneration":Marker.val,
+        "enerCubixGenerationLegacyConfig":config,"nativeConfig":unrelated,"dis":"original label"]),Ref("legacy-generation"))).newRec
+      edits:=FinEnergyNamespace.changes(original,"enerCubix","finEnergy")
+      targetMap:=Etc.dictToMap(original)
+      edits.each |v,k| {if (v==Remove.val) targetMap.remove(k);else targetMap[k]=v}
+      target:=Etc.makeDict(targetMap)
+      // The real journal is a multi-row grid with sparse columns and newly
+      // allocated nested Dicts when ZincReader reconstructs the backup.
+      other:=Etc.makeDict(["id":Ref("other"),"extra":"sparse column"])
+      before:=ZincReader(ZincWriter.gridToStr(Etc.makeDictsGrid(null,[original,other])).in).readGrid.first
+      after:=ZincReader(ZincWriter.gridToStr(Etc.makeDictsGrid(null,[target,other])).in).readGrid.first
+      stored:=db.commit(Diff(original,Etc.makeDict(["dis":"updated native label"]))).newRec
+      live:=Etc.dictToMap(stored);live["curVal"]=Number(50);live["curStatus"]="ok"
+      current:=Etc.makeDict(live)
+      forward:=FinEnergyNamespace.safeRestore(current,after,before)
+      verifyEq(forward["enerCubixGenerationLegacyConfig"],Remove.val)
+      verifyEq(((Dict)forward["finEnergyGenerationLegacyConfig"])["finEnergyProfileRef"],Ref("p:test:r:profile"))
+      verify(!forward.has("curVal"));verify(!forward.has("curStatus"));verify(!forward.has("nativeConfig"));verify(!forward.has("dis"))
+      applied:=db.commit(Diff(stored,forward)).newRec
+      verifyEq(applied.dis,"updated native label")
+      verify(FinEnergyNamespace.safeRestore(applied,after,before).isEmpty)
+      backward:=FinEnergyNamespace.safeRestore(applied,before,after)
+      verifyEq(backward["finEnergyGenerationLegacyConfig"],Remove.val)
+      restored:=db.commit(Diff(applied,backward)).newRec
+      verifyEq(((Dict)restored["enerCubixGenerationLegacyConfig"])["deltaMin"],Number(0,Unit("kWh")))
+      verifyEq(restored.dis,"updated native label")
+      verify(FinEnergyNamespace.safeRestore(restored,before,after).isEmpty)
+      changed:=Etc.dictToMap(config);changed["deltaMin"]=Number(5,Unit("kWh"))
+      edited:=db.commit(Diff(restored,Etc.makeDict(["enerCubixGenerationLegacyConfig":Etc.makeDict(changed)]))).newRec
+      verifyErr(ArgErr#) {FinEnergyNamespace.safeRestore(edited,after,before)}
+    }
+    finally {db.close}
+  }
+
+  Void testJournalContainerComparisonRetainsStrictCollisionChecks()
+  {
+    inner:=Etc.makeDict(["mode":"auto","settings":[Etc.makeDict(["minimum":Number(0,Unit("kWh"))])]])
+    source:=Etc.makeDict(["id":Ref("list-config"),"enerCubixCleaningOriginal":[inner]])
+    before:=ZincReader(ZincWriter.gridToStr(Etc.makeDictsGrid(null,[source])).in).readGrid.first
+    target:=Etc.makeDict(["id":source.id,"finEnergyCleaningOriginal":[inner]])
+    after:=ZincReader(ZincWriter.gridToStr(Etc.makeDictsGrid(null,[target])).in).readGrid.first
+    patch:=FinEnergyNamespace.safeRestore(source,after,before)
+    verifyEq(patch["enerCubixCleaningOriginal"],Remove.val)
+    verify(!patch.has("id"))
+    verify(FinEnergyNamespace.safeRestore(target,after,before).isEmpty)
+    changed:=Etc.makeDict(["id":source.id,"finEnergyCleaningOriginal":[Etc.makeDict(["mode":"manual"])]])
+    verifyErr(ArgErr#) {FinEnergyNamespace.safeRestore(changed,before,after)}
+    sameTarget:=Etc.makeDict(["enerCubixCleaningOriginal":source["enerCubixCleaningOriginal"],
+      "finEnergyCleaningOriginal":after["finEnergyCleaningOriginal"]])
+    verifyEq(FinEnergyNamespace.changes(sameTarget,"enerCubix","finEnergy")["enerCubixCleaningOriginal"],Remove.val)
+    conflict:=Etc.makeDict(["enerCubixCleaningOriginal":source["enerCubixCleaningOriginal"],
+      "finEnergyCleaningOriginal":changed["finEnergyCleaningOriginal"]])
+    verifyErr(ArgErr#) {FinEnergyNamespace.changes(conflict,"enerCubix","finEnergy")}
+  }
 }
