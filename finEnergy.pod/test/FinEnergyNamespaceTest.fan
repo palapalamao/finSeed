@@ -369,4 +369,78 @@ class FinEnergyNamespaceTest : Test
     }
     finally {db.close}
   }
+
+  Void testSparseZincAlarmHasNoNullValuesAtNativeDatabaseBoundary()
+  {
+    home:=Env.cur.tempDir+("finEnergy-sparse-alarm-"+Uuid()+"/").toUri
+    db:=FolioFlatFile.open(FolioConfig {it.dir=home})
+    try
+    {
+      first:=Etc.makeDict(["id":Ref("alarm-one"),"state":"offNormal","priority":Number(50),"occurred":DateTime.now,
+        "active":Marker.val,"metadata":Etc.makeDict(["enerCubixEnergyAlarm":Marker.val,"enerCubixEventRef":Ref("event")])])
+      second:=Etc.makeDict(["id":Ref("alarm-two"),"state":"offNormal","priority":Number(50),"occurred":DateTime.now,
+        "ackedBy":"operator","acked":DateTime.now,"ackMessage":"keep note"])
+      commitNativeAlarm(db,Alarm.wrap(first))
+      sparse:=ZincReader(ZincWriter.gridToStr(Etc.makeDictsGrid(null,[first,second])).in).readGrid.first
+      changed:=FinEnergyNamespace.alarmChange(sparse,"enerCubix","finEnergy")
+      result:=commitNativeAlarm(db,changed)
+      verifyEq(result.id,first.id)
+      verify(((Dict)result["metadata"]).has("finEnergyEnergyAlarm"))
+      verify(!((Dict)result["metadata"]).has("enerCubixEnergyAlarm"))
+      changed.each |v,k| {verify(v!=null,"Null native write field: "+k)}
+    }
+    finally {db.close}
+  }
+
+  Void testNativeAlarmDeltaPreservesFreshAcknowledgementAndExplicitRemovals()
+  {
+    home:=Env.cur.tempDir+("finEnergy-alarm-delta-"+Uuid()+"/").toUri
+    db:=FolioFlatFile.open(FolioConfig {it.dir=home})
+    try
+    {
+      original:=commitNativeAlarm(db,Alarm.wrap(Etc.makeDict(["id":Ref("owned-alarm"),"state":"offNormal",
+        "priority":Number(50),"occurred":DateTime.now-1hr,"created":DateTime.now-1hr,"sourceRef":Ref("source"),
+        "active":Marker.val,"enerCubixOwnedAlarm":Marker.val,
+        "metadata":Etc.makeDict(["enerCubixEnergyAlarm":Marker.val,"enerCubixEventRef":Ref("event"),
+          "optional":null,"enabled":false,"zero":Number(0),"unknown":NA.val,"positions":[null,Number(0)]])])))
+      target:=FinEnergyNamespace.alarmChange(original,"enerCubix","finEnergy")
+      payload:=FinEnergyNamespace.alarmWrite(original,FinEnergyNamespace.safeRestore(original,target,original))
+      verifyEq(payload["enerCubixOwnedAlarm"],Remove.val)
+      ["active","acked","ackedBy","ackMessage","created","sourceRef"].each |k| {verify(!payload.has(k))}
+      now:=DateTime.now
+      latest:=db.readById(original.id)
+      db.commitAll([Diff.makeAll(latest.id,latest["mod"],latest,null,null,
+        Etc.makeDict(["acked":now,"ackedBy":"latest operator","ackMessage":"native acknowledgement","active":Remove.val]),0)])
+      result:=commitNativeAlarm(db,payload)
+      verifyEq(result.id,original.id);verifyEq(result["sourceRef"],original["sourceRef"])
+      verifyEq(result["created"],original["created"]);verifyEq(result["occurred"],original["occurred"])
+      verifyEq(result["acked"],now);verifyEq(result["ackedBy"],"latest operator");verifyEq(result["ackMessage"],"native acknowledgement")
+      verify(!result.has("active"));verify(!result.has("enerCubixOwnedAlarm"));verify(result.has("finEnergyOwnedAlarm"))
+      metadata:=(Dict)result["metadata"]
+      verify(!metadata.has("enerCubixEventRef"));verifyEq(metadata["finEnergyEventRef"],Ref("event"))
+      verifyEq(metadata["enabled"],false);verifyEq(metadata["zero"],Number(0));verifyEq(metadata["unknown"],NA.val)
+      positions:=(List)metadata["positions"]
+      verifyEq(positions.size,2);verifyEq(positions[0],null);verifyEq(positions[1],Number(0))
+      metadata.each |v,k| {verify(v!=null)}
+      rollback:=FinEnergyNamespace.alarmWrite(result,FinEnergyNamespace.safeRestore(result,original,target))
+      verifyEq(rollback["finEnergyOwnedAlarm"],Remove.val)
+      restored:=commitNativeAlarm(db,rollback)
+      verify(restored.has("enerCubixOwnedAlarm"));verify(!restored.has("finEnergyOwnedAlarm"))
+      verifyEq(restored["acked"],now);verifyEq(restored["ackedBy"],"latest operator");verify(!restored.has("active"))
+      verify(FinEnergyNamespace.safeRestore(restored,original,target).isEmpty)
+    }
+    finally {db.close}
+  }
+
+  // Same public Diff/FolioFlatFile path used by FIN 5.3.0.2761
+  // AlarmFolioDatabase.commitCreateOrUpdate, including its native tag filter.
+  private Dict commitNativeAlarm(Folio db,Alarm alarm)
+  {
+    fields:=Etc.dictFindAll(Etc.dictRemove(alarm,"id")) |v,n|
+    { n=="curVal" || n=="curStatus" || !FolioUtil.isUncommittable(n) }
+    existing:=db.readById(alarm.id,false)
+    diff:=existing==null ? Diff.makex(alarm.id,DateTime.now,fields,Diff.add) :
+      Diff.makeAll(alarm.id,existing["mod"],existing,null,null,fields,0)
+    return db.commitAll([diff]).first.newRec
+  }
 }

@@ -102,7 +102,7 @@ class FinEnergyNamespace
   static Alarm? alarmChange(Dict original, Str from, Str to)
   {
     edits:=changes(original,from,to)
-    return edits.isEmpty ? null : Alarm.wrap(merge(original,edits))
+    return edits.isEmpty ? null : Alarm.wrap(alarmFields(merge(original,edits)))
   }
 
   ** Preview is mandatory. Snapshot files and a recovery journal precede writes.
@@ -238,7 +238,7 @@ class FinEnergyNamespace
     {
       alarm:=current[prior.id.id]
       patch:=safeRestore(alarm,after[i],prior)
-      if (!patch.isEmpty) updates.add(merge(alarm,patch))
+      if (!patch.isEmpty) updates.add(alarmWrite(alarm,patch))
     }
     return updates
   }
@@ -293,7 +293,7 @@ class FinEnergyNamespace
     {
       current:=alarms[prior.id.id]
       patch:=safeRestore(current,prior,alarmAfter[i])
-      if (!patch.isEmpty) alarmRestore.add(merge(current,patch))
+      if (!patch.isEmpty) alarmRestore.add(alarmWrite(current,patch))
     }
     // Validate every resource before the first restoration.
     files.each |raw|
@@ -556,7 +556,36 @@ class FinEnergyNamespace
   {
     if (records.isEmpty) return
     AlarmLib lib:=HxContext.curHx.rt.lib("alarm")
-    lib.db.createOrUpdate(records.map |r->Alarm| { Alarm.wrap(r) },false).get(30sec)
+    lib.db.createOrUpdate(records.map |r->Alarm| { Alarm.wrap(alarmFields(r)) },false).get(30sec)
+  }
+
+  ** Native createOrUpdate merges fields, so removals must stay explicit. Send
+  ** only the required Alarm wrapper fields and the migration delta: native
+  ** acknowledgements/active state remain the latest values in its own actor.
+  internal static Alarm alarmWrite(Dict current,Dict patch)
+  {
+    if (patch.has("id") || patch.has("mod")) throw ArgErr("Namespace alarm identity cannot be changed")
+    fields:=Str:Obj?[:]
+    ["id","state","priority","occurred"].each |name|
+    {fields[name]=current[name] ?: throw ArgErr("Namespace alarm required field missing: "+name)}
+    patch.each |v,k| {if (v!=null) fields[k]=v}
+    return Alarm.wrap(alarmFields(Etc.makeDict(fields)))
+  }
+
+  ** Grid rows enumerate absent columns as null. FolioFlatFile rejects a null
+  ** top-level change at apply:404. Compact Dicts, preserving false/zero/NA,
+  ** explicit Remove markers and positional nulls inside ordinary lists.
+  private static Dict alarmFields(Dict record)
+  {
+    fields:=Str:Obj?[:]
+    record.each |v,k| {if(v!=null) fields[k]=alarmValue(v)}
+    return Etc.makeDict(fields)
+  }
+  private static Obj? alarmValue(Obj? value)
+  {
+    if (value is Dict) return alarmFields(value)
+    if (value is List) return ((List)value).map |v->Obj?| {alarmValue(v)}
+    return value
   }
   internal static [Str:Obj?][] assetPlan(Dict[] records,File projectDir,Ref projectRef,Str from,Str to)
   {
