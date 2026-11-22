@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {CockpitLazyQuery} from './cockpitLazy';
+import {CockpitLazyQuery,cockpitAppliedConditions} from './cockpitLazy';
 import {cockpitModules,type CockpitRequest,type CockpitSnapshot} from './cockpitTypes';
 const token='a'.repeat(64);
 function fixture(id='base'):CockpitSnapshot{return {schemaVersion:1,requestId:id,snapshotId:id,generatedAt:'2026-11-22T00:00:00Z',
@@ -46,4 +46,10 @@ it('requires a fresh base after a known configuration conflict and retains old c
  await expect(query.open('balance')).rejects.toThrow();expect(load).toHaveBeenCalledTimes(1);
  await query.open('space');expect(query.getSnapshot().errorSource).toBe('cockpitConfigurationChanged');
  query.reset(fixture('refresh'));await expect(query.open('time')).rejects.toThrow();expect(load).toHaveBeenCalledTimes(2);
+});
+it('retains applied relative labels after absolute base rehydration but uses fresh labels after manual refresh',()=>{
+ const original={preset:'thisMonth' as const,comparisonMode:'presetDefault' as const};
+ const returned={...fixture('return-base-1'),context:{...fixture().context,time:{...fixture().context.time,preset:'custom' as const},comparison:{mode:'custom' as const,from:'2025-11-01T00:00:00Z',to:'2025-11-22T00:00:00Z'}}};
+ expect(cockpitAppliedConditions(returned,original)).toBe(original);
+ expect(cockpitAppliedConditions({...returned,requestId:'cockpit-2'},original)).toEqual({preset:'custom',comparisonMode:'custom'});
 });

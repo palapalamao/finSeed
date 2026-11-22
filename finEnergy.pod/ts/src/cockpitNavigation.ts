@@ -10,7 +10,7 @@ import {attachCockpitDiagnostics} from './cockpitDiagnostics';
 export type CockpitTargetKind='profile'|'energyFlow'|'daily'|'workingHours'|'workingDays'|'utility'|'cop';
 const faceNames=['space','time','endUse','organization','balance','efficiency'];
 const targetKinds=['profile','energyFlow','daily','workingHours','workingDays','utility','cop'];
-export interface CockpitViewState {focusObjectId?:string;selectedFace:CockpitFace;presentationMode:boolean;scrollY:number;draft:{scope:CockpitScope;categoryId:string;preset:CockpitRequest['time']['preset'];auxiliarySelection?:string;dates?:{from?:string;to?:string;period:'hour'|'day'|'month';comparison:NonNullable<CockpitRequest['comparison']>}}}
+export interface CockpitViewState {focusObjectId?:string;selectedFace:CockpitFace;presentationMode:boolean;scrollY:number;appliedConditions?:{preset:CockpitRequest['time']['preset'];comparisonMode:NonNullable<CockpitRequest['comparison']>['mode']};draft:{scope:CockpitScope;categoryId:string;preset:CockpitRequest['time']['preset'];auxiliarySelection?:string;dates?:{from?:string;to?:string;period:'hour'|'day'|'month';comparison:NonNullable<CockpitRequest['comparison']>}}}
 export interface NavigationContextV1 {schemaVersion:1;origin:'cockpit';project:string;parentSnapshotId:string;returnToken:string;appliedContext:CockpitRequest;focusObjectId?:string;selectedFace:CockpitFace;presentationMode:boolean;scrollAnchor:number;parentComparison?:CockpitRequest['comparison'];targetKind:CockpitTargetKind;targetRequest:ReportRequest}
 export interface CockpitReturnState {snapshot:CockpitSnapshot;view:CockpitViewState;configurationChanged:boolean}
 const dimensions=['space','metering','organization'];

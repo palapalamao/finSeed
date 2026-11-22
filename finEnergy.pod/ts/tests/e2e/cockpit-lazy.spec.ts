@@ -8,7 +8,11 @@ for(const language of ['zh-CN','en-US'])test('loads and caches independent cockp
  const state=await installTransport(page,{userLocale:language,records:[
   {id:'plant',kind:'space',name:'Plant',nativeSourceKind:'site'},
   {id:'elec',kind:'category',name:'Electricity',unit:'kWh'},
-  {id:'in',kind:'meter',name:'Input meter',pointId:'pi',categoryId:'elec',spaceId:'plant'}]});
+  {id:'heat',kind:'category',name:'Heat',unit:'kWh'},
+  {id:'in',kind:'meter',name:'Input meter',pointId:'pi',categoryId:'elec',spaceId:'plant'},
+  {id:'out',kind:'meter',name:'Output meter',pointId:'po',categoryId:'heat',spaceId:'plant'},
+  {id:'pi',kind:'nativePoint',name:'Input primary',his:true},
+  {id:'po',kind:'nativePoint',name:'Output primary',his:true}]});
  await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{project:'testproject',version,edition:'china',licenseMode:'selfManaged',user:{name:state.username,canWrite:false},records:state.records}}}));
  const requests:CockpitRequest[]=[];let fail=false;
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
@@ -16,15 +20,17 @@ for(const language of ['zh-CN','en-US'])test('loads and caches independent cockp
   if(fail)return route.fulfill({status:409,json:{ok:false,error:{code:'COCKPIT_CONFIGURATION_CHANGED',msg:'cockpitConfigurationChanged'}}});
   const result=structuredClone(fixture);result.requestId=q.requestId;result.snapshotId='controlled-'+requests.length;
   result.context={...result.context,project:'testproject',configurationToken:'a'.repeat(64),reportScope:q.reportScope,focusCategoryId:q.focusCategoryId};
+  result.context.time={...result.context.time,preset:q.time.preset,period:q.time.period};
   if(q.time.preset==='custom')result.context.time={...q.time,from:q.time.from!,to:q.time.to!};
   if(q.asOf)result.context.asOf=q.asOf;
   if(q.comparison?.mode==='custom')result.context.comparison=q.comparison;
+  else if(q.comparison?.mode==='presetDefault')result.context.comparison={mode:'presetDefault',from:result.context.time.from.replace('2026-','2025-'),to:result.context.time.to.replace('2026-','2025-')};
   result.modules=Object.fromEntries(q.modules.map(m=>[m,result.modules[m]||{status:'unavailable'}]));
   return route.fulfill({json:{ok:true,data:result}});
  });
  await page.goto('/#/cockpit?project=testproject');
  await expect(page.locator('.cockpit-number')).toHaveText('300 kWh');expect(requests).toHaveLength(1);
- expect(requests[0].modules).toEqual(['kpis','trend','issues','space']);
+ expect(requests[0].modules).toEqual(['kpis','trend','issues','space']);await expect(page.locator('.cockpit-query-state')).toHaveCount(0);
  const zh=language==='zh-CN';
  await page.getByRole('tab',{name:zh?'时间':'Time',exact:true}).click();
  await expect(page.locator('[data-view-snapshot]')).toHaveAttribute('data-view-snapshot','controlled-2');expect(requests).toHaveLength(2);
@@ -34,12 +40,12 @@ for(const language of ['zh-CN','en-US'])test('loads and caches independent cockp
  await expect(page.locator('.cockpit-number')).toHaveText('300 kWh');
  await expect(page.locator('[data-view-snapshot]')).toHaveAttribute('data-view-snapshot','controlled-2');
  expect(requests).toHaveLength(3);expect(requests[2].modules).toEqual(['kpis','trend','issues','space']);
- expect(requests[2].asOf).toBe(fixture.context.asOf);
+ expect(requests[2].asOf).toBe(fixture.context.asOf);await expect(page.locator('.cockpit-query-state')).toHaveCount(0);
  expect(requests[1].modules).toEqual(['time']);expect(requests[1].asOf).toBe(fixture.context.asOf);
  expect(requests[1].expectedConfigurationToken).toBe('a'.repeat(64));
  await page.getByRole('tab',{name:zh?'空间':'Space',exact:true}).click();
  await page.getByRole('tab',{name:zh?'时间':'Time',exact:true}).click();
- await expect(page.locator('[data-view-snapshot]')).toHaveAttribute('data-view-snapshot','controlled-2');expect(requests).toHaveLength(2);
+ await expect(page.locator('[data-view-snapshot]')).toHaveAttribute('data-view-snapshot','controlled-2');expect(requests).toHaveLength(3);
  await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
  await page.screenshot({path:testInfo.outputPath('lazy-time-'+language+'.png'),fullPage:true});
  await page.setViewportSize({width:1440,height:1000});

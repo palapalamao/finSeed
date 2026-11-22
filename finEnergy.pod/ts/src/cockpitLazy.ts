@@ -1,8 +1,12 @@
 import {cockpitModules,type CockpitFace,type CockpitRequest,type CockpitSnapshot} from './cockpitTypes';
 import {absoluteCockpitRequest} from './cockpitNavigation';
+import type {CockpitViewState} from './cockpitNavigation';
 import {t} from './i18n';
 export const cockpitInitialModules=['kpis','trend','issues','space'] as const;
 export interface CockpitLazyState {loading:boolean;face?:CockpitFace|'full';snapshot?:CockpitSnapshot;errorSource?:string}
+/** Absolute return-base transport does not mean the user edited its relative
+ * preset. These labels only control the draft indicator, never API ranges. */
+export function cockpitAppliedConditions(snapshot:CockpitSnapshot,previous?:CockpitViewState['appliedConditions']):NonNullable<CockpitViewState['appliedConditions']>{return snapshot.requestId.startsWith('return-base-')&&previous?previous:{preset:snapshot.context.time.preset,comparisonMode:snapshot.context.comparison?.mode||'none'};}
 function freeze<T>(value:T):T{if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 function invalid(source:string):Error{return Object.assign(new Error(t(source)),{sourceMessage:source});}
 function compatible(a:CockpitSnapshot['context'],b:CockpitSnapshot['context']){

@@ -8,7 +8,7 @@ import {CockpitQuery,defaultCockpitSelection,cockpitQueryError,accessibleCockpit
 import {dimensionRecords} from './dimensionTree';
 import {ReportChart} from './ReportChart';
 import {locale,t,serverMessage} from './i18n';
-import {CockpitLazyQuery,cockpitInitialModules} from './cockpitLazy';
+import {CockpitLazyQuery,cockpitInitialModules,cockpitAppliedConditions} from './cockpitLazy';
 import {CockpitSourceEvidence} from './CockpitSourceEvidence';
 import {cockpitProfileSnapshot} from './cockpitReport';
 import {absoluteCockpitRequest,createFaceNavigation,createNavigation,type CockpitTargetKind,focusRecords,type CockpitReturnState,type CockpitViewState,type NavigationContextV1} from './cockpitNavigation';
@@ -74,14 +74,15 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
  const scopeRows=dimensionRecords(catalog.records,scope?.dimension||'space',catalog.spaceSource==='fin').filter(r=>r.id&&!r.nativeHidden&&['space','organization','meter','totalMeter'].includes(r.kind));
  const allSiteIds=accessibleCockpitSiteIds(catalog);
  const categories=catalog.records.filter(r=>r.kind==='category'&&r.id);
- const sameComparison=!!snapshot&&((preset==='custom'&&dates.comparison.mode==='presetDefault'?'none':dates.comparison.mode)===(snapshot.context.comparison?.mode||'none')&&(dates.comparison.mode!=='custom'||Date.parse(dates.comparison.from||'')===Date.parse(snapshot.context.comparison?.from||'')&&Date.parse(dates.comparison.to||'')===Date.parse(snapshot.context.comparison?.to||'')));
- const dirty=!!snapshot&&(scope?.dimension!==snapshot.context.reportScope.dimension||scope?.selectionIntent!==snapshot.context.reportScope.selectionIntent||JSON.stringify(scope?.nodeIds)!==JSON.stringify(snapshot.context.reportScope.nodeIds)||categoryId!==snapshot.context.focusCategoryId||auxiliaryCategoryId!==(snapshot.context.auxiliaryCategoryId??undefined)||preset!==snapshot.context.time.preset||!sameComparison||preset==='custom'&&(Date.parse(dates.from||'')!==Date.parse(snapshot.context.time.from)||Date.parse(dates.to||'')!==Date.parse(snapshot.context.time.to)||dates.period!==snapshot.context.time.period));
+ const appliedConditions=snapshot?cockpitAppliedConditions(snapshot,restored?.view.appliedConditions):undefined;
+ const sameComparison=!!snapshot&&((preset==='custom'&&dates.comparison.mode==='presetDefault'?'none':dates.comparison.mode)===(appliedConditions?.comparisonMode||'none')&&(dates.comparison.mode!=='custom'||Date.parse(dates.comparison.from||'')===Date.parse(snapshot.context.comparison?.from||'')&&Date.parse(dates.comparison.to||'')===Date.parse(snapshot.context.comparison?.to||'')));
+ const dirty=!!snapshot&&(scope?.dimension!==snapshot.context.reportScope.dimension||scope?.selectionIntent!==snapshot.context.reportScope.selectionIntent||JSON.stringify(scope?.nodeIds)!==JSON.stringify(snapshot.context.reportScope.nodeIds)||categoryId!==snapshot.context.focusCategoryId||auxiliaryCategoryId!==(snapshot.context.auxiliaryCategoryId??undefined)||preset!==appliedConditions?.preset||!sameComparison||preset==='custom'&&(Date.parse(dates.from||'')!==Date.parse(snapshot.context.time.from)||Date.parse(dates.to||'')!==Date.parse(snapshot.context.time.to)||dates.period!==snapshot.context.time.period));
  const name=(id:string)=>catalog.records.find(r=>r.id===id)?.name||id;
  const hasChart=report?.result.series.some(series=>series.points.some(point=>point.value!==null||point.knownValue!=null));
  const focusRows=snapshot&&snapshot.capabilities.canRead?focusRecords(catalog,snapshot.context.reportScope):[];
  const focused=focusRows.find(r=>r.id===focusObjectId),spaceFocus=snapshot?cockpitSpaceObjects(snapshot,catalog).find(node=>node.id===focusObjectId):undefined;
  const selectedFocusId=focused?.id||spaceFocus?.id;
- const currentView=():CockpitViewState=>({focusObjectId:selectedFocusId,selectedFace:face,presentationMode,scrollY:window.scrollY,draft:{scope:scope!,categoryId:categoryId!,preset,auxiliarySelection:auxiliarySelection||auxiliaryCategoryId||'__area__',dates}});
+ const currentView=():CockpitViewState=>({focusObjectId:selectedFocusId,selectedFace:face,presentationMode,scrollY:window.scrollY,appliedConditions,draft:{scope:scope!,categoryId:categoryId!,preset,auxiliarySelection:auxiliarySelection||auxiliaryCategoryId||'__area__',dates}});
  const drill=(kind:'profile'|'energyFlow')=>{if(!snapshot)return;if(selectedFocusId&&!focused){setFace('space');return;}automatic.controller.setPaused('route',true);const view=currentView();onDrill(createNavigation(snapshot,kind,view),snapshot,view);};
  const drillFace=(kind:Exclude<CockpitTargetKind,'energyFlow'>)=>{if(!visualSnapshot)return;if(selectedFocusId&&!focused){setFace('space');return;}automatic.controller.setPaused('route',true);const view=currentView();onDrill(createFaceNavigation(visualSnapshot,kind,view),visualSnapshot,view);};
  useEffect(()=>{if(snapshot&&scope&&categoryId)onSnapshot?.(snapshot,currentView());},[snapshot,face,selectedFocusId,presentationMode]);
