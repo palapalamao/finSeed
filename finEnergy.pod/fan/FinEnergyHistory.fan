@@ -247,7 +247,10 @@ class FinEnergyHistory
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
           result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict,timing)
           normalizing:=Duration.nowTicks
-          out.add(request["_profileFirst"]==true ? normalizeChartClean(point,result,from,to) : normalizeClean(point,result,from,to,request["kind"] == "trend"))
+          cockpit:=request.keys.any |key| {key.startsWith("_cockpit")}
+          rawView:=request["kind"]=="regression" || !FinEnergyMath.strings(request["referenceIds"]).isEmpty
+          out.add(request["_profileFirst"]==true ? normalizeChartClean(point,result,from,to) :
+            (cockpit ? normalizeClean(point,result,from,to) : normalizeFullClean(point,result,from,to,rawView)))
           addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
           return
         }
@@ -684,6 +687,50 @@ class FinEnergyHistory
     if(substituted) return "substituted"
     if(value==null) return ["inputNull","previousNull","nonPositiveInterval"].contains(reason) ? "missing" : "filtered"
     return reason=="rollover" ? "corrected" : "cleaned"
+  }
+
+  ** Complete ordinary reports read authoritative intervals. Dense synthetic
+  ** hourly samples are not an additional source of truth. Preserve all public
+  ** cleaning evidence and keep raw observations for reference/regression views.
+  ** The legacy helper remains available to raw/native/cockpit consumers.
+  internal static Str:Obj? normalizeFullClean(Dict point, FinEnergyCleanResult result, DateTime from, DateTime to, Bool rawView := false)
+  {
+    // load.range aligns the start. Keep the more general helper's historical
+    // cursor-based summary behavior if this seam is called with a partial hour.
+    if(from!=FinEnergyMath.floorHour(from)) return normalizeClean(point,result,from,to)
+    intervals:=[Str:Obj?][,]
+    filtered:=0; substituted:=0; na:=0; valid:=0; nulls:=0; validTicks:=0
+    result.details.each |d|
+    {
+      if(d["emitted"]==false || d["intervalSeconds"]==null) return
+      seconds:=FinEnergyMath.num(d["intervalSeconds"]) ?: 0f
+      if(seconds<=0f) return
+      end:=DateTime.fromIso(d["ts"].toStr).toTimeZone(from.tz)
+      start:=end-Duration((seconds*1sec.ticks.toFloat).toInt)
+      if(end<=from || start>=to) return
+      q:=detailQuality(d); number:=FinEnergyMath.num(d["value"])
+      intervals.add(["from":start.toIso,"to":end.toIso,"value":d["value"],"valueType":d["valueType"],"quality":q])
+      if(q=="filtered") filtered++
+      if(d["substituted"]==true) substituted++
+      if(d["valueType"]=="na") na++
+      if(d["valueType"]=="null") nulls++
+      if(number!=null) valid++
+      hour:=FinEnergyMath.floorHour(start)
+      // Exactly the original summary accumulator condition. Crossing segments
+      // do not add coverage; another valid short segment in that hour still can.
+      if(hour>=from && hour<to && (hour-from).ticks % 1hr.ticks==0 && end<=hour+1hr && number!=null && d["substituted"]!=true && q!="filtered")
+        validTicks+=(end-start).ticks
+    }
+    meta:=result.summary.dup
+    meta["summary"]=["filteredCount":filtered,"substitutedCount":substituted,"naCount":na,"intervalCount":intervals.size,"coverage":(validTicks.toFloat/(to-from).ticks.toFloat).min(1f)]
+    inputCount:=0
+    result.rawItems.each |item| {if(item.ts>=from && item.ts<to) inputCount++}
+    meta["inputCount"]=inputCount;meta["outputCount"]=intervals.size
+    meta["validCount"]=valid;meta["nullCount"]=nulls;meta["naCount"]=na
+    meta.setAll(cleaningEvidence(point,result,from,to))
+    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"]?.toStr ?: "","mode":"interval","quality":"cleaned","rawQuality":"ok","samples":[Str:Obj?][,],"intervals":intervals,"sourceIds":result.summary["sourceIds"] ?: [point.id.id],"cleaning":meta]
+    if(rawView) out["rawSamples"]=result.rawItems.map |item->[Str:Obj?]| { ["ts":item.ts.toTimeZone(from.tz).toIso,"value":number(item.val),"valueType":valueType(item.val)] }
+    return out
   }
 
   internal static Str:Obj? normalizeClean(Dict point, FinEnergyCleanResult result, DateTime from, DateTime to, Bool trend := false)
