@@ -414,14 +414,14 @@ class FinEnergyRepo
   [Str:Obj?] resolvePoints(Str:Obj? body)
   {mustRead;return FinEnergyPointCatalog.resolve(cx.db,|Dict r->Bool| {cx.canRead(r)},body)}
 
-  [Str:Obj?] report([Str:Obj?] input)
+  [Str:Obj?] report([Str:Obj?] input,[Str:Int]? timing := null)
   {
     started:=Duration.nowTicks
     prepared:=prepareReport(input)
     request:=(Str:Obj?)prepared["request"]; all:=([Str:Obj?][])prepared["records"]
     request=FinEnergyProfileFirst.activate(request,all)
     preparedAt:=Duration.nowTicks
-    histories:=FinEnergyHistory.load(cx,request,all)
+    histories:=FinEnergyHistory.load(cx,request,all,null,null,timing)
     loadedAt:=Duration.nowTicks
     result:=FinEnergyHistory.report(request,all,histories)
     if(request["_profileFirst"]==true)
@@ -443,6 +443,14 @@ class FinEnergyRepo
         }
         return readable[id]
       }
+    }
+    if(timing!=null)
+    {
+      finished:=Duration.nowTicks
+      timing["prepareMs"]=(preparedAt-started)/1ms.ticks
+      timing["historyMs"]=(loadedAt-preparedAt)/1ms.ticks
+      timing["calculateMs"]=(finished-loadedAt)/1ms.ticks
+      timing["totalMs"]=(finished-started)/1ms.ticks
     }
     return result
   }

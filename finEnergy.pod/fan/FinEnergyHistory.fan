@@ -197,13 +197,15 @@ class FinEnergyHistory
   private static Void configurationChanged()
   {throw FinEnergyHttpErr(409,"CONFIGURATION_CHANGED","cockpitConfigurationChanged")}
 
-  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, [Str:Dict?]? frozenPoints := null, [Str:Dict]? frozenConfigs := null)
+  static [Str:Obj?][] load(Context cx, Str:Obj? request, [Str:Obj?][] records, [Str:Dict?]? frozenPoints := null, [Str:Dict]? frozenConfigs := null,[Str:Int]? timing := null)
   {
     plan:=range(request,records)
     from:=(DateTime)plan["from"]; to:=(DateTime)plan["to"]
     out:=[Str:Obj?][,]
     modeRecords:=FinEnergyDimension.active(request) ? FinEnergyDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
-    (frozenPoints == null ? pointIds(request,records) : frozenPoints.keys).each |id|
+    ids:=frozenPoints == null ? pointIds(request,records) : frozenPoints.keys
+    addTiming(timing,"plannedPoints",ids.size)
+    ids.each |id|
     {
       Dict? point:=null
       try
@@ -222,12 +224,19 @@ class FinEnergyHistory
         // consumption function. Never replace it with cleaned child intervals.
         if (request["kind"] == "trend")
         {
+          reading:=Duration.nowTicks
+          try
+          {
           cx.rt.his.read(point,span,Etc.makeDict(["raw":Marker.val])) |HisItem item|
           {
             if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
             items.add(item)
           }
+          }
+          finally {addTiming(timing,"nativeReadNs",Duration.nowTicks-reading);addTiming(timing,"rawRows",items.size);addTiming(timing,"nativeReads",1)}
+          normalizing:=Duration.nowTicks
           out.add(normalize(point,items,from,to,true))
+          addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
           return
         }
         overrides:=modeRecords.findAll |r| { r["pointId"] == id && r["historyMode"] != null && r["historyMode"] != "auto" }.map |r->Str| { r["historyMode"].toStr }.unique
@@ -236,19 +245,28 @@ class FinEnergyHistory
         {
           config:=frozenConfigs?.get(id)
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
-          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict)
+          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict,timing)
+          normalizing:=Duration.nowTicks
           out.add(request["_profileFirst"]==true ? normalizeChartClean(point,result,from,to) : normalizeClean(point,result,from,to,request["kind"] == "trend"))
+          addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
           return
         }
+        reading:=Duration.nowTicks
+        try
+        {
         cx.rt.his.read(point,span,request["raw"] == true ? Etc.makeDict(["raw":Marker.val]) : readOptions(point)) |HisItem item|
         {
           if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
           items.add(item)
         }
+        }
+        finally {addTiming(timing,"nativeReadNs",Duration.nowTicks-reading);addTiming(timing,"rawRows",items.size);addTiming(timing,"nativeReads",1)}
         mode:=outputMode(point,overrides.first,true)
+        normalizing:=Duration.nowTicks
         normalized:=normalize(point,items,from,to,request["kind"] == "trend",mode)
         if(request["_profileFirst"]==true) normalized.remove("rawSamples")
         out.add(normalized)
+        addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
       }
       catch (ArgErr e)
       {
@@ -397,13 +415,13 @@ class FinEnergyHistory
 
   ** Shared entry for FIN hisRead and reports. Every meter cleans its own stored
   ** readings; historical queries never expand its current child relationships.
-  internal static FinEnergyCleanResult cleanRead(Context cx, Dict point, Span span, Dict opts, Dict config)
+  internal static FinEnergyCleanResult cleanRead(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
-    return cleanStored(cx,point,span,opts,config)
+    return cleanStored(cx,point,span,opts,config,timing)
   }
 
-  private static FinEnergyCleanResult cleanStored(Context cx, Dict point, Span span, Dict opts, Dict config)
+  private static FinEnergyCleanResult cleanStored(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
     if (!opts.has("finEnergyCleaningPreview") || config.isEmpty)
@@ -417,7 +435,10 @@ class FinEnergyHistory
       config=selectConfig(defaults,config)
     }
     if (config.isEmpty) throw ArgErr("missingCleaningProfile")
-    answer:=FinEnergyCleaning.clean(point,storedRaw(cx,point,span),config)
+    raw:=storedRaw(cx,point,span,timing)
+    started:=Duration.nowTicks
+    answer:=FinEnergyCleaning.clean(point,raw,config)
+    addTiming(timing,"cleanNs",Duration.nowTicks-started)
     answer.summary["sourceIds"]=[point.id.id]
     answer.summary["pointId"]=point.id.id
     answer.summary["profileId"]=(config["finEnergyProfileRef"] as Ref)?.id
@@ -426,16 +447,24 @@ class FinEnergyHistory
     return answer
   }
 
-  private static HisItem[] storedRaw(Context cx, Dict point, Span span)
+  private static HisItem[] storedRaw(Context cx, Dict point, Span span,[Str:Int]? timing := null)
   {
     raw:=HisItem[,]
+    started:=Duration.nowTicks
+    try
+    {
     cx.rt.his.read(point,span,Etc.makeDict(["raw":Marker.val])) |item|
     {
       if (raw.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
       raw.add(item)
     }
+    }
+    finally {addTiming(timing,"nativeReadNs",Duration.nowTicks-started);addTiming(timing,"rawRows",raw.size);addTiming(timing,"nativeReads",1)}
     return raw
   }
+
+  private static Void addTiming([Str:Int]? timing,Str key,Int amount)
+  {if(timing!=null) timing[key]=(timing[key] ?: 0)+amount}
 
   ** Native consumption functions expose already-published own intervals
   ** directly; differencing them again would turn consumption into a counter.

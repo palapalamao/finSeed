@@ -21,6 +21,10 @@ internal class FinEnergyKnownUsage
       ["samples","rawSamples"].each |key|
       {
         if (h[key] == null) return
+        // Raw counters and explicit intervals have the same cutoff predicate.
+        // Implicit hourly consumption does not: its processed hour must close.
+        if(key=="rawSamples" && h[key]===h["samples"] && (h["mode"]!="interval" || h.containsKey("intervals")))
+        {out[key]=out["samples"];return}
         out[key]=FinEnergyMath.maps(h[key]).findAll |s|
         {
           at:=DateTime.fromIso(s["ts"].toStr)

@@ -39,7 +39,7 @@ internal class FinEnergyHistoryData
     sources = FinEnergyMath.strings(data["sourceIds"])
     if (sources.isEmpty) sources=[id]
     samples = parse(data["samples"])
-    rawSamples = data["rawSamples"] == null ? samples : parse(data["rawSamples"])
+    rawSamples = data["rawSamples"] == null || data["rawSamples"] === data["samples"] ? samples : parse(data["rawSamples"])
     intervals = data.containsKey("intervals") ? parseIntervals(data["intervals"]) : null
     sparse=data["_preparedSparse"] as Map
     if(sparse != null)
