@@ -78,11 +78,11 @@ test('opening detail statistics requests full diagnostics once',async({page})=>{
  const {control}=await setup(page);await page.locator('.report-details>summary').click();await expect(page.locator('.report-profile-rebuilt')).toBeVisible();expect(control.fullCalls).toBe(1);
 });
 test('an obsolete full-read promise cannot block or overwrite a newer chart snapshot',async({page})=>{
- const {control}=await setup(page);let release!:()=>void,seen!:()=>void;
- const hold=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{seen=resolve;});
+ const {control}=await setup(page);let release!:()=>void,seen!:()=>void,delivered!:()=>void;
+ const hold=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{seen=resolve;}),returned=new Promise<void>(resolve=>{delivered=resolve;});
  await page.route('**/api/testproject/ext/finEnergy/v1/points/resolve',async route=>{
   if(!(route.request().postDataJSON().ids as string[]).includes('slow-point')){await route.fallback();return;}
-  seen();await hold;await route.fulfill({json:{ok:true,data:{items:[{id:'slow-point',name:'Old point names',his:true}],total:1,offset:0,limit:10}}});
+  seen();await hold;try{await route.fulfill({json:{ok:true,data:{items:[{id:'slow-point',name:'Old point names',his:true}]}}});}finally{delivered();}
  });
  try{
   control.delayNames=true;await page.getByRole('button',{name:'查看完整诊断',exact:true}).click();await started;
@@ -91,7 +91,9 @@ test('an obsolete full-read promise cannot block or overwrite a newer chart snap
   await page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')}).click();await expect.poll(()=>control.chartCalls).toBe(2);await expect(page.locator('.report-profile-first')).toBeVisible();
   await page.getByRole('button',{name:'查看完整诊断',exact:true}).click();await expect.poll(()=>control.fullCalls).toBe(2);await expect(page.locator('.report-profile-rebuilt')).toBeVisible();
   await expect(page.locator('.profile-object-summary').first().locator('.metric-readout strong')).toContainText('304');
-  release();
+  // The obsolete batch is now abortable; wait for the held server handler,
+  // rather than requiring the browser to receive an intentionally aborted reply.
+  release();await returned;
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await expect(page.locator('.profile-object-summary').first().locator('.metric-readout strong')).toContainText('304');expect(control.fullCalls).toBe(2);
  }finally{release();}

@@ -24,6 +24,13 @@ class FinEnergyAlarmGroupsTest : Test
     verifyErr(ArgErr#) {FinEnergyAlarmGroups.page(all,-1,30,"all")}
     verifyErr(ArgErr#) {FinEnergyAlarmGroups.page(all,0,201,"all")}
   }
+  Void testOrphanEvidenceDoesNotInventAnEpisodeOrBreakExistingRoots()
+  {
+    rows:=[row("a",null,0,10),row("orphan","missing",0,20).set("ts","invalid-orphan-time")]
+    result:=FinEnergyAlarmGroups(rows).events
+    verifyEq(result.size,1);verifyEq(result.first["id"],"a")
+    verifyEq(FinEnergyMath.maps(result.first["hours"]).size,1)
+  }
   private Str:Obj? row(Str id,Str? parent,Int hour,Int value)
   { ["id":id,"episodeId":parent,"kind":"alarm","name":id,"ts":"2026-11-01T${hour.toStr.padl(2,'0')}:00:00Z","value":value,"unit":"kWh","limit":9,"quality":"ok","priorAckBy":"Previous operator","nativeAlarmArchive":["keep":"original"]] }
 }

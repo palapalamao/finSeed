@@ -4,11 +4,19 @@ internal class FinEnergyAlarmGroups
 {
   new make([Str:Obj?][] rows)
   {
+    rootIds:=Str:Bool[:]
     rows.each |r|
     {
       id:=r["id"].toStr;parent:=r["episodeId"] as Str
-      if(parent==null || parent==id) roots.add(r)
+      if(parent==null || parent==id) {roots.add(r);rootIds[id]=true}
+    }
+    rows.each |r|
+    {
+      id:=r["id"].toStr;parent:=r["episodeId"] as Str
       key:=parent ?: id
+      // Match the legacy root-first view, including permission-hidden roots.
+      // Orphan evidence must not invent an event or introduce a new parse error.
+      if(!rootIds.containsKey(key)) return
       if(!members.containsKey(key)) members[key]=[Str:Obj?][,]
       members[key].add(r);times[id]=DateTime.fromIso(r["ts"].toStr)
     }
@@ -22,7 +30,7 @@ internal class FinEnergyAlarmGroups
   {r:=roots.find |r| {r["id"]==id};return r==null ? null : build(r,detail)}
   private Str:Obj? build(Str:Obj? root,Bool detail)
   {
-    hours:=members[root["id"].toStr] ?: throw ArgErr("Alarm episode has no root")
+    hours:=members[root["id"].toStr] ?: throw ArgErr("alarmEpisodeInvalid")
     result:=root.dup;result.remove("nativeAlarmArchive");result.remove("hours")
     result["hourCount"]=hours.size;result["latestValue"]=hours.last["value"]
     result["peakValue"]=hours.reduce(0f) |Float peak,e->Float| {peak.max(FinEnergyConfig.number(e["value"]))}

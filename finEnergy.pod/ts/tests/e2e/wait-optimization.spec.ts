@@ -24,7 +24,7 @@ for(const language of ['zh-CN','en-US']){
   expect(state.requests.filter(r=>r.path==='alarms/detail')).toHaveLength(0);expect(state.requests.filter(r=>r.path==='alarms')).toHaveLength(0);
   await main.locator('.ant-table-row-expand-icon').first().click();await expect(page.getByText('Full original evidence',{exact:true})).toBeVisible();
   expect(state.requests.filter(r=>r.path==='alarms/detail')).toHaveLength(1);
-  await main.locator('.ant-table-row-expand-icon-expanded').first().click();await main.locator('.ant-pagination-next').first().click();
+  await main.locator('.ant-table-row-expand-icon-expanded').first().click();await main.locator('.ant-pagination-next').last().click();
   await expect.poll(()=>state.requests.filter(r=>r.path==='alarms/page').length).toBe(2);
   await expect(main.locator('tbody > tr.ant-table-row')).toHaveCount(30);
   await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

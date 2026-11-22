@@ -7,7 +7,7 @@ internal class FinEnergyPointCatalog
   static Str:Obj? resolve(Folio db,|Dict->Bool| canRead,Str:Obj? body)
   {
     ids:=body["ids"] as List
-    if(body.keys.any |k| {k!="ids"} || ids==null || ids.size>200 || ids.any |id| {id isnot Str || id.toStr.isEmpty}) throw ArgErr("Invalid point batch")
+    if(body.keys.any |k| {k!="ids"} || ids==null || ids.size>200 || ids.any |id| {id isnot Str || id.toStr.isEmpty}) throw ArgErr("pointBatchInvalid")
     reader:=FinEnergyPointCatalog(db,canRead)
     items:=[Str:Obj?][,];seen:=Str:Bool[:]
     ids.each |id|

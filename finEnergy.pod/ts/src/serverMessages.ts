@@ -507,3 +507,16 @@ Object.assign(chineseServerMessages,{
  licenseChanged:'当前授权已发生变化。请核对更新后的授权再删除。',
  licenseStoreFailed:'FIN 无法保存授权。请检查实例存储后重试。',
 });
+Object.assign(serverMessages,{
+ pointBatchInvalid:'Invalid point metadata batch. Refresh and try again.',
+ catalogModeInvalid:'Unsupported catalog read mode. Refresh and try again.',
+ alarmEpisodeInvalid:'The alarm episode evidence is inconsistent. Refresh the alarm list.',
+ alarmEventUnavailable:'The alarm event does not exist or is not readable by the current user.',
+ '分页范围无效':'Invalid page range.',
+});
+Object.assign(chineseServerMessages,{
+ pointBatchInvalid:'点位元数据批次无效，请刷新后重试。',
+ catalogModeInvalid:'目录读取方式无效，请刷新后重试。',
+ alarmEpisodeInvalid:'报警事件的证据不一致，请刷新报警列表。',
+ alarmEventUnavailable:'报警记录不存在或当前用户无权查看。',
+});

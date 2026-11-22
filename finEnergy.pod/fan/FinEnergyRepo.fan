@@ -86,7 +86,7 @@ class FinEnergyRepo
 
   [Str:Obj?] catalog(Str mode := "full")
   {
-    if(!["full","analysis"].contains(mode)) throw ArgErr("Invalid catalog mode")
+    if(!["full","analysis"].contains(mode)) throw ArgErr("catalogModeInvalid")
     all:=mode=="analysis" ? FinEnergyNativeEquipRepo(this).records(rawRecords(false,false,false,true)) : records
     source:=FinEnergyNativeSpace.load(cx)
     projected:=source.project(all)

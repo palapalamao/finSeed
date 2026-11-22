@@ -141,7 +141,7 @@ class FinEnergyNativeAlarms
     selected:=source(false).findAll |r| {r["id"]==id || r["episodeId"]==id}
     full:=selected.map |r->Str:Obj?| {FinEnergyRepo.decode(repo.stored(r["id"].toStr))}
     event:=FinEnergyAlarmGroups(full).event(id,true)
-    if(event==null) throw FinEnergyHttpErr(404,"NOT_FOUND","记录不存在")
+    if(event==null) throw FinEnergyHttpErr(404,"NOT_FOUND","alarmEventUnavailable")
     return nativeEvents([event]).first
   }
 
