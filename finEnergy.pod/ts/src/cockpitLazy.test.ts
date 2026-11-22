@@ -40,6 +40,20 @@ it('rehydrates a returned independent face without copying it into the restored 
  expect(core.modules.time).toBeUndefined();
  expect(query.remember({...partial,context:{...partial.context,asOf:'2026-11-23T00:00:00Z'}})).toBe(false);
 });
+it('cancels queued complete export data without cancelling the selected face',async()=>{
+ const pending=deferred<CockpitSnapshot>();let faceRequest!:CockpitRequest;
+ const load=vi.fn((request:CockpitRequest)=>{faceRequest=request;return pending.promise;});
+ const query=new CockpitLazyQuery(load);query.reset(fixture());
+ const face=query.open('time');await Promise.resolve();
+ const complete=query.open('full');
+ expect(query.getSnapshot().fullStartedAt).toBeTypeOf('number');
+ query.cancelFull();
+ expect(query.getSnapshot()).toMatchObject({face:'time',loading:true,fullStartedAt:undefined});
+ pending.resolve(answer(faceRequest));
+ expect(await face).toBeDefined();
+ expect(await complete).toBeUndefined();
+ expect(load).toHaveBeenCalledTimes(1);
+});
 it('requires a fresh base after a known configuration conflict and retains old cached snapshots as old',async()=>{
  const load=vi.fn(async()=>{throw Object.assign(new Error('changed'),{code:'COCKPIT_CONFIGURATION_CHANGED',sourceMessage:'cockpitConfigurationChanged'});});
  const query=new CockpitLazyQuery(load);query.reset(fixture());await expect(query.open('time')).rejects.toThrow();

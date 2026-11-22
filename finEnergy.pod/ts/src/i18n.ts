@@ -100,6 +100,7 @@ Object.assign(chineseServerMessages,{cockpitConfigurationChanged:'配置已变�
 Object.assign(englishMessages,{
  '已等待 {0} 秒，超过 11 秒查询目标。':'This query has taken {0} seconds, exceeding the 11-second target.',
  '正在读取报表的数据来源。':'Reading report source information.',
+ '正在为导出读取完整驾驶舱数据…':'Reading the complete cockpit data for export…',
  '取消查询':'Cancel query',
 });
 Object.assign(serverMessages,{queryCancelled:'The query was cancelled.',queryInProgress:'This query is already running.',queryRequestId:'The query identifier is invalid.'});

@@ -105,6 +105,7 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
    <div aria-live="polite">{loading&&<p className="cockpit-loading"><Spin size="small"/> {t('正在读取驾驶舱数据…')}</p>}{state.error&&<Alert type="error" showIcon message={cockpitQueryError(state)}/>}</div>
    {loading&&state.startedAt!==undefined&&<QueryWaitStatus startedAt={state.startedAt} phase={t('正在读取驾驶舱数据…')} onCancel={()=>query.cancel()}/>}
    {faceState.loading&&faceState.startedAt!==undefined&&<QueryWaitStatus startedAt={faceState.startedAt} phase={t('此视角正在按需读取…')} onCancel={()=>faces.cancelPending()}/>}
+   {faceState.fullStartedAt!==undefined&&<QueryWaitStatus startedAt={faceState.fullStartedAt} phase={t('正在为导出读取完整驾驶舱数据…')} onCancel={()=>faces.cancelFull()}/>}
    {snapshot&&<section className="cockpit-snapshot" data-cockpit-snapshot={snapshot.snapshotId} aria-label={t('驾驶舱数据快照')}>
     {(state.phase!=='ready'||dirty)&&<Alert type="info" showIcon message={t('当前保留上次成功快照，范围和时间以此处标注为准。')}/>}
     {initialRequest&&!restored&&<Alert type="info" showIcon message={t('已恢复绝对查询条件并重新读取，这是新快照。')}/>}

@@ -4,7 +4,7 @@ import type {CockpitViewState} from './cockpitNavigation';
 import {t} from './i18n';
 import {afterQueryPaint,observeQuery} from './queryPerformance';
 export const cockpitInitialModules=['kpis','trend','issues','space'] as const;
-export interface CockpitLazyState {loading:boolean;face?:CockpitFace|'full';snapshot?:CockpitSnapshot;errorSource?:string;startedAt?:number}
+export interface CockpitLazyState {loading:boolean;face?:CockpitFace|'full';snapshot?:CockpitSnapshot;errorSource?:string;startedAt?:number;fullStartedAt?:number}
 /** Absolute return-base transport does not mean the user edited its relative
  * preset. These labels only control the draft indicator, never API ranges. */
 export function cockpitAppliedConditions(snapshot:CockpitSnapshot,previous?:CockpitViewState['appliedConditions']):NonNullable<CockpitViewState['appliedConditions']>{return snapshot.requestId.startsWith('return-base-')&&previous?previous:{preset:snapshot.context.time.preset,comparisonMode:snapshot.context.comparison?.mode||'none'};}
@@ -20,18 +20,25 @@ function compatible(a:CockpitSnapshot['context'],b:CockpitSnapshot['context']){
 export class CockpitLazyQuery {
  private base?:CockpitSnapshot;private epoch=0;private sequence=0;private desired?:CockpitFace|'full';private blockedSource?:string;
  private cache=new Map<CockpitFace|'full',CockpitSnapshot>();private pending=new Map<CockpitFace|'full',Promise<CockpitSnapshot|undefined>>();
+ private fullStartedAt?:number;
  private controller?:AbortController;private activeFace?:CockpitFace|'full';private tail:Promise<unknown>=Promise.resolve();
  private state:CockpitLazyState={loading:false};private listeners=new Set<()=>void>();
  constructor(private load:(request:CockpitRequest,signal:AbortSignal)=>Promise<CockpitSnapshot>){}
  getSnapshot=()=>this.state;
  subscribe=(listener:()=>void)=>{this.listeners.add(listener);return()=>{this.listeners.delete(listener);};};
- private publish(state:CockpitLazyState){this.state=state;this.listeners.forEach(listener=>listener());}
+ private publish(state:CockpitLazyState){this.state={...state,fullStartedAt:this.fullStartedAt};this.listeners.forEach(listener=>listener());}
  reset(snapshot:CockpitSnapshot){this.cancel();this.base=snapshot;for(const face of ['space','time','endUse','organization','balance','efficiency'] as const)if(snapshot.modules[face])this.cache.set(face,snapshot);if(cockpitModules.every(m=>snapshot.modules[m]))this.cache.set('full',snapshot);
   // Historical complete snapshots predate the space module/token. They remain
   // usable as their original frozen export; no missing data is re-fetched.
   if(!snapshot.context.configurationToken){this.cache.set('space',snapshot);if(cockpitModules.filter(m=>m!=='space').every(m=>snapshot.modules[m]))this.cache.set('full',snapshot);}
  }
- cancel(){++this.epoch;this.controller?.abort();this.pending.clear();this.cache.clear();this.base=undefined;this.desired=undefined;this.blockedSource=undefined;this.publish({loading:false});}
+ cancel(){++this.epoch;this.controller?.abort();this.pending.clear();this.cache.clear();this.base=undefined;this.desired=undefined;this.blockedSource=undefined;this.fullStartedAt=undefined;this.publish({loading:false});}
+ cancelFull(){
+  if(!this.pending.delete('full'))return;
+  if(this.activeFace==='full')this.controller?.abort();
+  this.fullStartedAt=undefined;
+  this.publish(this.state);
+ }
  cancelPending(){
   const face=this.state.face;
   if(!face||!this.state.loading)return;
@@ -48,9 +55,8 @@ export class CockpitLazyQuery {
   const existing=this.pending.get(face);if(existing)return existing;
   const epoch=this.epoch;
   const observation=observeQuery('cockpit:'+face);
-  if(face!=='full')this.publish({loading:true,face,startedAt:observation.start});
   const run=async()=>{
-   if(epoch!==this.epoch||(face!=='full'&&this.desired!==face)){observation.finish('cancelled');return;}
+   if(epoch!==this.epoch||this.pending.get(face)!==opening||(face!=='full'&&this.desired!==face)){observation.finish('cancelled');return;}
    const controller=new AbortController();this.controller=controller;this.activeFace=face;
    try{
     const token=base.context.configurationToken;if(!token)throw invalid('此快照缺少配置版本，请刷新首页。');
@@ -74,6 +80,13 @@ export class CockpitLazyQuery {
    }finally{if(this.controller===controller){this.controller=undefined;this.activeFace=undefined;}}
   };
   const opening=this.tail.then(run);this.tail=opening.catch(()=>undefined);this.pending.set(face,opening);
-  try{return await opening;}finally{if(this.pending.get(face)===opening)this.pending.delete(face);}
+  if(face==='full'){this.fullStartedAt=observation.start;this.publish(this.state);}
+  else this.publish({loading:true,face,startedAt:observation.start});
+  try{return await opening;}finally{
+   if(this.pending.get(face)===opening){
+    this.pending.delete(face);
+    if(face==='full'){this.fullStartedAt=undefined;this.publish(this.state);}
+   }
+  }
  }
 }
