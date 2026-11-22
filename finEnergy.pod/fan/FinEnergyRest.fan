@@ -52,7 +52,7 @@ const class FinEnergyRest : WebMod
         case "license/status": data=repo.licenseStatus
         case "license/import": data=repo.licenseImport(body["license"])
         case "license/delete": data=repo.licenseDelete(body["token"])
-        case "catalog": data=repo.catalog
+        case "catalog": data=repo.catalog(req.uri.query["mode"] ?: "full")
         case "tree": data=repo.treeView(req.uri.query["dimension"] ?: "space")
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
         case "migration/preview": data=repo.migration(["action":"preview"])

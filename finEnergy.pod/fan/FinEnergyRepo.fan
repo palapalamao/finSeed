@@ -64,7 +64,7 @@ class FinEnergyRepo
   [Str:Obj?][] records()
   { FinEnergyNativeEquipRepo(this).records(rawRecords) }
 
-  [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false, Bool analysis := false)
+  [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false, Bool analysis := false, Bool navigation := false)
   {
     mustRead
     requireConfigurationAccess
@@ -77,16 +77,17 @@ class FinEnergyRepo
       if (!comparison && !cx.canRead(r)) return
       if (!recovery && (r["finEnergyConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")) return
       cockpitPreparation?.hold(2)
-      data:=analysis ? FinEnergyCockpitInput.decode(r,cockpitPreparation) : (cockpitPreparation==null ? decode(r) : decodeOwned(r,cockpitPreparation))
+      data:=analysis ? FinEnergyCockpitInput.decode(r,cockpitPreparation) : (navigation ? FinEnergyCatalog.decode(r,true) : (cockpitPreparation==null ? decode(r) : decodeOwned(r,cockpitPreparation)))
       if(comparison) data["_comparisonReadable"]=cx.canRead(r)
       out.add(data)
     }
     return out
   }
 
-  [Str:Obj?] catalog()
+  [Str:Obj?] catalog(Str mode := "full")
   {
-    all:=records
+    if(!["full","analysis"].contains(mode)) throw ArgErr("Invalid catalog mode")
+    all:=mode=="analysis" ? FinEnergyNativeEquipRepo(this).records(rawRecords(false,false,false,true)) : records
     source:=FinEnergyNativeSpace.load(cx)
     projected:=source.project(all)
     info:=source.info(all)
@@ -104,7 +105,7 @@ class FinEnergyRepo
     projected=FinEnergyMeterOrigin.decorate(projected,readSource,|Ref ref->Dict?| { readSource(ref.id) })
     owned:=ownedSnapshot
     refs:=FinEnergyMath.maps(owned["budgets"]).dup.addAll(FinEnergyMath.maps(owned["rules"])).findAll |r| {r["validation"] != "invalid"}.map |r->[Str:Obj?]| {["id":r["id"],"mod":r["mod"]]}
-    return ["edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"version":FinEnergyRepo#.pod.version.toStr, "project":cx.proj.name, "projectRef":cx.proj.id.id,"cockpitConfigRefs":refs,"user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
+    return ["catalogMode":mode,"edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"version":FinEnergyRepo#.pod.version.toStr, "project":cx.proj.name, "projectRef":cx.proj.id.id,"cockpitConfigRefs":refs,"user":["name":cx.user.username,"canWrite":cx.user.isAdmin], "storageModel":"nativeEquip", "spaceSource":"fin", "nativeTreePath":source.path, "nativeTreeWarnings":info["warnings"], "records":projected]
   }
 
   Bool nativeModel() { FinEnergyNativeEquipRepo(this).active }

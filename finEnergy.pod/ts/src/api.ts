@@ -19,6 +19,7 @@ export function unwrap<T>(value:unknown,status=200):T {
 export {projectFromLocation} from './projectLocation';
 export class FinEnergyApi {
  readonly base:string;
+ private catalogPending=new Map<'analysis'|'full',Promise<Catalog>>();
  constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
  async request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
   const started=performance.now();
@@ -45,7 +46,11 @@ export class FinEnergyApi {
  saveRuleProfile=(body:Record<string,unknown>)=>this.request<RuleConfig>('cockpit/rule-profiles/save',body);
  deleteCockpitConfig=(type:'budget'|'rule',record:{id?:string;mod?:string})=>this.request<{deleted:string}>('cockpit/'+(type==='budget'?'budgets':'rule-profiles')+'/delete',{id:record.id,mod:record.mod});
  cockpitConfigAudit=(targetId:string)=>this.request<CockpitConfigAudit>('cockpit/config-audit?targetId='+encodeURIComponent(targetId));
- catalog=()=>this.request<Catalog>('catalog');
+ catalog=(mode:'analysis'|'full'='full'):Promise<Catalog>=>{
+  const pending=this.catalogPending.get(mode);if(pending)return pending;
+  const own=this.request<Catalog>('catalog'+(mode==='analysis'?'?mode=analysis':'')).finally(()=>{if(this.catalogPending.get(mode)===own)this.catalogPending.delete(mode);});
+  this.catalogPending.set(mode,own);return own;
+ };
  licenseStatus=(signal?:AbortSignal)=>this.request<LicenseStatus>('license/status',undefined,signal);
  assets=(signal?:AbortSignal)=>this.request<CockpitAssetCatalog>('cockpit/assets',undefined,signal);
  uploadAsset=(body:{id?:string;mod?:string;manifestMod:string|null;scopeId:string;name:string;base64:string;clearHotspots?:boolean})=>this.request<CockpitAssetCatalog>('cockpit/assets/upload',body);
