@@ -1,7 +1,8 @@
 import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import type {Catalog} from './types';
 import {serverMessage,t} from './i18n';
-export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string;pendingRequestId?:string}
+import {afterQueryPaint,observeQuery} from './queryPerformance';
+export interface CockpitQueryState {phase:'idle'|'loading'|'refreshing'|'ready'|'error'|'sessionExpired';snapshot?:CockpitSnapshot;error?:string;errorSource?:string;pendingRequestId?:string;startedAt?:number}
 export function cockpitQueryError(state:CockpitQueryState):string{return state.errorSource?serverMessage(state.errorSource):state.error||'';}
 function freeze<T>(value:T):T {if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 export class CockpitQuery {
@@ -16,14 +17,18 @@ export class CockpitQuery {
  async apply(request:CockpitRequest){
   if(this.state.phase==='sessionExpired')return;
   const sequence=++this.sequence;this.controller?.abort();const controller=new AbortController();this.controller=controller;
-  this.publish({phase:this.state.snapshot?'refreshing':'loading',snapshot:this.state.snapshot,pendingRequestId:request.requestId});
+  const observation=observeQuery('cockpit:core');
+  this.publish({phase:this.state.snapshot?'refreshing':'loading',snapshot:this.state.snapshot,pendingRequestId:request.requestId,startedAt:observation.start});
   try{
    const result=await this.load(structuredClone(request),controller.signal);
-   if(sequence!==this.sequence||controller.signal.aborted)return;
+   if(sequence!==this.sequence||controller.signal.aborted){observation.finish('cancelled');return;}
    if(result.schemaVersion!==1||result.requestId!==request.requestId)throw Object.assign(new Error(t('驾驶舱响应与当前查询不一致，请重新查询。')),{sourceMessage:'驾驶舱响应与当前查询不一致，请重新查询。'});
+   observation.phase('render');
    this.publish({phase:'ready',snapshot:freeze(structuredClone(result))});
+   afterQueryPaint(()=>observation.finish(controller.signal.aborted?'cancelled':'complete'));
   }catch(error){
-   if(sequence!==this.sequence||controller.signal.aborted)return;
+   if(sequence!==this.sequence||controller.signal.aborted){observation.finish('cancelled');return;}
+   observation.finish('failed');
    const code=error&&typeof error==='object'&&'code'in error?error.code:undefined;
    const expired=code==='session_expired'||code==='unauthorized';
    const source=error&&typeof error==='object'&&'sourceMessage'in error&&typeof error.sourceMessage==='string'?error.sourceMessage:code==='network'?'无法连接 FIN，请检查网络与当前会话。':!(error instanceof Error)?'无法读取驾驶舱，请检查当前 FIN 会话。':undefined;

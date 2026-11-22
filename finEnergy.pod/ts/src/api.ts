@@ -34,6 +34,7 @@ export class FinEnergyApi {
     route:path.split('?')[0],status:response.status,headerWaitMs:headersAt-started,
     responseAndParseMs:end-headersAt,responseBytes:resource?.decodedBodySize,
     server:readQueryServerTiming(response.headers.get('Server-Timing')),
+    serverWork:response.headers.get('X-FIN-Energy-Query-Work'),
    });
   }
   try{return unwrap<T>(value,response.status);}catch(error){if(response.status===401||error instanceof ApiError&&(['session_expired','unauthorized','http_401'].includes(error.code)))this.onSessionExpired?.();throw error;}

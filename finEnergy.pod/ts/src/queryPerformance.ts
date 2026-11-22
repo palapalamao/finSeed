@@ -62,7 +62,7 @@ export function readQueryServerTiming(header: string | null): Record<string, num
 }
 
 export function afterQueryPaint(callback: () => void) {
-  if (document.visibilityState !== 'visible') {
+  if (typeof document === 'undefined' || document.visibilityState !== 'visible' || typeof requestAnimationFrame !== 'function') {
     setTimeout(callback, 0);
     return;
   }

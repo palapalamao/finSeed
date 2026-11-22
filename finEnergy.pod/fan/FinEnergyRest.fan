@@ -6,6 +6,8 @@ const class FinEnergyRest : WebMod
 {
   override Void onService()
   {
+    started := Duration.nowTicks
+    phases := Str:Int[:]
     FinEnergyCockpitRequestScope? cockpitScope
     Err? failure
     try
@@ -61,11 +63,19 @@ const class FinEnergyRest : WebMod
         case "records/delete": data=repo.remove(str(body,"id"),body["mod"])
         case "tree/manage": data=repo.manage(body)
         case "tree/copy": case "tree/move": case "tree/toggle": data=repo.tree(route.split('/').last,str(body,"id"),body["parentId"] as Str,body["mod"])
-        case "report": data=repo.report(body)
+        case "report": data=repo.report(body,phases)
         case "cockpit":
           cockpitScope=FinEnergyCockpitRequestScope(repo.cx.proj.name,repo.cx.user.username)
           data=repo.cockpitScoped(body,cockpitScope)
-          cockpitScope.deliver((Str:Obj?)data,|Buf bytes| {sendCockpit(bytes)})
+          wireAt := Duration.nowTicks
+          cockpitScope.deliver((Str:Obj?)data,|Buf bytes|
+          {
+            phases["encodeMs"]=(Duration.nowTicks-wireAt)/1ms.ticks
+            phases["resultBytes"]=bytes.size
+            queryMetrics(phases,started)
+            sendCockpit(bytes)
+          })
+          logQuery(route,phases,started,wireAt)
           return
         case "cleaning/preview": data=FinEnergyCleaningRepo(repo).preview(body)
         case "tasks": data=FinEnergyJobs(repo).run(body)
@@ -74,7 +84,16 @@ const class FinEnergyRest : WebMod
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw FinEnergyHttpErr(404,"NOT_FOUND","接口不存在")
       }
+      encodingAt := Duration.nowTicks
+      if(route=="report")
+      {
+        from := DateTime.fromIso(body["from"] as Str ?: "",false)
+        to := DateTime.fromIso(body["to"] as Str ?: "",false)
+        if(from != null && to != null) phases["spanHours"]=(to-from).ticks/1hr.ticks
+      }
+      queryMetrics(phases,started)
       send(200,["ok":true,"data":data])
+      logQuery(route,phases,started,encodingAt)
     }
     catch (FinEnergyHttpErr e)
     {
@@ -98,6 +117,39 @@ const class FinEnergyRest : WebMod
       catch(Err cleanup)
       {if(failure==null && cockpitScope?.responseStarted!=true) throw cleanup;Log.get("finEnergy").err("Cockpit request cleanup failed after response processing",cleanup)}
     }
+  }
+
+  private Void queryMetrics(Str:Int phases, Int started)
+  {
+    samples := Str[,]
+    ["prepare","history","calculate","encode"].each |phase|
+    {
+      value := phases[phase+"Ms"]
+      if(value != null) samples.add("${phase};dur=$value")
+    }
+    ["nativeRead":"nativeReadNs","clean":"cleanNs","normalize":"normalizeNs"].each |key,name|
+    {
+      value := phases[key]
+      if(value != null) samples.add("${name};dur=${value/1ms.ticks}")
+    }
+    samples.add("total;dur=${(Duration.nowTicks-started)/1ms.ticks}")
+    res.headers["Server-Timing"]=samples.join(", ")
+    counts := Str[,]
+    ["plannedPoints","nativeReads","rawRows","spanHours","resultBytes"].each |key|
+    {
+      if(phases[key]!=null) counts.add("${key}=${phases[key]}")
+    }
+    if(!counts.isEmpty) res.headers["X-FIN-Energy-Query-Work"]=counts.join(", ")
+  }
+
+  private Void logQuery(Str route, Str:Int phases, Int started, Int encodingAt)
+  {
+    ended:=Duration.nowTicks
+    total:=(ended-started)/1ms.ticks
+    if(route!="report" && route!="cockpit" && total<=11000) return
+    phases["totalMs"]=total
+    phases["encodeAndWriteMs"]=(ended-encodingAt)/1ms.ticks
+    Log.get("finEnergyQuery").info("$route $phases")
   }
 
   private Bool failedAfterResponseStart(FinEnergyCockpitRequestScope? scope,Err e)

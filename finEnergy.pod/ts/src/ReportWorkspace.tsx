@@ -72,7 +72,7 @@ export function ReportWorkspace({initialRequest,initialSnapshot,navigationContex
    if(sequence!==querySequence.current || abort.signal.aborted){observation.finish('cancelled');return;}
    observation.phase('sourceNames');
    setQueryWait({startedAt:observation.start,sourceNames:true});
-   const points=await reportPointNames(result,(ids,signal)=>api.resolvePoints(ids,signal),abort.signal);
+   const points=await reportPointNames(result,records,(ids,signal)=>api.resolvePoints(ids,signal),abort.signal);
    if(sequence!==querySequence.current || abort.signal.aborted){observation.finish('cancelled');return;}
    observation.phase('render');
    setProjected(false);

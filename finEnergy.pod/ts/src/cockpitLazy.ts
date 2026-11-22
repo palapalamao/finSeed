@@ -2,8 +2,9 @@ import {cockpitModules,type CockpitFace,type CockpitRequest,type CockpitSnapshot
 import {absoluteCockpitRequest} from './cockpitNavigation';
 import type {CockpitViewState} from './cockpitNavigation';
 import {t} from './i18n';
+import {afterQueryPaint,observeQuery} from './queryPerformance';
 export const cockpitInitialModules=['kpis','trend','issues','space'] as const;
-export interface CockpitLazyState {loading:boolean;face?:CockpitFace|'full';snapshot?:CockpitSnapshot;errorSource?:string}
+export interface CockpitLazyState {loading:boolean;face?:CockpitFace|'full';snapshot?:CockpitSnapshot;errorSource?:string;startedAt?:number}
 /** Absolute return-base transport does not mean the user edited its relative
  * preset. These labels only control the draft indicator, never API ranges. */
 export function cockpitAppliedConditions(snapshot:CockpitSnapshot,previous?:CockpitViewState['appliedConditions']):NonNullable<CockpitViewState['appliedConditions']>{return snapshot.requestId.startsWith('return-base-')&&previous?previous:{preset:snapshot.context.time.preset,comparisonMode:snapshot.context.comparison?.mode||'none'};}
@@ -19,7 +20,7 @@ function compatible(a:CockpitSnapshot['context'],b:CockpitSnapshot['context']){
 export class CockpitLazyQuery {
  private base?:CockpitSnapshot;private epoch=0;private sequence=0;private desired?:CockpitFace|'full';private blockedSource?:string;
  private cache=new Map<CockpitFace|'full',CockpitSnapshot>();private pending=new Map<CockpitFace|'full',Promise<CockpitSnapshot|undefined>>();
- private controller?:AbortController;private tail:Promise<unknown>=Promise.resolve();
+ private controller?:AbortController;private activeFace?:CockpitFace|'full';private tail:Promise<unknown>=Promise.resolve();
  private state:CockpitLazyState={loading:false};private listeners=new Set<()=>void>();
  constructor(private load:(request:CockpitRequest,signal:AbortSignal)=>Promise<CockpitSnapshot>){}
  getSnapshot=()=>this.state;
@@ -31,34 +32,48 @@ export class CockpitLazyQuery {
   if(!snapshot.context.configurationToken){this.cache.set('space',snapshot);if(cockpitModules.filter(m=>m!=='space').every(m=>snapshot.modules[m]))this.cache.set('full',snapshot);}
  }
  cancel(){++this.epoch;this.controller?.abort();this.pending.clear();this.cache.clear();this.base=undefined;this.desired=undefined;this.blockedSource=undefined;this.publish({loading:false});}
+ cancelPending(){
+  const face=this.state.face;
+  if(!face||!this.state.loading)return;
+  this.desired=undefined;
+  if(this.activeFace===face)this.controller?.abort();
+  this.pending.delete(face);
+  this.publish({loading:false,face,snapshot:this.cache.get(face)});
+ }
  remember(snapshot:CockpitSnapshot){if(!this.base?.context.configurationToken||!compatible(this.base.context,snapshot.context))return false;const own=freeze(structuredClone(snapshot));for(const face of ['space','time','endUse','organization','balance','efficiency'] as const)if(own.modules[face])this.cache.set(face,own);return true;}
  async open(face:CockpitFace|'full'):Promise<CockpitSnapshot|undefined>{
   const base=this.base;if(!base)return;if(face!=='full')this.desired=face;
   const cached=this.cache.get(face);if(cached){if(face!=='full')this.publish({loading:false,face,snapshot:cached,errorSource:this.blockedSource});return cached;}
   if(this.blockedSource){this.publish({loading:false,face,errorSource:this.blockedSource});throw invalid(this.blockedSource);}
   const existing=this.pending.get(face);if(existing)return existing;
-  const epoch=this.epoch;if(face!=='full')this.publish({loading:true,face});
+  const epoch=this.epoch;
+  const observation=observeQuery('cockpit:'+face);
+  if(face!=='full')this.publish({loading:true,face,startedAt:observation.start});
   const run=async()=>{
-   if(epoch!==this.epoch||(face!=='full'&&this.desired!==face))return;
-   const controller=new AbortController();this.controller=controller;
+   if(epoch!==this.epoch||(face!=='full'&&this.desired!==face)){observation.finish('cancelled');return;}
+   const controller=new AbortController();this.controller=controller;this.activeFace=face;
    try{
     const token=base.context.configurationToken;if(!token)throw invalid('此快照缺少配置版本，请刷新首页。');
     const request={...absoluteCockpitRequest(base),requestId:'face-'+(++this.sequence),expectedConfigurationToken:token,
      modules:face==='full'?[...cockpitModules]:[face]} satisfies CockpitRequest;
     const result=await this.load(request,controller.signal);
-    if(epoch!==this.epoch||controller.signal.aborted)return;
+    if(epoch!==this.epoch||controller.signal.aborted){observation.finish('cancelled');return;}
     if(result.schemaVersion!==1||result.requestId!==request.requestId||!compatible(base.context,result.context)||
      !request.modules.every(m=>Object.hasOwn(result.modules,m))){this.blockedSource='配置已变化，请刷新首页后重新打开此视角。';throw invalid(this.blockedSource);}
+    observation.phase('render');
     const saved=freeze(structuredClone(result));this.cache.set(face,saved);
-    if(this.desired===face)this.publish({loading:false,face,snapshot:saved});return saved;
+    if(this.desired===face)this.publish({loading:false,face,snapshot:saved});
+    afterQueryPaint(()=>observation.finish(controller.signal.aborted?'cancelled':'complete'));
+    return saved;
    }catch(error){
-    if(epoch!==this.epoch||controller.signal.aborted)return;
+    if(epoch!==this.epoch||controller.signal.aborted){observation.finish('cancelled');return;}
+    observation.finish('failed');
     const source=error&&typeof error==='object'&&'sourceMessage'in error&&typeof error.sourceMessage==='string'?error.sourceMessage:'该视角读取失败，可再次选择重试。';
     if(error&&typeof error==='object'&&'code'in error&&error.code==='COCKPIT_CONFIGURATION_CHANGED')this.blockedSource=source;
     if(this.desired===face)this.publish({loading:false,face,errorSource:source});throw error;
-   }
+   }finally{if(this.controller===controller){this.controller=undefined;this.activeFace=undefined;}}
   };
   const opening=this.tail.then(run);this.tail=opening.catch(()=>undefined);this.pending.set(face,opening);
-  try{return await opening;}finally{if(epoch===this.epoch)this.pending.delete(face);}
+  try{return await opening;}finally{if(this.pending.get(face)===opening)this.pending.delete(face);}
  }
 }

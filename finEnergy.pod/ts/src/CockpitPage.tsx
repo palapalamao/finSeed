@@ -10,6 +10,7 @@ import {ReportChart} from './ReportChart';
 import {locale,t,serverMessage} from './i18n';
 import {CockpitLazyQuery,cockpitInitialModules,cockpitAppliedConditions} from './cockpitLazy';
 import {CockpitSourceEvidence} from './CockpitSourceEvidence';
+import {QueryWaitStatus} from './QueryWaitStatus';
 import {cockpitProfileSnapshot} from './cockpitReport';
 import {absoluteCockpitRequest,createFaceNavigation,createNavigation,type CockpitTargetKind,focusRecords,type CockpitReturnState,type CockpitViewState,type NavigationContextV1} from './cockpitNavigation';
 import {CockpitKpis} from './CockpitKpis';
@@ -102,6 +103,8 @@ export function CockpitPage({api,catalog,onLegacy,onConfigure,onConfigureAssets,
     <CockpitDates preset={preset} draft={dates} onChange={setDates}/><CockpitRefreshControls controller={automatic.controller} state={automatic.state}/></div></details>
    </section>
    <div aria-live="polite">{loading&&<p className="cockpit-loading"><Spin size="small"/> {t('正在读取驾驶舱数据…')}</p>}{state.error&&<Alert type="error" showIcon message={cockpitQueryError(state)}/>}</div>
+   {loading&&state.startedAt!==undefined&&<QueryWaitStatus startedAt={state.startedAt} phase={t('正在读取驾驶舱数据…')} onCancel={()=>query.cancel()}/>}
+   {faceState.loading&&faceState.startedAt!==undefined&&<QueryWaitStatus startedAt={faceState.startedAt} phase={t('此视角正在按需读取…')} onCancel={()=>faces.cancelPending()}/>}
    {snapshot&&<section className="cockpit-snapshot" data-cockpit-snapshot={snapshot.snapshotId} aria-label={t('驾驶舱数据快照')}>
     {(state.phase!=='ready'||dirty)&&<Alert type="info" showIcon message={t('当前保留上次成功快照，范围和时间以此处标注为准。')}/>}
     {initialRequest&&!restored&&<Alert type="info" showIcon message={t('已恢复绝对查询条件并重新读取，这是新快照。')}/>}
