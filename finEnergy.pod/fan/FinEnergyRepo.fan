@@ -432,7 +432,6 @@ class FinEnergyRepo
 
   [Str:Obj?] report([Str:Obj?] input)
   {
-    if(input["responseMode"]!=null && !["full","chart"].contains(input["responseMode"])) throw ArgErr("Invalid report response mode")
     started:=Duration.nowTicks
     prepared:=prepareReport(input)
     request:=(Str:Obj?)prepared["request"]; all:=([Str:Obj?][])prepared["records"]

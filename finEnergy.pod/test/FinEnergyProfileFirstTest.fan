@@ -33,6 +33,7 @@ class FinEnergyProfileFirstTest : Test
     q:=request;rs:=records
     verify(FinEnergyProfileFirst.activate(q.dup.set("responseMode","chart"),rs)["_profileFirst"]==true)
     verify(FinEnergyProfileFirst.activate(q,rs)["_profileFirst"]!=true)
+    verify(FinEnergyProfileFirst.activate(q.dup.set("responseMode","future-mode"),rs)["_profileFirst"]!=true)
     verify(FinEnergyProfileFirst.activate(q.dup.set("_profileFirst",true),rs)["_profileFirst"]!=true)
     changes:=Str:Obj?["kind":"daily","metric":"cost","period":"hour","dimension":"organization","perArea":true,"referenceIds":["weather"],"otherFrom":q["from"],"raw":true,"nodeIds":["unknown"]]
     changes.each |value,key|
