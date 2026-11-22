@@ -123,8 +123,11 @@ internal class FinEnergyFullCleaning
   {
     if(finished) throw ArgErr("fullCleaningFinished")
     finished=true;started:=timing==null ? 0 : Duration.nowTicks
-    add("cleanNs",cleaningNs)
-    add("normalizeNs",projectionNs)
+    if(timing!=null)
+    {
+      add("cleanNs",cleaningNs)
+      add("normalizeNs",projectionNs)
+    }
     // Keep the bulk summary's original typed-map shape as well as JSON fields.
     Str:Obj? meta:=["inputCount":inputCount,"outputCount":selected,"validCount":valid,"nullCount":nulls,"naCount":na,
       "rolloverCount":rolloverCount,"rejectedCount":rejectedCount,"removedNACount":removedNACount,"substitutedCount":substitutedCount]

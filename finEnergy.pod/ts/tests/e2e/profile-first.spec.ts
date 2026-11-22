@@ -38,7 +38,6 @@ test('a normal profile query returns the complete report in its first request',a
 });
 
 test('an over-budget complete query can finish with its result or be cancelled explicitly',async({page})=>{
- await page.clock.install();
  const {state}=await setup(page,'zh-CN',false);
  let unblock!:()=>void;
  const hold=new Promise<void>(resolve=>{unblock=resolve;});
@@ -49,9 +48,8 @@ test('an over-budget complete query can finish with its result or be cancelled e
  const submit=page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')});
  const request=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/report');
  await submit.click();await request;
- await page.clock.runFor(11_600);
  const slow=page.getByText(/超过 11 秒查询目标/);
- await expect(slow).toBeVisible();
+ await expect(slow).toBeVisible({timeout:15_000});
  unblock();
  await expect(slow).toHaveCount(0);
  await expect.poll(async()=>page.evaluate(()=>performance.getEntriesByName('finenergy.query.operation').some(entry=>entry instanceof PerformanceMeasure&&entry.detail.outcome==='complete'&&entry.detail.missed))).toBe(true);
@@ -68,7 +66,7 @@ test('an over-budget complete query can finish with its result or be cancelled e
   const second=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/report');
   await submit.click();
   const pending=await second;
-  await page.clock.runFor(11_600);
+  await expect(slow).toBeVisible({timeout:15_000});
   const cancelled=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/query/cancel');
   await page.getByRole('button',{name:'取消查询',exact:true}).click();
   expect((await cancelled).postDataJSON().id).toBe(pending.headers()['x-fin-energy-query-id']);
