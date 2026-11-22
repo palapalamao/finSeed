@@ -101,7 +101,7 @@ const class FinEnergyRest : WebMod
       }
       cancellation?.check
       queryMetrics(phases,started)
-      send(200,["ok":true,"data":data])
+      send(200,["ok":true,"data":data],route=="report")
       logQuery(route,phases,started,encodingAt)
     }
     catch (FinEnergyHttpErr e)
@@ -194,12 +194,34 @@ const class FinEnergyRest : WebMod
     return route=="cockpit/assets/upload" ? 3145728 : 2097152
   }
 
-  private Void send(Int status, [Str:Obj?] body)
+  internal static Bool acceptsGzip(Str header)
+  {
+    return header.split(',').any |option|
+    {
+      parts:=option.lower.split(';')
+      if(parts.first?.trim!="gzip") return false
+      quality:=parts.find |part| {part.trim.startsWith("q=")}
+      if(quality==null) return true
+      at:=quality.index("=") ?: 0
+      weight:=Float.fromStr(quality[at+1..-1].trim,false)
+      return weight!=null && weight>0f && weight<=1f
+    }
+  }
+
+  private Void send(Int status, [Str:Obj?] body,Bool compress := false)
   {
     res.statusCode=status
     res.headers["Content-Type"]="application/json; charset=utf-8"
     res.headers["Cache-Control"]="no-store"
-    JsonOutStream(res.out).writeJson(body)
+    if(compress) res.headers["Vary"]="Accept-Encoding"
+    if(compress && acceptsGzip(req.headers.get("Accept-Encoding","")))
+    {
+      res.headers["Content-Encoding"]="gzip"
+      gzip:=Zip.gzipOutStream(FinEnergyResponseWriteStream(res.out))
+      try {JsonOutStream(gzip).writeJson(body)}
+      finally {gzip.close}
+    }
+    else JsonOutStream(res.out).writeJson(body)
     res.out.flush
     res.done
   }
@@ -231,4 +253,11 @@ const class FinEnergyRest : WebMod
 
   ** Authentication and FIN CSRF still run through the native /api project route.
   internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve","query/cancel"].contains(route) }
+}
+
+** The response is flushed and completed by the WebMod after gzip is finalized.
+internal class FinEnergyResponseWriteStream : OutStream
+{
+  new make(OutStream response) : super(response) {}
+  override Bool close() {true}
 }

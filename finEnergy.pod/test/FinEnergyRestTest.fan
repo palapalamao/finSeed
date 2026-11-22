@@ -1,5 +1,13 @@
 class FinEnergyRestTest : Test
 {
+  Void testReportEncodingNegotiation()
+  {
+    verify(FinEnergyRest.acceptsGzip("br, gzip, deflate"))
+    verify(FinEnergyRest.acceptsGzip("GZip; q=0.5"))
+    verify(!FinEnergyRest.acceptsGzip("br, gzip;q=0"))
+    verify(!FinEnergyRest.acceptsGzip("br, x-gzip"))
+    verify(!FinEnergyRest.acceptsGzip("gzip;q=invalid"))
+  }
   Void testNativeEntryUsesVersionedCockpit()
   {
     verifyEq(FinEnergyExt.appUri("cubeTest").toStr,
