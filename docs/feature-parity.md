@@ -1,4 +1,4 @@
-# FIN Energy 当前功能与验证边界
+# FIN 能源管理 当前功能与验证边界
 
 适用 0.16.0 候选版。旧版本逐项账本与原有未提交文案保存在 [历史原文](../archive/prior-documentation/docs/feature-parity.md)。本页不把旧版本实机结果改写为新版本结果。
 

@@ -12,7 +12,7 @@ for(const language of ['zh-CN','zh-TW','en-US','de-DE']){
    const state=await installTransport(page);
    await openView(page,'profile');
    await expect(page.locator('html')).toHaveAttribute('lang',chinese?'zh-CN':'en-US');
-   await expect(page).toHaveTitle(chinese?'FIN Energy 能源管理 · 楼宇能源分析':'FIN Energy · Building Energy Analytics');
+   await expect(page).toHaveTitle(chinese?'FIN 能源管理 · 楼宇能源分析':'FIN Energy · Building Energy Analytics');
    await expect(page.getByRole('heading',{name:chinese?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
    await expect(page.getByRole('navigation').getByRole('button',{name:chinese?'总览':'Overview',exact:true})).toBeVisible();
    await expect(page.getByRole('combobox',{name:chinese?'汇总间隔':'Aggregation interval',exact:true})).toBeVisible();
@@ -97,13 +97,13 @@ for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.descr
   const state=await installTransport(page,{userLocale:finLanguage});
   await page.goto('/?finEnergyLang='+encodeURIComponent(zh?'en-US':'zh-CN')+'#/profile?project=testproject');
   await expect(page.getByRole('heading',{name:zh?'能耗概况':'Consumption profile',exact:true})).toBeVisible();
-  await expect(page).toHaveTitle(zh?'FIN Energy 能源管理 · 楼宇能源分析':'FIN Energy · Building Energy Analytics');
+  await expect(page).toHaveTitle(zh?'FIN 能源管理 · 楼宇能源分析':'FIN Energy · Building Energy Analytics');
   await expect(page.locator('html')).toHaveAttribute('lang',zh?'zh-CN':'en-US');
   await expect(page.getByRole('button',{name:zh?'切换语言':'Switch language',exact:true})).toBeVisible();
   state.userLocale=zh?'en':'zh';
   await page.reload();
   await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
-  await expect(page).toHaveTitle(zh?'FIN Energy · Building Energy Analytics':'FIN Energy 能源管理 · 楼宇能源分析');
+  await expect(page).toHaveTitle(zh?'FIN Energy · Building Energy Analytics':'FIN 能源管理 · 楼宇能源分析');
   expect(state.requests.filter(r=>r.path==='session')).toHaveLength(2);
   if(mobile)expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
  });
@@ -142,7 +142,7 @@ for(const finLanguage of ['zh','en'])for(const mobile of [false,true])test.descr
   };
   await choose(!zh,zh?'English':'中文');
   await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();
-  await expect(page).toHaveTitle(zh?'FIN Energy · Building Energy Analytics':'FIN Energy 能源管理 · 楼宇能源分析');
+  await expect(page).toHaveTitle(zh?'FIN Energy · Building Energy Analytics':'FIN 能源管理 · 楼宇能源分析');
   await expect(page).toHaveURL(/#\/profile\?project=testproject$/);
   await page.reload();
   await expect(page.getByRole('heading',{name:zh?'Consumption profile':'能耗概况',exact:true})).toBeVisible();

@@ -38,7 +38,7 @@ export function App(){
  useSyncExternalStore(subscribeLocale,localeSnapshot,localeSnapshot);
  const [exportLocked,setExportLocked]=useState(false);
  const [aboutOpen,setAboutOpen]=useState(false);
- const productName=t('FIN Energy 能源管理'),productTagline=t('楼宇能源分析');
+ const productName=t('FIN 能源管理'),productTagline=t('楼宇能源分析');
  const[project,setProject]=useState(()=>projectFromLocation(location));
  const[view,setView]=useState<View>(readView);
  // Start the selected page download alongside catalog I/O, after FIN locale initialization.
@@ -103,7 +103,7 @@ export function App(){
    <Layout.Content className="app-content">
     {!project?<div className="connection-state"><Empty description={t('尚未指定 FIN 项目')}/><Alert type="info" showIcon message={t('请从 FIN 项目打开能源管理，或在地址中指定 #/dashboard?project=项目名。')}/></div>:!catalog?<div className="connection-state">{loading?<Spin tip={t('正在读取 FIN 项目配置…')}/>:<><Alert type="error" showIcon message={(errorSource?serverMessage(errorSource):error)||t('项目配置尚未加载')}/><Button onClick={()=>void reload()}>{t('重新连接')}</Button></>}</div>:<>
      {error&&<Alert banner type="error" message={errorSource?serverMessage(errorSource):error}/>}
-     {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开FIN Energy 能源管理以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/finEnergy/`)}>{t('加载新版界面')}</Button>}/>}
+     {versionMismatch&&<Alert banner type="warning" showIcon message={t('当前界面版本为 {0}，服务版本为 {1}。请重新打开 FIN 能源管理以加载最新界面。',uiVersion,catalog.version)} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/finEnergy/`)}>{t('加载新版界面')}</Button>}/>}
      {editionMismatch&&<Alert banner type="warning" showIcon message={t('界面与服务器的发行版不一致，请重新打开应用。')} action={<Button onClick={()=>location.assign(`/api/${encodeURIComponent(project)}/ext/finEnergy/`)}>{t('加载新版界面')}</Button>}/>}
      <div className="content-frame" inert={exportLocked}>
       {settingsView&&<div className="settings-navigation"><Tabs activeKey={view} onChange={key=>navigate(key as View)} items={settingsViews.map(key=>({key,label:key==='tree'?t('计量资产'):manageTitles[key]}))}/></div>}

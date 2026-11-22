@@ -1,6 +1,6 @@
-# FIN Energy 系统要求
+# FIN 能源管理 系统要求
 
-适用版本 FIN Energy 0.16.0 候选版，2026 年 11 月 20 日。英文版见 [System requirements](finenergy-system-requirements.en.md)。本文区分构建基线与客户环境验收，供安装人员确认部署条件。
+适用版本 FIN 能源管理 0.16.0 候选版，2026 年 11 月 20 日。英文版见 [System requirements](finenergy-system-requirements.en.md)。本文区分构建基线与客户环境验收，供安装人员确认部署条件。
 
 ## FIN 版本
 
@@ -16,10 +16,10 @@ Pod 依赖见 [build.fan](../finEnergy.pod/build.fan)，包含 FIN 原生 `fin` 
 
 ## 服务器和客户端
 
-服务器使用所选 FIN 发行版支持的操作系统、CPU、内存、磁盘和 Java。FIN Energy 复用 FIN 运行时，不需要客户另装 Node.js、SQLite、时序数据库或独立授权签发服务。Node.js/npm 和 SDK 仅是源码构建环境的依赖。
+服务器使用所选 FIN 发行版支持的操作系统、CPU、内存、磁盘和 Java。FIN 能源管理 复用 FIN 运行时，不需要客户另装 Node.js、SQLite、时序数据库或独立授权签发服务。Node.js/npm 和 SDK 仅是源码构建环境的依赖。
 
 
-以下是查阅日 FIN 官方通用服务器配置参考，不是单独测定的 FIN Energy 最低配置：
+以下是查阅日 FIN 官方通用服务器配置参考，不是单独测定的 FIN 能源管理 最低配置：
 
 | 项目 | FIN 官方参考 |
 | --- | --- |
@@ -31,7 +31,7 @@ Pod 依赖见 [build.fan](../finEnergy.pod/build.fan)，包含 FIN 原生 `fin` 
 
 来源为 [FIN 官方系统要求](https://finproducts.atlassian.net/wiki/spaces/FINFramework/pages/770708327/System%2BRequirements)，查阅于2026-11-20。官方同时说明点位、历史、应用、报警和多项目会影响容量。上述参考不能证明本包已在某个Linux或OEM发行版运行。
 
-本轮没有独立测定 FIN Energy 的最低 CPU、内存或磁盘阈值。容量应覆盖整个 FIN 实例的点位、历史留存、统计周期、清洗规则与并发查询。先采用 FIN 官方系统要求，再用目标项目数据验证查询和内存表现，不把单一演示项目当作容量承诺。
+本轮没有独立测定 FIN 能源管理 的最低 CPU、内存或磁盘阈值。容量应覆盖整个 FIN 实例的点位、历史留存、统计周期、清洗规则与并发查询。先采用 FIN 官方系统要求，再用目标项目数据验证查询和内存表现，不把单一演示项目当作容量承诺。
 
 客户端采用当前维护的 Edge 或 Chrome。页面提供中文、英文及手机布局，默认跟随 FIN 用户语言并保留手动切换。尚未宣称具体最低浏览器版本。应用随包提供 Manrope 字体，中文使用系统字体回退；不依赖外部字体服务。
 
@@ -39,7 +39,7 @@ Pod 依赖见 [build.fan](../finEnergy.pod/build.fan)，包含 FIN 原生 `fin` 
 
 存量改造与新项目均可采用。安装与启用需要 FIN 管理权限及原生能源功能授权。每块纳管表明确绑定已启用历史的主能耗点；能源类型、单位和读数语义应匹配。缺测不补零，虚拟表历史也不以分表合计替代。
 
-普通用量不要求面积。单位面积指标需要可核对的楼宇、楼层或服务面积；楼宇和楼层面积可在 FIN Energy 编辑并保存到对应原生 `area` 标签。查询使用当前生效关系和本次冻结的面积来源。
+普通用量不要求面积。单位面积指标需要可核对的楼宇、楼层或服务面积；楼宇和楼层面积可在 FIN 能源管理 编辑并保存到对应原生 `area` 标签。查询使用当前生效关系和本次冻结的面积来源。
 
 既有项目更名前须先预览并备份，停用旧应用任务，通过明确升级入口迁移产品自有标签、回调和素材；原始记录 ID 与主点历史保留。详见 [迁移与回滚](finenergy-upgrade.md) 和 [原生授权](finenergy-licensing.md)。
 

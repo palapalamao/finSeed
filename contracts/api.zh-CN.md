@@ -1,4 +1,4 @@
-# FIN Energy 能源管理接口文档
+# FIN 能源管理接口文档
 
 ## 0.16.0 原生授权与命名空间升级
 
@@ -10,7 +10,7 @@
 
 `409` 还包括 `LICENSE_REQUIRED`（原生能源功能不可用）和 `NAMESPACE_MIGRATION_REQUIRED`（旧项目尚须明确升级）。这些前置失败不能按普通模块缺项处理，也不能用旧快照伪装成新的查询成功。
 
-**FIN Energy 0.16.0 候选 · FIN Framework 5.3.0.2761 · 简体中文版**
+**FIN 能源管理 0.16.0 候选 · FIN Framework 5.3.0.2761 · 简体中文版**
 
 [English version](api.md) · [架构与模块设计](../docs/finenergy-architecture-design.md)
 
@@ -18,7 +18,7 @@
 
 POST 接收 `Content-Type: application/json` 的 JSON 对象。`report`、`cockpit` 和 `cleaning/preview` 是只读 POST 路由，其余 POST 路由要求管理员权限。迁移预览的 GET 和 POST 路由同样要求管理员权限。写操作按接口规定提交当前 `mod`。
 
-正常响应为 HTTP 200，正文为 `{ok:true,data:...}`。应用错误返回非 2xx 状态和 `{ok:false,error:{code,msg}}`。图片路由成功时返回二进制内容。FIN 可在FIN Energy 能源管理分发请求之前拒绝过期会话或 CSRF 校验失败的请求。客户端还处理 FIN 重定向和非 JSON 错误。JSON 和驾驶舱图片使用 `Cache-Control: no-store`。普通 POST 请求体最多 2,097,152 字符，素材上传的 JSON 最多 3,145,728 个 UTF-8 字节。
+正常响应为 HTTP 200，正文为 `{ok:true,data:...}`。应用错误返回非 2xx 状态和 `{ok:false,error:{code,msg}}`。图片路由成功时返回二进制内容。FIN 可在 FIN 能源管理分发请求之前拒绝过期会话或 CSRF 校验失败的请求。客户端还处理 FIN 重定向和非 JSON 错误。JSON 和驾驶舱图片使用 `Cache-Control: no-store`。普通 POST 请求体最多 2,097,152 字符，素材上传的 JSON 最多 3,145,728 个 UTF-8 字节。
 
 | 状态 | 代表性错误码 | 处理 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ GET `session` 自 0.12.16 起从已认证的 FIN 请求上下文返回 `{locale:
 
 ## 当前数据来源与版本边界
 
-自 0.12.9 起，实测表、物理表和虚拟设备的用量统一读取该设备明确配置的主能耗点在 FIN 中的原生历史。FIN 负责采集与历史存储。FIN Energy 能源管理负责读取、清洗、计算和展示，复用 FIN 的时序数据。未设置主点或主点没有历史时保留缺测。辅助历史、旧分钟批次、当前分表之和以及公式输入点的历史均不替代设备自身历史。贡献成员也分别读取各自的主点。
+自 0.12.9 起，实测表、物理表和虚拟设备的用量统一读取该设备明确配置的主能耗点在 FIN 中的原生历史。FIN 负责采集与历史存储。FIN 能源管理负责读取、清洗、计算和展示，复用 FIN 的时序数据。未设置主点或主点没有历史时保留缺测。辅助历史、旧分钟批次、当前分表之和以及公式输入点的历史均不替代设备自身历史。贡献成员也分别读取各自的主点。
 
 查询使用当前配置的关系。有效表计去重集合、范围、截止时间、指标与单位、清洗配置相同时，各视角和报表应得出相同的基础用量。改动草稿条件不改变已成功生成的报表及导出快照。查询清洗只作用于计算，缺测、NA、真实零和估算质量分别保留。
 
@@ -158,7 +158,7 @@ POST `cockpit` 是已认证的只读请求，使用与 `report` 一致的 FIN �
 
 - `space`、`organization` 的字段为 `parentId?,area?,description?`。上级与当前对象必须同为 `space` 或同为 `organization`。两套层级独立于旧分组和计量拓扑。
 - `group` 的字段为 `parentId?,area?,description?,alarmLimits:[{categoryId,limit,enabled}]`。
-- `meter`、`totalMeter`、`sensor` 的字段为 `parentId?,spaceId?,meterParentId?,organizationId?,canonicalId?,pointId?,categoryId?,subcategoryId?,utilityId?,tariffId?,expressionId?,area?,maximum?,includeInTotals?,actualEfficiency?,baselineEfficiency?,alarmEnabled?,alarmLimit?,unit?,description?,location?`。表计和总表的 `historyMode?:auto|cumulative|interval` 仅在FIN Energy 能源管理内指定历史的解释方式。同一点位的显式模式须一致。省略模式时采用 FIN 配置，包括单独设置的累计量 Marker `hisTotalized`。
+- `meter`、`totalMeter`、`sensor` 的字段为 `parentId?,spaceId?,meterParentId?,organizationId?,canonicalId?,pointId?,categoryId?,subcategoryId?,utilityId?,tariffId?,expressionId?,area?,maximum?,includeInTotals?,actualEfficiency?,baselineEfficiency?,alarmEnabled?,alarmLimit?,unit?,description?,location?`。表计和总表的 `historyMode?:auto|cumulative|interval` 仅在 FIN 能源管理内指定历史的解释方式。同一点位的显式模式须一致。省略模式时采用 FIN 配置，包括单独设置的累计量 Marker `hisTotalized`。
 - `category` 提供 `unit`。`subcategory` 提供 `categoryId,coalFactor,co2Factor,rawcoalFactor?,oilFactor?`。`utility` 提供 `categoryId`。折算因子为每单位分类能源的产出质量，标准煤以 kgce 计、二氧化碳以 kgCO2 计，原煤和石油以 kg 计。例如，0.1229 kgce/kWh × 240 kWh = 29.496 kgce。
 - `tariff` 的字段为 `categoryId?,isDefault?,mode=flat|absolute|weekly|monthlyBlock|yearlyBlock,rate:number,rules:[{from?,to?,startHour?,endHour?,weekday?,rate}],exceptions:[{from,to,startHour?,endHour?,rate}],blocks:[{limit:number|null,rate:number}]`。
 - `calendar` 的字段为 `isDefault?,peakHours:number[],valleyHours:number[],workHours:number[],workDays:number[],exceptions:[{date:string,working:boolean}]`，工作日采用 ISO 编号，从周一 1 到周日 7。
@@ -174,7 +174,7 @@ POST `cockpit` 是已认证的只读请求，使用与 `report` 一致的 FIN �
 
 GET `catalog` 返回 `{version,project,projectRef,cockpitConfigRefs,user:{name,canWrite},storageModel:'nativeEquip',spaceSource:'fin',nativeTreePath,nativeTreeWarnings:string[],records:FinEnergyRecord[]}`。`cockpitConfigRefs` 以 `{id,mod}` 列出可读且有效的驾驶舱预算、规则版本。每次请求直接读取当前原生 `legacy::NavTree.find(cx,"equip")`，保留导航名称、顺序、嵌套设备、叶子点位和 FIN 权限校验。页面或工作台刷新时重新读取该投影。GET 只读目录。
 
-原生容器投影为 `kind:'space',nativeReadonly:true,nativeSourceId,nativeSourceKind,parentId`。ID 使用 FIN 原生 Ref，具有匹配 `migrationSourceId` 的已有FIN Energy 能源管理空间保持自身 ID。叶子点位投影为 `kind:'nativePoint',nativeReadonly:true,nativeSourceId,parentId,nativeDis,unit?,his?,pointKind?`，用于目录浏览。界面仅显示 `his:true` 的叶子点位，原生容器全部保留。已绑定的合格叶子点位在原始 FIN 叶子名称下显示其规范计量配置。旧手工空间保留在目录，并用 `nativeHidden:true` 排除出当前 FIN 树。
+原生容器投影为 `kind:'space',nativeReadonly:true,nativeSourceId,nativeSourceKind,parentId`。ID 使用 FIN 原生 Ref，具有匹配 `migrationSourceId` 的已有 FIN 能源管理空间保持自身 ID。叶子点位投影为 `kind:'nativePoint',nativeReadonly:true,nativeSourceId,parentId,nativeDis,unit?,his?,pointKind?`，用于目录浏览。界面仅显示 `his:true` 的叶子点位，原生容器全部保留。已绑定的合格叶子点位在原始 FIN 叶子名称下显示其规范计量配置。旧手工空间保留在目录，并用 `nativeHidden:true` 排除出当前 FIN 树。
 
 表计投影从当前点位上级附加瞬态 `nativeSpaceReadonly:true,nativeSpaceId?`。来源缺失或不可读时保留表计配置，标记 `nativeSourceMissing:true`，并取消当前覆盖。刷新保留已存记录、组织与上游引用。新增或修改绑定时将原生上级存为 Folio `finEnergySpaceRef`，无关编辑保留用于兼容请求的 `spaceId`。持久化前移除所有 `native*` 字段。原生容器和叶子点位拒绝结构编辑、移动、复制和删除。站点或楼层面积有下文限定的面积例外。未绑定和虚拟表计仍在全对象列表及其他维度中可用。
 
@@ -206,7 +206,7 @@ POST `tree/manage` 仅管理员可用。`action=save` 接收 `{records:FinEnergy
 
 省略 `dimension` 沿用旧树分组。原 `tree/move` 和 `tree/toggle` 也采用旧关系语义，`tree/manage` 支持指定维度操作。旧 `tree/copy` 复制分组层级，所复制的表计配置清除物理点、表达式及规范绑定，默认排除在汇总外。
 
-`action=previewDelete` 接收 `{items:[{id,mod}]}`，返回 `{revision,roots,records:[{id,kind,name}],blockers:[{id,kind,name,referencedIds}]}`。预览纳入完整FIN Energy 能源管理子树。外部模板、表达式、COP 或其他配置引用阻止删除。`action=delete` 接收相同条目及预览版本，配置已变化时拒绝，成功返回 `{deleted:string[]}`。删除范围仅为FIN Energy 能源管理配置，保留 FIN 原生点位、设备和历史。报警、任务审计继续按既有事件保留规则处理。
+`action=previewDelete` 接收 `{items:[{id,mod}]}`，返回 `{revision,roots,records:[{id,kind,name}],blockers:[{id,kind,name,referencedIds}]}`。预览纳入完整 FIN 能源管理子树。外部模板、表达式、COP 或其他配置引用阻止删除。`action=delete` 接收相同条目及预览版本，配置已变化时拒绝，成功返回 `{deleted:string[]}`。删除范围仅为 FIN 能源管理配置，保留 FIN 原生点位、设备和历史。报警、任务审计继续按既有事件保留规则处理。
 
 工程界面可限定直属子级、所有后代或全对象。路径按所选维度的关系解析。拖放和批量移动共用后端校验。新物理表计默认纳入汇总，传感器排除，复用表计保留已存开关。规范化单位和原生 Marker 证据唯一一致时，向导才建议能源分类。批量存在歧义时须显式选择。简称使用明确的原生命名元数据，来源证据保留原名。计量能源分组只用于展示。桌面使用右侧检查面板，手机使用详情抽屉。高级单对象字段折叠时保留存量值。
 
@@ -232,13 +232,13 @@ POST `migration` 携带 `target:'threeTree'` 时使用本兼容协议，预览�
 
 `records` 包含自动新增记录和完整的编辑记录。`MigrationSuggestion` 为 `{id,type,title,reason,requiresConfirmation:true,records:FinEnergyRecord[],patches:object[],recordIds:string[],sourceIds:string[],count:number,placementRequired?:boolean,parentId?:string}`。建议类型包括 `legacySpace,nativeFloor,meterTopology,legacyGroup`。完整建议记录便于审阅，字段补丁允许组合空间与拓扑建议，各自的修改可独立应用。`placementRequired` 建议需要明确选择目标空间。
 
-POST `migration` 传 `{action:'apply',target:'threeTree',revision,sourceRevision,acceptedSuggestionIds?:string[],placements?:{[suggestionId]:spaceId}}` 时应用自动记录、已接受的建议及显式位置。两个版本均须原样取自预览。服务端重新生成方案并对比FIN Energy 能源管理配置版本和原生来源元数据签名。发生变化时返回 HTTP 409 / `CONFLICT`，需要重新预览。未知建议 ID 或无效目标会被拒绝。位置键必须标识 `placementRequired` 建议，目标须为已有空间或接受建议中的新空间。重叠建议为同一表计指定的位置须一致。全部候选在一次 Folio 提交前校验。响应 `{applied:number,job:FinEnergyRecord|null}`，无修改时返回零且无任务。
+POST `migration` 传 `{action:'apply',target:'threeTree',revision,sourceRevision,acceptedSuggestionIds?:string[],placements?:{[suggestionId]:spaceId}}` 时应用自动记录、已接受的建议及显式位置。两个版本均须原样取自预览。服务端重新生成方案并对比 FIN 能源管理配置版本和原生来源元数据签名。发生变化时返回 HTTP 409 / `CONFLICT`，需要重新预览。未知建议 ID 或无效目标会被拒绝。位置键必须标识 `placementRequired` 建议，目标须为已有空间或接受建议中的新空间。重叠建议为同一表计指定的位置须一致。全部候选在一次 Folio 提交前校验。响应 `{applied:number,job:FinEnergyRecord|null}`，无修改时返回零且无任务。
 
 仅有充分依据的站点根和有来源的空间位置会自动创建。只有所有已提供的原生 `submeterOf` 引用均明确映射到同能源分类的同一现有规范上游表计，且不会产生环路时，才继承关系。原生楼层名称也可能代表功能分组，按名称推断的楼层或楼栋位置仍须人工确认。总能耗、风机盘管等功能组需要显式目标，没有表计的分组保持未绑定。诸如 1#楼水表 的外层分组可给出批量拓扑建议，其上级为现有总表点的规范记录。共用分组或名称不足以自动建立计量拓扑。
 
-同一点位的兼容别名接收 `canonicalId`。优先选择纳入统计且生效的总表为规范记录，否则以确定性规则选择既有记录，并保留一致的既有规范选择。不兼容的能源分类或表达式会产生警告。新空间 ID 使用确定性的项目限定 FIN Ref，应用后重新预览不会重复新增。既有分组、表计 `parentId`、原始点位绑定和旧汇总开关保留。迁移写入限于FIN Energy 能源管理配置。
+同一点位的兼容别名接收 `canonicalId`。优先选择纳入统计且生效的总表为规范记录，否则以确定性规则选择既有记录，并保留一致的既有规范选择。不兼容的能源分类或表达式会产生警告。新空间 ID 使用确定性的项目限定 FIN Ref，应用后重新预览不会重复新增。既有分组、表计 `parentId`、原始点位绑定和旧汇总开关保留。迁移写入限于 FIN 能源管理配置。
 
-已应用的迁移保留任务 `action:'treeMigration',status:'applied',migrationKey,processed`，并保留 `treeMigrationSnapshot` 任务记录中的配置前后值。POST `migration` 传 `{action:'rollback',target:'threeTree',jobId,mod}` 需要当前迁移任务的 `mod`，返回 `{rolledBack:number,job:FinEnergyRecord}`。回滚比对当前业务字段与保存的修改后状态，迁移记录已变更或缺失时返回 HTTP 409。服务端还验证恢复候选，若迁移新建的对象随后获得外部引用，则拒绝删除。回滚成功时原子恢复原记录、删除仅迁移产生的新增项，并标记任务为 `rolledBack`。审计和快照记录继续保留。此流程恢复FIN Energy 能源管理配置，原生历史备份独立处理。
+已应用的迁移保留任务 `action:'treeMigration',status:'applied',migrationKey,processed`，并保留 `treeMigrationSnapshot` 任务记录中的配置前后值。POST `migration` 传 `{action:'rollback',target:'threeTree',jobId,mod}` 需要当前迁移任务的 `mod`，返回 `{rolledBack:number,job:FinEnergyRecord}`。回滚比对当前业务字段与保存的修改后状态，迁移记录已变更或缺失时返回 HTTP 409。服务端还验证恢复候选，若迁移新建的对象随后获得外部引用，则拒绝删除。回滚成功时原子恢复原记录、删除仅迁移产生的新增项，并标记任务为 `rolledBack`。审计和快照记录继续保留。此流程恢复 FIN 能源管理配置，原生历史备份独立处理。
 
 ## 报表
 
@@ -385,7 +385,7 @@ GET `alarms` 每次持续超限返回一行，包括 episodeStartTs、lastTs、r
 
 `summary.selectionTotals` 及 `extra.selectionTotals` 按有效表计集合去重，含 `meterIds/sourceIds/knownValue`。相同有效表计集合、单位、清洗规则和截止应有相同基础合计。父子同时选择只计有效上级一次；重叠空间／组织范围不重复累加。组织未分配不抹掉设备自身已知用量，但结算归属及完整性单独标记。`usageCoverage` 记录实际覆盖与查询时长；`knownUsage.sourceUsage` 的诊断区间总计最多1000条，截断标记不改变数值及覆盖统计。
 
-排名保留无数据对象，`rank:null`；占比以明确标注的已有量为分母，单个正值为100%。零合计、负值、范围重叠或无有效量分别返回 `percentageBasis` 原因并不生成饼图比例。对比保留 `knownCurrent/knownReference`，仅完整可比覆盖生成差值及变化率。完整账单、COP、泄漏／计量差额及预测训练不因已有小计展示而放宽条件；FIN Energy 能源管理不发布额外归档历史。
+排名保留无数据对象，`rank:null`；占比以明确标注的已有量为分母，单个正值为100%。零合计、负值、范围重叠或无有效量分别返回 `percentageBasis` 原因并不生成饼图比例。对比保留 `knownCurrent/knownReference`，仅完整可比覆盖生成差值及变化率。完整账单、COP、泄漏／计量差额及预测训练不因已有小计展示而放宽条件；FIN 能源管理不发布额外归档历史。
 
 能流兼容 `scopeDimension/scopeNodeIds`。空间／组织选择由当前配置解析为有效表计集合。全区间总览读取每块表当前明确绑定的主点历史。覆盖区间描述源数据的可用性，关系变更日志供独立审计。
 

@@ -18,12 +18,12 @@ export function unwrap<T>(value:unknown,status=200):T {
 export {projectFromLocation} from './projectLocation';
 export class FinEnergyApi {
  readonly base:string;
- constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开FIN Energy 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开FIN Energy 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
+ constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
  async request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
   let response:Response;
   try{response=await finCsrfFetch(`${this.base}/${path}`,{method:body===undefined?'GET':'POST',headers:{Accept:'application/json',...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});}
   catch(error){if(error instanceof Error&&error.name==='AbortError')throw error;if(error&&typeof error==='object'&&'status'in error){if(error.status===401){this.onSessionExpired?.();throw new ApiError('unauthorized',t("FIN 会话已过期，请在 FIN 中重新登录。"),"FIN 会话已过期，请在 FIN 中重新登录。");}if(error.status===403)throw new ApiError('forbidden',t("当前 FIN 会话无权访问此项目。"),"当前 FIN 会话无权访问此项目。");if('_isCsrfError'in error&&error._isCsrfError){this.onSessionExpired?.();throw new ApiError('session_expired',t("FIN 会话已失效，请在 FIN 中重新登录。"),"FIN 会话已失效，请在 FIN 中重新登录。");}}throw new ApiError('network',t("无法连接 FIN，请检查网络与当前会话。"),"无法连接 FIN，请检查网络与当前会话。");}
-  let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及FIN Energy 能源管理扩展是否已启用。"),login?"FIN 会话已失效，请在 FIN 中重新登录。":"FIN 未返回 JSON，请检查项目名称及FIN Energy 能源管理扩展是否已启用。");}
+  let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及 FIN 能源管理扩展是否已启用。"),login?"FIN 会话已失效，请在 FIN 中重新登录。":"FIN 未返回 JSON，请检查项目名称及 FIN 能源管理扩展是否已启用。");}
   try{return unwrap<T>(value,response.status);}catch(error){if(response.status===401||error instanceof ApiError&&(['session_expired','unauthorized','http_401'].includes(error.code)))this.onSessionExpired?.();throw error;}
  }
  budgets=()=>this.request<CockpitConfigList<BudgetConfig>>('cockpit/budgets');

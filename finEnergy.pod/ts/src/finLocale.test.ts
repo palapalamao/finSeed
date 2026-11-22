@@ -3,7 +3,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 
 it.each([
- ['zh','en-US','zh-CN','FIN Energy 能源管理 · 楼宇能源分析','zh-cn'],
+ ['zh','en-US','zh-CN','FIN 能源管理 · 楼宇能源分析','zh-cn'],
  ['en','zh-CN','en-US','FIN Energy · Building Energy Analytics','en'],
  ['fr','zh-CN','en-US','FIN Energy · Building Energy Analytics','en']
 ])('uses FIN language %s despite conflicting browser, URL and saved preferences',async(finLanguage,browser,expected,title,dateLocale)=>{
@@ -20,7 +20,7 @@ it.each([
  expect(i18n.locale).toBe(expected);
  expect(document.documentElement.lang).toBe(expected);
  expect(document.title).toBe(title);
- expect(productName).toBe(expected==='zh-CN'?'FIN Energy 能源管理':'FIN Energy');
+ expect(productName).toBe(expected==='zh-CN'?'FIN 能源管理':'FIN Energy');
  expect(reportNames.dashboard).toBe(expected==='zh-CN'?'能源概览':'Energy overview');
  expect(dayjs.locale()).toBe(dateLocale);
 });

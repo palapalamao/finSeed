@@ -1,6 +1,6 @@
-# FIN Energy 升级与回滚操作
+# FIN 能源管理 升级与回滚操作
 
-本说明用于管理员把既有能源应用升级到 FIN Energy 0.16.0 候选版。英文版见 [Upgrade and rollback](finenergy-upgrade.en.md)。新项目不需要旧标签迁移。本文操作尚须在取得总部真实功能授权后，先在隔离项目验证。
+本说明用于管理员把既有能源应用升级到 FIN 能源管理 0.16.0 候选版。英文版见 [Upgrade and rollback](finenergy-upgrade.en.md)。新项目不需要旧标签迁移。本文操作尚须在取得总部真实功能授权后，先在隔离项目验证。
 
 ## 升级前核对
 

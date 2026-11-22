@@ -5,8 +5,8 @@ test('horizontal workspace preserves query filters while changing independent an
  const records=[...testRecords().map(row=>row.id==='meter1'?{...row,spaceId:'floor',organizationId:'department'}:row),{id:'floor',kind:'space' as const,name:'示范楼层'},{id:'department',kind:'organization' as const,name:'示范部门'}];
  const state=await installTransport(page,{records});await openView(page,'profile');
  await expect(page.getByRole('navigation',{name:'主导航'})).toBeVisible();
- await expect(page).toHaveTitle('FIN Energy 能源管理 · 楼宇能源分析');
- await expect(page.locator('.brand-wordmark')).toContainText('FIN Energy 能源管理');
+ await expect(page).toHaveTitle('FIN 能源管理 · 楼宇能源分析');
+ await expect(page.locator('.brand-wordmark')).toContainText('FIN 能源管理');
  await expect(page.locator('.object-panel:visible')).toHaveCount(0);
  await page.getByRole('button',{name:/^选择对象/}).click();
  const drawer=page.getByRole('dialog',{name:'选择分析对象'});
@@ -37,7 +37,7 @@ test('horizontal workspace preserves query filters while changing independent an
 
 test('mobile workspace keeps navigation, language and object selection accessible',async({page},testInfo)=>{
  await page.setViewportSize({width:390,height:844});await installTransport(page);await openView(page,'profile');
- await expect(page.locator('.brand-wordmark')).toContainText('FIN Energy 能源管理');
+ await expect(page.locator('.brand-wordmark')).toContainText('FIN 能源管理');
  await page.getByRole('button',{name:'打开导航',exact:true}).click();
  await page.getByRole('dialog',{name:'主导航'}).getByRole('button',{name:'消息中心',exact:true}).click();
  await expect(page.getByRole('heading',{name:'能耗报警',exact:true})).toBeVisible();

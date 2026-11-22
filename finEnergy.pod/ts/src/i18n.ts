@@ -52,7 +52,7 @@ export function serverMessage(source:string):string{
  if(locale==='zh-CN'){
   if(chineseServerMessages[source])return chineseServerMessages[source];
   for(const {pattern,message}of chineseServerPatterns){const match=source.match(pattern);if(match)return message.replace(/\{(\d+)\}/g,(_,index:string)=>match[Number(index)+1]);}
-  return ({'FinEnergy 调度记录标识已被其他记录占用':'FIN Energy 能源管理调度记录标识已被其他记录占用','设备已被其他 FinEnergy 配置占用':'设备已被其他FIN Energy 能源管理配置占用'} as Record<string,string>)[source]??source;
+  return ({'FinEnergy 调度记录标识已被其他记录占用':'FIN 能源管理调度记录标识已被其他记录占用','设备已被其他 FinEnergy 配置占用':'设备已被其他 FIN 能源管理配置占用'} as Record<string,string>)[source]??source;
  }
  const exact=activeLanguage.messages[source]??serviceMessages[source]??englishMessages[source];
  if(exact)return exact;
@@ -81,6 +81,6 @@ function applyLocale(){
  dayjs.locale(activeLanguage.dayjsLocale);
  if(typeof document!=='undefined'){
   document.documentElement.lang=locale;
-  document.title=t('FIN Energy 能源管理 · 楼宇能源分析');
+  document.title=t('FIN 能源管理 · 楼宇能源分析');
  }
 }

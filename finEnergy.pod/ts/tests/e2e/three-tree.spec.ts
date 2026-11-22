@@ -38,7 +38,7 @@ test('dimension-specific move preserves physical and orthogonal references',asyn
 });
 
 test('space delete preview excludes attached physical meters and blocks external references',async({page})=>{
- const state=await installTransport(page,{records:threeRecords()});await openView(page,'tree');await tableButton(page,'一号楼').click();await page.getByRole('button',{name:'删除分支',exact:true}).click();const modal=page.getByRole('dialog');await expect(modal).toContainText('将删除 2 个FIN Energy 能源管理配置对象');await expect(modal).toContainText('请先解除以下外部引用');await expect(modal.getByRole('button',{name:'确认移除业务配置',exact:true})).toBeDisabled();expect(state.records.find(row=>row.id==='meter1')?.pointId).toBe('point1');
+ const state=await installTransport(page,{records:threeRecords()});await openView(page,'tree');await tableButton(page,'一号楼').click();await page.getByRole('button',{name:'删除分支',exact:true}).click();const modal=page.getByRole('dialog');await expect(modal).toContainText('将删除 2 个 FIN 能源管理配置对象');await expect(modal).toContainText('请先解除以下外部引用');await expect(modal.getByRole('button',{name:'确认移除业务配置',exact:true})).toBeDisabled();expect(state.records.find(row=>row.id==='meter1')?.pointId).toBe('point1');
 });
 
 test('reports persist explicit dimensions and missing dimensions in old templates remain legacy',async({page})=>{

@@ -12,10 +12,10 @@ internal class FinEnergyHistorySafety
     changes.each |d|
     {
       if (d.changes.has("trash") && d.changes["trash"] isnot Remove)
-        throw ArgErr("FIN Energy 能源管理禁止自动添加 trash 标记")
+        throw ArgErr("FIN 能源管理禁止自动添加 trash 标记")
       old:=db.readById(d.id,false)
       if (d.isRemove && old != null && ["point","his","finEnergyIntervalBatch","finEnergyMeterGeneration","finEnergyIntervalCorrection"].any |tag| {old.has(tag)})
-        throw ArgErr("FIN Energy 能源管理配置操作不能删除历史点或已发布历史")
+        throw ArgErr("FIN 能源管理配置操作不能删除历史点或已发布历史")
     }
   }
 

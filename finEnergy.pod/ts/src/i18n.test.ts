@@ -60,7 +60,7 @@ describe('FIN user interface language',()=>{
   expect(document.title).toBe('FIN Energy · Building Energy Analytics');expect(dayjs.locale()).toBe('en');
  });
  it.each([
-  ['zh-CN','FIN Energy 能源管理','楼宇能源分析'],
+  ['zh-CN','FIN 能源管理','楼宇能源分析'],
   ['en-US','FIN Energy','Building Energy Analytics'],
   ['fr-FR','FIN Energy','Building Energy Analytics']
  ])('uses the localized product lockup for %s',async(language,name,tagline)=>{

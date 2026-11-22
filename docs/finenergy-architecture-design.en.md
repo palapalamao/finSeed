@@ -166,7 +166,7 @@ This is maintenance across stores, not a single distributed database transaction
 
 The application uses J2 Deep Blue #0e2738, Blue #3488b2, Aqua #00ccff and approved Green/Purple accents. Manrope is packaged locally; Chinese falls back to Microsoft YaHei or a suitable system CJK font. The temporary product mark is replaceable and does not purport to be HQ's final logo. Documents use the supplied original J2/FIN assets and FIN Wave with source hashes.
 
-Chinese displays FIN Energy 能源管理; English displays FIN Energy. Native menu titles use `toLocale` and Pod locale properties. The app follows the logged-in FIN user's language, retains manual switching, and migrates only eligible per-user legacy preferences. Project, equipment and user-entered names are not translated by a namespace upgrade.
+Chinese displays FIN 能源管理; English displays FIN Energy. Native menu titles use `toLocale` and Pod locale properties. The app follows the logged-in FIN user's language, retains manual switching, and migrates only eligible per-user legacy preferences. Project, equipment and user-entered names are not translated by a namespace upgrade.
 
 ## 12 Candidate Verification and Release Boundary
 

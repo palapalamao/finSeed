@@ -1,4 +1,4 @@
-# FIN Energy 0.16.0 现行文档
+# FIN 能源管理 0.16.0 现行文档
 
 本索引指定本次候选的有效文档；历史材料不作为新版功能或运行承诺。交付目录为 `D:/mygithub/finSeed/output/fin-energy-0.16.0/`，最终清单记录每个文件的语言、页数、源码／截图来源与 SHA256。
 
@@ -12,7 +12,7 @@
 | 原生授权 | [双语授权说明](finenergy-licensing.md) | [Bilingual licensing](finenergy-licensing.md) |
 | 实现与验收 | [功能边界](feature-parity.md) | [Verification boundary](feature-parity.md) |
 
-Brochure、Onepage、图文操作手册、逐项驾驶舱需求原型及视频的成品和可编辑文件，按交付目录下对应分类查阅。中文品牌为 FIN Energy 能源管理；英文为 FIN Energy。所有演示数据、历史实拍和保存响应回放均有来源说明。
+Brochure、Onepage、图文操作手册、逐项驾驶舱需求原型及视频的成品和可编辑文件，按交付目录下对应分类查阅。中文品牌为 FIN 能源管理；英文为 FIN Energy。所有演示数据、历史实拍和保存响应回放均有来源说明。
 
 The candidate is not a customer deployment. HQ must confirm the exact native feature and provide a genuine test license. The Belgian customer's full FIN build and OS must be accepted before platform compatibility is claimed. The ten-meter free allowance and training grant remain proposals, not enabled features.
 

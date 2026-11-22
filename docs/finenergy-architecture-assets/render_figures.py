@@ -91,7 +91,7 @@ class Diagram:
 
 
 def overview(regular, bold):
-    d = Diagram(572, "01", "FIN Energy 能源管理总体架构", "FIN Framework 5.3.0.2761  /  FIN Energy 0.16.0", regular, bold)
+    d = Diagram(572, "01", "FIN 能源管理总体架构", "FIN Framework 5.3.0.2761  /  FIN Energy 0.16.0", regular, bold)
     d.card(32, 102, 756, 70, "用户浏览器 · React / TypeScript",
            ("能源经营驾驶舱 · 分析工作台 · 报告模板 · 消息中心 · 配置管理",))
     d.arrow((410, 172), (410, 219))
@@ -110,7 +110,7 @@ def overview(regular, bold):
     d.card(48, 418, 224, 75, "设备与 Folio", ("设备、点位及配置记录",), BLUE)
     d.card(298, 418, 224, 75, "原生历史", ("采集、归档和历史读取",), BLUE)
     d.card(548, 418, 224, 75, "原生报警", ("报警发生、确认与恢复",), BLUE)
-    d.banner(523, "FIN 管理采集与历史。FIN Energy 能源管理负责业务配置、查询计算和结果呈现。")
+    d.banner(523, "FIN 管理采集与历史。FIN 能源管理负责业务配置、查询计算和结果呈现。")
     d.save("01-overview.png")
 
 

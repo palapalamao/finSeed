@@ -16,9 +16,9 @@ export const serverMessages:Record<string,string>={
  '虚拟表也必须选择已有主能耗点，请先在 FIN 中准备设备和点位':'Virtual meters also need an existing primary energy point. Prepare the equipment and point in FIN first.',
 
  '重算会改写所选区间的已有派生历史，须明确确认':'Recalculation can replace existing derived history in the selected range. Explicit confirmation is required.',
- 'FIN Energy 能源管理禁止自动添加 trash 标记':'FIN Energy does not allow automatic trash tagging.',
- 'FIN Energy 能源管理配置操作不能删除历史点或已发布历史':'FIN Energy configuration operations cannot delete history points or published history.',
- '历史写入仅允许FIN Energy 能源管理所属派生点':'History writes are restricted to FIN Energy-owned derived points.',
+ 'FIN 能源管理禁止自动添加 trash 标记':'FIN Energy does not allow automatic trash tagging.',
+ 'FIN 能源管理配置操作不能删除历史点或已发布历史':'FIN Energy configuration operations cannot delete history points or published history.',
+ '历史写入仅允许 FIN 能源管理所属派生点':'History writes are restricted to FIN Energy-owned derived points.',
  '已有历史与新增结果不同，未获明确授权不能改写':'The new result conflicts with existing history. Replacement requires explicit authorization.',
  '已有发布区间不能由自动任务改写':'Automatic tasks cannot replace published historical intervals.',
 
@@ -377,7 +377,7 @@ export const chineseServerMessages:Record<string,string>={
  'incompatibleUnit':'清洗来源的单位不兼容',
  'forbidden':'没有清洗源点历史的读取权限',
  'missingBranches':'未配置可读取的来源分表',
- 'Conflicting FinEnergy history modes':'FIN Energy 能源管理历史读数类型配置冲突',
+ 'Conflicting FinEnergy history modes':'FIN 能源管理历史读数类型配置冲突',
  'History exceeds 1000000 raw samples':'历史读数超过 1000000 条，请缩短查询范围',
  'Unknown cleaning parameter: {0}':'未知清洗参数：{0}',
  '{0} must be enabled or omitted':'{0} 只能启用或省略',
@@ -494,7 +494,7 @@ Object.assign(serverMessages,{
  licenseStoreFailed:'FIN could not save the license. Check the instance storage and try again.',
 });
 Object.assign(chineseServerMessages,{
- licenseMeterLimit:'免费额度允许本项目纳入最多 10 块表。请在设置 → 授权管理中激活FIN Energy 能源管理。',
+ licenseMeterLimit:'免费额度允许本项目纳入最多 10 块表。请在设置 → 授权管理中激活 FIN 能源管理。',
  licenseProjectOverLimit:'本项目已纳入超过 10 块表。请在设置 → 授权管理中激活，或减少本项目纳管表计。',
  licenseInvalid:'授权文件或签名无效。',
  licenseInvalidPeriod:'授权文件中的有效期有误。请联系签发人员核对日期。',
