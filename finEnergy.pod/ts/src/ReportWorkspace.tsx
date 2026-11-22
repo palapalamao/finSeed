@@ -1,5 +1,7 @@
 import {referenceKinds} from './referenceCurves';
-import {chartFirstRequest,rebuildFullProfile} from './profileFirst';
+import {profileChartStage,rebuildFullProfile} from './profileFirst';
+import {afterQueryPaint,observeQuery} from './queryPerformance';
+import {QueryWaitStatus} from './QueryWaitStatus';
 import {t,localizedRecord} from './i18n';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Alert,Button,Checkbox,DatePicker,Drawer,Input,Radio,Select,Space,Spin,Tag,Tree,Typography,Tabs,message} from 'antd';
@@ -34,6 +36,12 @@ const descriptions:Partial<Record<ReportKind,string>>=localizedRecord(()=>({ener
 interface Props {initialRequest?:ReportRequest;initialSnapshot?:ReportSnapshot;navigationContext?:NavigationContextV1;configurationChanged?:boolean;onReturn?:()=>void;initialTemplateId?:string;kind:ReportKind;api:FinEnergyApi;catalog:Catalog;reload:()=>Promise<void>;navigate:(kind:ReportKind)=>void}
 export function ReportWorkspace({initialRequest,initialSnapshot,navigationContext,configurationChanged,onReturn,initialTemplateId,kind,api,catalog,reload,navigate}:Props){
  const[dimension,setDimension]=useState<Dimension>('space');const[range,setRange]=useState<[Dayjs,Dayjs]>(()=>kind==='energyFlow'?energyFlowRange('thisMonth'):presetRange('thisMonth'));const[comparisonSelection,setComparisonSelection]=useState<ComparisonSelection>(()=>comparisonPreset('monthToDate'));const[preset,setPreset]=useState<Preset|undefined>('thisMonth');const[metric,setMetric]=useState<Metric>('energy');const[period,setPeriod]=useState<ReportRequest['period']>('day');const[perArea,setPerArea]=useState(false);const[selected,setSelected]=useState<string[]>([]);const[references,setReferences]=useState<string[]>([]);const[baselineId,setBaselineId]=useState<string>();const[xId,setXId]=useState<string>();const[yId,setYId]=useState<string>();const[workHours,setWorkHours]=useState<number[]>([]);const[compareMode,setCompareMode]=useState('period');const[activeTemplate,setActiveTemplate]=useState<string>();const[auto,setAuto]=useState(true);const[treeSearch,setTreeSearch]=useState('');const[treeOpen,setTreeOpen]=useState(false);const[snapshot,setSnapshot]=useState<ReportSnapshot|null>(null);const[loading,setLoading]=useState(false);const[error,setError]=useState('');const[templateRecord,setTemplateRecord]=useState<Partial<FinEnergyRecord>|null>(null);const[saving,setSaving]=useState(false);const controller=useRef<AbortController|null>(null);const querySequence=useRef(0);
+ const[queryWait,setQueryWait]=useState<{startedAt:number;sourceNames:boolean}|null>(null);
+ const cancelWait=()=>{
+  controller.current?.abort();
+  querySequence.current++;
+  setLoading(false);
+ };
  const[trainingDays,setTrainingDays]=useState(56);const[forecastDays,setForecastDays]=useState(7);const[forecastRolling,setForecastRolling]=useState(true);const[forecastCutoff,setForecastCutoff]=useState(dayjs().startOf('day'));
  const[advancedOpen,setAdvancedOpen]=useState(false);const[flowScopeId,setFlowScopeId]=useState<string>();const[flowMode,setFlowMode]=useState<'relations'|'endUse'>('relations');
  const[treeExpanded,setTreeExpanded]=useState<string[]>([]);
@@ -51,7 +59,38 @@ export function ReportWorkspace({initialRequest,initialSnapshot,navigationContex
  const request=useCallback(()=>{const current=draftRequest();if(initialRequest){if(categoryIds.length===1)current.categoryId=categoryIds[0];return inheritAbsoluteRequest(current,initialRequest,!preset?[range[0].valueOf(),range[1].valueOf()]:undefined);}return current;},[draftRequest,initialRequest,categoryIds,preset,range]);
  const [projected,setProjected]=useState(false);
  const lastQuery=useRef<{from:string;to:string;signature:string;asOf:string}|null>(null);
- const query=useCallback(async(override?:Partial<ReportRequest>)=>{const current={...request(),...override};const signature=JSON.stringify({...current,asOf:undefined});const previous=lastQuery.current;if(!current.asOf&&previous&&previous.from===current.from&&previous.to===current.to&&previous.signature!==signature)current.asOf=previous.asOf;if(kind==='energyFlow'&&current.flowMode==='endUse'&&current.nodeIds.some(id=>!['meter','totalMeter'].includes(records.find(row=>row.id===id)?.kind||''))){setError(t('分项能流请选择总表或表计，按当前计量边界查看分流。'));return;}if(kind==='energyFlow'&&!current.categoryId){setError(t("请选择能源类型"));return;}if(objectComparison){if(new Set([...current.nodeIds,...(current.referenceIds||[])]).size<2){setError(t("请在对象树中至少选择两个对比对象"));return;}if(!current.baselineId){setError(t("请从已选对象中指定基准对象"));return;}}if(kind!=='dashboard'&&!current.nodeIds.length&&kind!=='regression'){setError(t("请先选择分析对象"));return;}if(kind==='regression'&&(!current.xId||!current.yId)){setError(t("请选择回归分析的 X 与 Y 对象"));return;}if(dayjs(current.to).valueOf()<=dayjs(current.from).valueOf()){message.error(t("结束时间必须晚于开始时间"));return;}controller.current?.abort();const sequence=++querySequence.current;const abort=new AbortController();controller.current=abort;setLoading(true);setError('');try{const result=await api.report(chartFirstRequest(current),abort.signal);const points=await reportPointNames(result,records,id=>api.points(id,0,10));if(sequence===querySequence.current){setProjected(false);lastQuery.current={from:current.from,to:current.to,signature,asOf:result.asOf||current.asOf||new Date().toISOString()};setSnapshot(makeSnapshot(current,result,reportNames[kind],catalog.project,new Date(),records,points));if(kind==='dashboard'&&!dashboardUsesRange||kind==='comparison'&&compareMode==='period'){setRange([dayjs(current.from),dayjs(current.to)]);setPreset(undefined);}}}catch(error){if(error instanceof Error&&error.name==='AbortError')return;if(sequence===querySequence.current)setError(error instanceof Error?error.message:t("查询失败"));}finally{if(sequence===querySequence.current)setLoading(false);}},[api,kind,catalog.project,records,request,objectComparison]);
+ const query=useCallback(async(override?:Partial<ReportRequest>)=>{
+  const current={...request(),...override};const signature=JSON.stringify({...current,asOf:undefined});const previous=lastQuery.current;if(!current.asOf&&previous&&previous.from===current.from&&previous.to===current.to&&previous.signature!==signature)current.asOf=previous.asOf;if(kind==='energyFlow'&&current.flowMode==='endUse'&&current.nodeIds.some(id=>!['meter','totalMeter'].includes(records.find(row=>row.id===id)?.kind||''))){setError(t('分项能流请选择总表或表计，按当前计量边界查看分流。'));return;}if(kind==='energyFlow'&&!current.categoryId){setError(t("请选择能源类型"));return;}if(objectComparison){if(new Set([...current.nodeIds,...(current.referenceIds||[])]).size<2){setError(t("请在对象树中至少选择两个对比对象"));return;}if(!current.baselineId){setError(t("请从已选对象中指定基准对象"));return;}}if(kind!=='dashboard'&&!current.nodeIds.length&&kind!=='regression'){setError(t("请先选择分析对象"));return;}if(kind==='regression'&&(!current.xId||!current.yId)){setError(t("请选择回归分析的 X 与 Y 对象"));return;}if(dayjs(current.to).valueOf()<=dayjs(current.from).valueOf()){message.error(t("结束时间必须晚于开始时间"));return;}
+  controller.current?.abort();
+  const sequence=++querySequence.current;
+  const abort=new AbortController();
+  controller.current=abort;
+  const observation=observeQuery('report:'+current.kind+':'+current.metric);
+  setLoading(true);setError('');setQueryWait({startedAt:observation.start,sourceNames:false});
+  try{
+   const result=await api.report(current,abort.signal);
+   if(sequence!==querySequence.current || abort.signal.aborted){observation.finish('cancelled');return;}
+   observation.phase('sourceNames');
+   setQueryWait({startedAt:observation.start,sourceNames:true});
+   const points=await reportPointNames(result,records,id=>api.points(id,0,10));
+   if(sequence!==querySequence.current || abort.signal.aborted){observation.finish('cancelled');return;}
+   observation.phase('render');
+   setProjected(false);
+   lastQuery.current={from:current.from,to:current.to,signature,asOf:result.asOf||current.asOf||new Date().toISOString()};
+   const next=makeSnapshot(current,result,reportNames[kind],catalog.project,new Date(),records,points);
+   setSnapshot(next);
+   if(kind==='dashboard'&&!dashboardUsesRange||kind==='comparison'&&compareMode==='period'){
+    setRange([dayjs(current.from),dayjs(current.to)]);setPreset(undefined);
+   }
+   afterQueryPaint(()=>observation.finish(abort.signal.aborted?'cancelled':profileChartStage(next)?'preview':'complete'));
+  }catch(error){
+   const cancelled=abort.signal.aborted||error instanceof Error&&error.name==='AbortError';
+   observation.finish(cancelled?'cancelled':'failed');
+   if(!cancelled&&sequence===querySequence.current)setError(error instanceof Error?error.message:t('查询失败'));
+  }finally{
+   if(sequence===querySequence.current)setLoading(false);
+  }
+ },[api,kind,catalog.project,records,request,objectComparison]);
  const queryRef=useRef(query);queryRef.current=query;
  useEffect(()=>{const changed=previousKind.current!==kind;previousKind.current=kind;if(changed&&kind==='energyFlow'&&(!template||(template.request as ReportRequest).kind!==kind)){setRange(energyFlowRange('thisMonth'));setPreset('thisMonth');setSelected([]);}if(changed&&kind==='dashboard'&&(!template||(template.request as ReportRequest).kind!==kind))setOverviewCustom(true);if(changed&&kind==='comparison'&&compareMode==='period'&&(!template||(template.request as ReportRequest).kind!==kind)){const [a,b]=preset?presetRange(preset):range;const calendar=a.valueOf()===a.startOf('month').valueOf()&&b.valueOf()===a.add(1,'month').valueOf();const begin=calendar?a.subtract(1,'month'):a.subtract(b.valueOf()-a.valueOf(),'millisecond');setComparisonSelection(comparisonFromRequest({...request(),from:iso(a),to:iso(b),otherFrom:iso(begin),otherTo:iso(a),comparisonAlignment:calendar?'calendarMonth':'duration',comparisonPreset:'custom'}));setPreset(undefined);}setSnapshot(null);setError('');controller.current?.abort();querySequence.current++;setLoading(false);if(template&&(template.request as ReportRequest).kind!==kind){setActiveTemplate(undefined);setComparisonBasis('physicalBoundary');setComparisonMembers({});if(dimension==='legacy'){setDimension('space');setSelected([]);}}if(kind==='primary')setMetric(previous=>['coal','co2','rawcoal','oil'].includes(previous)?previous:'coal');else setMetric(previous=>standardMetrics.includes(previous)?previous:'energy');setSelected(previous=>previous.filter(id=>{const record=records.find(record=>record.id===id);if(!record)return false;if(kind==='cop')return record.kind==='cop';if(kind==='leak')return leakMasters.has(id);if(kind==='utility')return utilityScopeAllowed(records,id,dimension,nativeSpace);if(kind==='trend')return nodeKinds.includes(record.kind)&&!!record.pointId;return dimensionRecords(records,dimension,nativeSpace).some(row=>row.id===id);}));return()=>controller.current?.abort();},[kind]);
  useEffect(()=>{if(kind!=='dashboard')return;if(!slides.length){setSnapshot(null);return;}void queryRef.current();},[kind,effectiveMetric,overviewSpan,slides.length]);
@@ -68,14 +107,27 @@ export function ReportWorkspace({initialRequest,initialSnapshot,navigationContex
  const pathFor=(id:string)=>{const path=dimensionPath(records,id,dimension,nativeSpace);return path.length?path.map(row=>row.name).join(' / '):t("已移除对象 ({0})",id);};
  const filteredSnapshot=useMemo(()=>{if(kind==='energyFlow')return snapshot;const ids=kind==='dashboard'?(activeSlide?.metric==='energy'&&activeSlide.categoryId?[activeSlide.categoryId]:[]):categoryIds;return filterSnapshot(snapshot,ids,ids.map(id=>records.find(record=>record.id===id)?.name||id));},[snapshot,categoryIds,records,kind,activeSlide]);
  const requireFull=useCallback(async(source:ReportSnapshot)=>{
-  controller.current?.abort();const sequence=++querySequence.current;const abort=new AbortController();controller.current=abort;setLoading(true);setError('');
+  controller.current?.abort();
+  const sequence=++querySequence.current;
+  const abort=new AbortController();
+  controller.current=abort;
+  const observation=observeQuery('report:diagnostics:'+source.request.metric);
+  setLoading(true);setError('');setQueryWait({startedAt:observation.start,sourceNames:false});
   try{
    const full=await rebuildFullProfile(source,api,records,abort.signal);
-   if(sequence!==querySequence.current)throw new DOMException('Aborted','AbortError');
+   if(sequence!==querySequence.current||abort.signal.aborted)throw new DOMException('Aborted','AbortError');
+   observation.phase('render');
    setProjected(false);setSnapshot(full);
+   afterQueryPaint(()=>observation.finish(abort.signal.aborted?'cancelled':'complete'));
    return filterSnapshot(full,source.categoryIds||[],source.categoryNames||[])!;
-  }catch(error){if(sequence===querySequence.current&&!(error instanceof Error&&error.name==='AbortError'))setError(error instanceof Error?error.message:t('查询失败'));throw error;}
-  finally{if(sequence===querySequence.current)setLoading(false);}
+  }catch(error){
+   const cancelled=abort.signal.aborted||error instanceof Error&&error.name==='AbortError';
+   observation.finish(cancelled?'cancelled':'failed');
+   if(sequence===querySequence.current&&!cancelled)setError(error instanceof Error?error.message:t('查询失败'));
+   throw error;
+  }finally{
+   if(sequence===querySequence.current)setLoading(false);
+  }
  },[api,records]);
  const selectable=useMemo(()=>{const project=(nodes:DimensionNode[]):DataNode[]=>nodes.flatMap(node=>{const children=project(node.children);return !treeSearch||node.title.toLowerCase().includes(treeSearch.toLowerCase())||children.length?[{key:node.key,title:node.title,children,disableCheckbox:node.bucket||node.synthetic,selectable:!node.synthetic}]:[];});let data=kind==='cop'?records.filter(record=>record.kind==='cop').map(record=>({key:record.id!,title:record.name})):dimension==='legacy'?treeData(records,treeSearch):project(dimensionRoots(records,dimension,nativeSpace));const map=(nodes:DataNode[]):DataNode[]=>nodes.map(node=>{const record=records.find(record=>record.id===node.key);return {...node,title:kind==='utility'&&record&&['meter','totalMeter'].includes(record.kind)?<span>{record.name}<small className="utility-selector-tag">{records.find(item=>item.id===record.utilityId)?.name||t('未指定分项')}</small></span>:record?.kind==='totalMeter'?<span>{typeof node.title==='function'?node.title(node):node.title}<MeterOriginBadge record={record}/></span>:node.title,disableCheckbox:node.disableCheckbox||record?.kind==='nativePoint'||(kind==='forecast'&&record?.kind==='sensor')||!!activeTemplate||(kind==='leak'&&!leakMasters.has(String(node.key)))||(kind==='energyFlow'&&flowMode==='endUse'&&!['meter','totalMeter'].includes(record?.kind||''))||(kind==='utility'&&!utilityScopeAllowed(records,record?.id,dimension,nativeSpace))||(kind==='trend'&&!record?.pointId),children:node.children?map(node.children):undefined};});return map(data);},[records,treeSearch,kind,activeTemplate,dimension,nativeSpace,leakMasters,objectComparison,flowMode]);
  useEffect(()=>{setTreeExpanded(dimensionRoots(records,dimension,nativeSpace).map(node=>node.key));if(!activeTemplate&&kind!=='cop')setSelected(previous=>previous.filter(id=>dimensionRecords(records,dimension,nativeSpace).some(row=>row.id===id&&row.kind!=='nativePoint'&&(kind!=='leak'||leakMasters.has(id)))));},[records,dimension,nativeSpace,activeTemplate,kind]);
@@ -130,6 +182,6 @@ export function ReportWorkspace({initialRequest,initialSnapshot,navigationContex
 </div></Drawer>
  {kind==='leak'&&!leakMasters.size&&<Alert className="report-warning" type="warning" showIcon message={t("泄漏分析需要同能源类型的总表与下级分表，请先在计量对象管理中维护上级表计。")}/>}
  {kind==='cop'&&!records.some(record=>record.kind==='cop')&&<Alert className="report-warning" type="info" message={t("尚无 COP 配置，请先选择供能量与输入能耗对象。")}/>}
- {error&&<Alert className="report-warning" type="error" showIcon message={error} description={snapshot?t("下方保留最近一次成功查询的快照，导出使用该快照。"):undefined}/>}{kind==='dashboard'&&!slides.length&&<Alert className="report-warning" type="info" message={t("请在概览设置中选择能源分类或费用、标准煤、碳排放指标。")}/>}<Spin spinning={loading} tip={t("正在读取 FIN 历史并计算…")}><ReportView snapshot={filteredSnapshot} onRequireFull={requireFull} onEnergyFlowOverview={()=>{setActiveTemplate(undefined);setSelected([]);setFlowScopeId(undefined);setSnapshot(null);setTreeOpen(true);}} onEnergyFlowFocusChange={setFlowScopeId}/></Spin>
+ {error&&<Alert className="report-warning" type="error" showIcon message={error} description={snapshot?t("下方保留最近一次成功查询的快照，导出使用该快照。"):undefined}/>}{kind==='dashboard'&&!slides.length&&<Alert className="report-warning" type="info" message={t("请在概览设置中选择能源分类或费用、标准煤、碳排放指标。")}/>}{loading&&queryWait&&<QueryWaitStatus startedAt={queryWait.startedAt} phase={t(queryWait.sourceNames?'正在读取报表的数据来源。':'正在读取 FIN 历史并计算…')} onCancel={cancelWait}/>}<Spin spinning={loading} tip={t("正在读取 FIN 历史并计算…")}><ReportView snapshot={filteredSnapshot} onRequireFull={requireFull} onEnergyFlowOverview={()=>{setActiveTemplate(undefined);setSelected([]);setFlowScopeId(undefined);setSnapshot(null);setTreeOpen(true);}} onEnergyFlowFocusChange={setFlowScopeId}/></Spin>
  </section><RecordEditor api={api} open={!!templateRecord} record={templateRecord} records={records} saving={saving} onClose={()=>setTemplateRecord(null)} onSave={saveTemplate} canWrite={catalog.user.canWrite}/></div>;
 }
