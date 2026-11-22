@@ -17,7 +17,7 @@ const class FinEnergyRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["session","catalog","points","alarms","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
+      readOnly := ["session","catalog","points","alarms","alarms/page","alarms/detail","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
       if (!["session","license/status","license/import","license/delete"].contains(route)) repo.requireConfigurationAccess
       if (req.method != (readOnly ? "GET" : "POST")) throw FinEnergyHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
@@ -80,6 +80,8 @@ const class FinEnergyRest : WebMod
         case "cleaning/preview": data=FinEnergyCleaningRepo(repo).preview(body)
         case "tasks": data=FinEnergyJobs(repo).run(body)
         case "alarms": data=repo.alarms
+        case "alarms/page": data=repo.alarmPage(Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "30"),req.uri.query["state"] ?: "all",req.uri.query["eventId"])
+        case "alarms/detail": data=repo.alarmDetail(req.uri.query["id"] ?: "")
         case "messages/changes": data=repo.changeMessages(Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "30"))
         case "alarms/ack": data=repo.acknowledge(str(body,"id"),body["mod"],body["note"] as Str ?: "")
         default: throw FinEnergyHttpErr(404,"NOT_FOUND","接口不存在")

@@ -8,6 +8,14 @@ internal class FinEnergyChangeMessages
   static [Str:Obj?] page(Folio db, |Dict->Bool| canRead, Bool admin, Int offset:=0, Int limit:=30)
   {
     if (offset < 0 || limit < 1 || limit > 200) throw ArgErr("offset >= 0; 1 <= limit <= 200")
+    // Repeated epochs/reference fields share native record reads only within
+    // this request. Permissions are still checked before any detail is exposed.
+    cache:=Str:Dict?[:]
+    read:=|Ref ref->Dict?|
+    {
+      if(!cache.containsKey(ref.id)) cache[ref.id]=db.readById(ref,false)
+      return cache[ref.id]
+    }
     meta:=FinEnergyNamespace.singleton(db,"finEnergyMeterTimeline")
     start:=meta?.get("finEnergyTimelineStart") as DateTime
     epochs:=db.readAllList(Filter.has("finEnergyMeterEpoch"))
@@ -50,7 +58,7 @@ internal class FinEnergyChangeMessages
         known[id]=true
         if (initial || !comparable || (before == null && after == null)) return
         action:=after == null ? "deleted" : (before == null ? "created" : "updated")
-        current:=db.readById(Ref(id),false)
+        current:=read(Ref(id))
         if (current != null && !canRead(current)) return
         if ((action == "deleted" || current == null) && !admin) return
         record:=after ?: before
@@ -64,7 +72,7 @@ internal class FinEnergyChangeMessages
           categories.add(category(field))
           try
           {
-            safeA:=safe(db,canRead,field,a); safeB:=safe(db,canRead,field,b)
+            safeA:=safe(db,canRead,field,a,read); safeB:=safe(db,canRead,field,b,read)
             if (safeA != safeB) changes.add(["field":field,"before":safeA,"after":safeB])
           }
           catch (Err err) { restricted=true }
@@ -98,15 +106,15 @@ internal class FinEnergyChangeMessages
 
   ** Only supported shapes cross the boundary; unknown nested keys and cached
   ** Ref names are never serialized. A restricted reference drops the field.
-  private static Obj? safe(Folio db, |Dict->Bool| canRead, Str field, Obj? value)
+  private static Obj? safe(Folio db, |Dict->Bool| canRead, Str field, Obj? value,|Ref->Dict?| read)
   {
     if (value == null) return null
-    if (FinEnergyRepo.refTags.containsKey(field)) return readableRef(db,canRead,value)
+    if (FinEnergyRepo.refTags.containsKey(field)) return readableRef(db,canRead,value,read)
     if (field == "variables")
     {
       vars:=value as Map ?: throw ArgErr("Invalid variables")
       result:=Str:Obj?[:]
-      vars.each |v,k| { result[k.toStr]=readableRef(db,canRead,v) }
+      vars.each |v,k| { result[k.toStr]=readableRef(db,canRead,v,read) }
       return result
     }
     if (field == "parameters")
@@ -154,7 +162,7 @@ internal class FinEnergyChangeMessages
       return rows.map |v->Obj?|
       {
         row:=v as Map ?: throw ArgErr("Invalid alarm limit")
-        return ["categoryId":readableRef(db,canRead,row["categoryId"]),"limit":scalar(row["limit"])]
+        return ["categoryId":readableRef(db,canRead,row["categoryId"],read),"limit":scalar(row["limit"])]
       }
     }
     return scalar(value)
@@ -165,11 +173,11 @@ internal class FinEnergyChangeMessages
     if (value == null || value is Str || value is Bool || value is Int || value is Float) return value
     throw ArgErr("Unsupported message value")
   }
-  private static Str readableRef(Folio db, |Dict->Bool| canRead, Obj? value)
+  private static Str readableRef(Folio db, |Dict->Bool| canRead, Obj? value,|Ref->Dict?| read)
   {
     if (value isnot Str && value isnot Ref) throw ArgErr("Invalid reference")
     ref:=absolute(db,value is Ref ? (Ref)value : Ref(value.toStr))
-    record:=db.readById(ref,false)
+    record:=read(ref)
     if (record == null || !canRead(record)) throw ArgErr("Restricted reference")
     return ref.id
   }

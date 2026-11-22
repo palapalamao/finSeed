@@ -75,6 +75,8 @@ export class FinEnergyApi {
  };
  comparisonScopes=(nodeIds:string[],signal?:AbortSignal)=>this.request<{scopes:ComparisonScope[]}>(`comparison-scopes?nodeIds=${encodeURIComponent(nodeIds.join(','))}`,undefined,signal);
  alarms=()=>this.request<FinEnergyRecord[]>('alarms');
+ alarmPage=(offset=0,limit=30,state='all',eventId?:string,signal?:AbortSignal)=>this.request<{items:FinEnergyRecord[];total:number;offset:number;limit:number}>(`alarms/page?offset=${offset}&limit=${limit}&state=${encodeURIComponent(state)}${eventId?'&eventId='+encodeURIComponent(eventId):''}`,undefined,signal);
+ alarmDetail=(id:string,signal?:AbortSignal)=>this.request<FinEnergyRecord>('alarms/detail?id='+encodeURIComponent(id),undefined,signal);
  changeMessages=(offset=0,limit=30,signal?:AbortSignal)=>this.request<ChangeMessagePage>(`messages/changes?offset=${offset}&limit=${limit}`,undefined,signal);
  ack=(record:FinEnergyRecord,note:string)=>this.request<FinEnergyRecord>('alarms/ack',{id:record.id,mod:record.mod,note});
  task=(body:{action:string;enabled?:boolean;from?:string;to?:string})=>this.request<FinEnergyRecord>('tasks',body);

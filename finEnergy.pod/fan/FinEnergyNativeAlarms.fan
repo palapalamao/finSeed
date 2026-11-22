@@ -130,25 +130,39 @@ class FinEnergyNativeAlarms
 
   [Str:Obj?][] list()
   {
-    all:=repo.records.findAll |r| { r["kind"] == "alarm" }
-    [Str:Obj?][] events:=all.findAll |r| { r["episodeId"] == null || r["episodeId"] == r["id"] }.map |r->[Str:Obj?]|
-    {
-      result:=r.dup
-      hours:=all.findAll |e| { e["id"] == r["id"] || e["episodeId"] == r["id"] }.sort |a,b| { DateTime.fromIso(a["ts"].toStr) <=> DateTime.fromIso(b["ts"].toStr) }
-      result["hours"]=hours.map |e->[Str:Obj?]| { ["ts":e["ts"],"value":e["value"],"unit":e["unit"],"limit":e["limit"],"quality":e["quality"],"priorAckBy":e["priorAckBy"],"priorAckAt":e["priorAckAt"],"priorAckNote":e["priorAckNote"]] }
-      result["hourCount"]=hours.size; result["latestValue"]=hours.last["value"]
-      result["peakValue"]=hours.reduce(0f) |Float peak,e->Float| { peak.max(FinEnergyConfig.number(e["value"])) }
-      result.remove("nativeAlarmArchive")
-      return result
-    }
+    return nativeEvents(FinEnergyAlarmGroups(source(true)).events)
+  }
+
+  Str:Obj? page(Int offset,Int limit,Str state,Str? target)
+  {FinEnergyAlarmGroups.page(nativeEvents(FinEnergyAlarmGroups(source(false)).events(false)),offset,limit,state,target)}
+
+  Str:Obj? detail(Str id)
+  {
+    selected:=source(false).findAll |r| {r["id"]==id || r["episodeId"]==id}
+    full:=selected.map |r->Str:Obj?| {FinEnergyRepo.decode(repo.stored(r["id"].toStr))}
+    event:=FinEnergyAlarmGroups(full).event(id,true)
+    if(event==null) throw FinEnergyHttpErr(404,"NOT_FOUND","记录不存在")
+    return nativeEvents([event]).first
+  }
+
+  private [Str:Obj?][] source(Bool full)
+  {
+    repo.mustRead;repo.requireConfigurationAccess
+    rows:=repo.cx.db.readAllList(Filter.has("finEnergyKind").and(Filter.eq("finEnergyKind","alarm")).and(Filter.has("finEnergy").or(Filter.has("equip"))))
+    return rows.findAll |r| {repo.cx.canRead(r)}.map |r->Str:Obj?| {full ? FinEnergyRepo.decode(r) : FinEnergyCockpitInput.decode(r,null)}
+  }
+
+  private [Str:Obj?][] nativeEvents([Str:Obj?][] events)
+  {
     ids:=events.findAll |r| { r["nativeAlarmId"] != null }.map |r->Ref| { Ref(r["nativeAlarmId"].toStr).toProjRel }
     if (ids.isEmpty) return events
     AlarmLib lib:=HxContext.curHx.rt.lib("alarm")
     Alarm[] alarms:=lib.db.get(HxContext.curHx,ids).get(30sec)
+    index:=Str:Alarm[:];alarms.each |alarm| {index[alarm.id.toProjRel.id]=alarm}
     return events.map |event->[Str:Obj?]|
     {
       if (event["nativeAlarmId"] == null) return event
-      alarm:=alarms.find |a| { a.id.toProjRel == Ref(event["nativeAlarmId"].toStr).toProjRel }
+      alarm:=index[Ref(event["nativeAlarmId"].toStr).toProjRel.id]
       if (alarm == null)
       {
         result:=event.dup

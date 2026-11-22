@@ -827,6 +827,8 @@ class FinEnergyRepo
   }
 
   [Str:Obj?][] alarms() { mustRead; return FinEnergyNativeAlarms(this).list }
+  Str:Obj? alarmPage(Int offset,Int limit,Str state,Str? target) {mustRead;return FinEnergyNativeAlarms(this).page(offset,limit,state,target)}
+  Str:Obj? alarmDetail(Str id) {mustRead;return FinEnergyNativeAlarms(this).detail(id)}
 
   [Str:Obj?] changeMessages(Int offset:=0, Int limit:=30)
   {
