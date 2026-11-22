@@ -460,6 +460,8 @@ Object.assign(chineseServerMessages,{cockpitComparison:'请选择有效的同期
 
 Object.assign(serverMessages,{"cockpitBusy":"A cockpit query is already running. Refresh manually after it finishes.","cockpitQueryTimeout":"The query exceeded its time limit. Reduce the scope or period.","cockpitHistoryDensityLimit":"History density exceeds the block limit. Check the source history.","cockpitHistoryScanLimit":"The query exceeds the source-sample scan limit. Reduce the scope or period.","cockpitHistoryMemoryLimit":"The query exceeds the raw-history memory budget. Reduce the scope or period.","cockpitPreparedReadLimit":"The query exceeds the prepared-subrange limit. Reduce the scope or period.","cockpitResponseLimit":"The result exceeds the response-size limit. Reduce the scope or period."});
 Object.assign(chineseServerMessages,{"cockpitBusy":"当前已有驾驶舱查询正在运行，请完成后手动刷新。","cockpitQueryTimeout":"查询超过执行时间上限，请缩小范围或时间区间。","cockpitHistoryDensityLimit":"源历史密度超过分块限制，请检查源点历史。","cockpitHistoryScanLimit":"查询超过源样本扫描预算，请缩小范围或时间区间。","cockpitHistoryMemoryLimit":"查询超过原始历史内存预算，请缩小范围或时间区间。","cockpitPreparedReadLimit":"查询超过预备子区间数量限制，请缩小范围或时间区间。","cockpitResponseLimit":"结果超过响应体大小限制，请缩小范围或时间区间。"});
+Object.assign(serverMessages,{reportHistoryCapacity:'The selected history exceeds the current processing capacity. A complete report is unavailable.'});
+Object.assign(chineseServerMessages,{reportHistoryCapacity:'所选历史数据超过当前处理容量，未能生成完整报表。'});
 
 Object.assign(serverMessages,{cockpitCopConfigurationLimit:'This scope exceeds20 COP configurations. Reduce the scope.'});
 Object.assign(chineseServerMessages,{cockpitCopConfigurationLimit:'当前范围超过20个 COP 配置，请缩小范围。'});

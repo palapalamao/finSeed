@@ -300,7 +300,11 @@ class FinEnergyHistory
       }
       catch (ArgErr e)
       {
-        code:=frozenPoints != null && e.msg.startsWith("History exceeds ") ? "historySampleLimit" : (["missingSource","missingCleaningProfile","duplicateSource","cycle","incompatibleCategory","incompatibleUnit","missingBranches"].contains(e.msg) ? e.msg : "invalidCleaningConfiguration")
+        guard?.check
+        sampleLimit:=e.msg.startsWith("History exceeds ")
+        if(sampleLimit && frozenPoints==null)
+          throw FinEnergyHttpErr(422,"REPORT_HISTORY_CAPACITY","reportHistoryCapacity")
+        code:=sampleLimit ? "historySampleLimit" : (["missingSource","missingCleaningProfile","duplicateSource","cycle","incompatibleCategory","incompatibleUnit","missingBranches"].contains(e.msg) ? e.msg : "invalidCleaningConfiguration")
         failed:=unavailable(id,code); failed["error"]=e.msg; out.add(failed)
       }
       catch (Err e) { guard?.check;out.add(unavailable(id,"historyReadError")) }
