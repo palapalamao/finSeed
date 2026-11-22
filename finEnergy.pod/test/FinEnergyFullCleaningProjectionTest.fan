@@ -8,10 +8,28 @@ class FinEnergyFullCleaningProjectionTest : Test
     result:=clean("p",[10,10,5,NA.val,null,20,24],["deltaMin":0,"defNull":true])
     old:=FinEnergyHistory.normalizeClean(point("p"),result,at,at+6hr)
     fast:=FinEnergyHistory.normalizeFullClean(point("p"),result,at,at+6hr)
-    verifyEq(fast["intervals"],old["intervals"])
+    verifyEq(intervalRows(fast),intervalRows(old))
     verifyEq(fast["cleaning"],old["cleaning"])
     verify(FinEnergyMath.maps(fast["samples"]).isEmpty,"full interval readers do not need a second dense hourly projection")
     verify(!fast.containsKey("rawSamples"),"no raw consumer requested")
+  }
+
+  Void testTypedClosedCarrierReusesParsedBoundariesAndHonorsCutoff()
+  {
+    result:=clean("p",[10,12,15,20],["defNull":true])
+    original:=FinEnergyHistory.normalizeClean(point("p"),result,at,at+3hr)
+    fast:=FinEnergyHistory.normalizeFullClean(point("p"),result,at,at+3hr)
+    carrier:=fast["_closedIntervals"] as FinEnergyClosedIntervals
+    verifyNotNull(carrier,"no duplicate Map/string interval representation")
+    verify(!fast.containsKey("intervals"))
+    parsed:=FinEnergyHistoryData(fast)
+    verify(parsed.intervals===carrier.rows)
+    verify(carrier.isImmutable);verify(carrier.rows.isImmutable)
+    [at+30min,at+1hr,at+90min,at+3hr,at+4hr].each |cutoff|
+    {
+      q:=request("profile").set("asOf",cutoff.toIso)
+      verifyEq(FinEnergyHistory.report(q,records,[fast]),FinEnergyHistory.report(q,records,[original]))
+    }
   }
 
   Void testCleanModesAndIrregularCoverageMatchOriginalMetadata()
@@ -30,7 +48,7 @@ class FinEnergyFullCleaningProjectionTest : Test
         old:=FinEnergyHistory.normalizeClean(point("p"),result,from,at+5hr+30min)
         fast:=FinEnergyHistory.normalizeFullClean(point("p"),result,from,at+5hr+30min,true)
         verifyEq(fast["cleaning"],old["cleaning"])
-        verifyEq(fast["intervals"],old["intervals"])
+        verifyEq(intervalRows(fast),intervalRows(old))
         verifyEq(fast["rawSamples"],old["rawSamples"])
       }
     }
@@ -47,7 +65,7 @@ class FinEnergyFullCleaningProjectionTest : Test
     old:=FinEnergyHistory.normalizeClean(point("p"),result,at,at+3hr)
     fast:=FinEnergyHistory.normalizeFullClean(point("p"),result,at,at+3hr)
     verifyEq(fast["cleaning"],old["cleaning"])
-    verifyEq(fast["intervals"],old["intervals"])
+    verifyEq(intervalRows(fast),intervalRows(old))
   }
 
   Void testAllOrdinaryReportKindsKeepCompleteResultAndReferenceReadings()
@@ -99,8 +117,15 @@ class FinEnergyFullCleaningProjectionTest : Test
       original:=FinEnergyHistory.normalizeClean(point("p"),result,start,start+6hr)
       fast:=FinEnergyHistory.normalizeFullClean(point("p"),result,start,start+6hr)
       verifyEq(fast["cleaning"],original["cleaning"])
-      verifyEq(fast["intervals"],original["intervals"])
+      verifyEq(intervalRows(fast),intervalRows(original))
     }
+  }
+
+  private [Str:Obj?][] intervalRows(Str:Obj? history)
+  {
+    // Compare the arithmetic carrier after the same numeric/NA parse; the full
+    // report oracle separately compares every public NA and cleaning field.
+    return (FinEnergyHistoryData(history).intervals ?: FinEnergyInterval[,]).map |row->[Str:Obj?]| {["from":row.start.toIso,"to":row.end.toIso,"value":row.value,"valueType":row.valueType,"quality":row.quality]}
   }
 
   private Obj? stableCaptureIds(Obj? input)

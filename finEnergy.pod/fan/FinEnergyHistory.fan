@@ -704,8 +704,8 @@ class FinEnergyHistory
     // load.range aligns the start. Keep the more general helper's historical
     // cursor-based summary behavior if this seam is called with a partial hour.
     if(from!=FinEnergyMath.floorHour(from)) return normalizeClean(point,result,from,to)
-    intervals:=[Str:Obj?][,]
-    filtered:=0; substituted:=0; na:=0; valid:=0; nulls:=0; validTicks:=0
+    intervals:=FinEnergyInterval[,]
+    filtered:=0; substituted:=0; na:=0; valid:=0; nulls:=0; validTicks:=0; selected:=0
     result.details.each |d|
     {
       if(d["emitted"]==false || d["intervalSeconds"]==null) return
@@ -715,7 +715,11 @@ class FinEnergyHistory
       start:=end-Duration((seconds*1sec.ticks.toFloat).toInt)
       if(end<=from || start>=to) return
       q:=detailQuality(d); number:=FinEnergyMath.num(d["value"])
-      intervals.add(["from":start.toIso,"to":end.toIso,"value":d["value"],"valueType":d["valueType"],"quality":q])
+      // Match the legacy Map reader's serialization boundary once. In particular
+      // native SDK offset-zone parsing is observable for fractional-hour DST;
+      // retaining a project-zone DateTime directly would change that behavior.
+      intervals.add(FinEnergyInterval(DateTime.fromIso(start.toIso),DateTime.fromIso(end.toIso),number,q,d["valueType"] as Str ?: (number==null ? "null" : "number")))
+      selected++
       if(q=="filtered") filtered++
       if(d["substituted"]==true) substituted++
       if(d["valueType"]=="na") na++
@@ -728,13 +732,13 @@ class FinEnergyHistory
         validTicks+=(end-start).ticks
     }
     meta:=result.summary.dup
-    meta["summary"]=["filteredCount":filtered,"substitutedCount":substituted,"naCount":na,"intervalCount":intervals.size,"coverage":(validTicks.toFloat/(to-from).ticks.toFloat).min(1f)]
+    meta["summary"]=["filteredCount":filtered,"substitutedCount":substituted,"naCount":na,"intervalCount":selected,"coverage":(validTicks.toFloat/(to-from).ticks.toFloat).min(1f)]
     inputCount:=0
     result.rawItems.each |item| {if(item.ts>=from && item.ts<to) inputCount++}
-    meta["inputCount"]=inputCount;meta["outputCount"]=intervals.size
+    meta["inputCount"]=inputCount;meta["outputCount"]=selected
     meta["validCount"]=valid;meta["nullCount"]=nulls;meta["naCount"]=na
     meta.setAll(cleaningEvidence(point,result,from,to))
-    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"]?.toStr ?: "","mode":"interval","quality":"cleaned","rawQuality":"ok","samples":[Str:Obj?][,],"intervals":intervals,"sourceIds":result.summary["sourceIds"] ?: [point.id.id],"cleaning":meta]
+    out:=Str:Obj?["pointId":point.id.id,"unit":point["unit"]?.toStr ?: "","mode":"interval","quality":"cleaned","rawQuality":"ok","samples":[Str:Obj?][,],"_closedIntervals":FinEnergyClosedIntervals(intervals),"sourceIds":result.summary["sourceIds"] ?: [point.id.id],"cleaning":meta]
     if(rawView) out["rawSamples"]=result.rawItems.map |item->[Str:Obj?]| { ["ts":item.ts.toTimeZone(from.tz).toIso,"value":number(item.val),"valueType":valueType(item.val)] }
     return out
   }

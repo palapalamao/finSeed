@@ -9,15 +9,34 @@ internal class FinEnergySample
   Str valueType
 }
 
-internal class FinEnergyInterval
+internal const class FinEnergyInterval
 {
   new make(DateTime start, DateTime end, Float? value, Str quality, Str valueType)
   { this.start=start; this.end=end; this.value=value; this.quality=quality; this.valueType=valueType }
-  DateTime start
-  DateTime end
-  Float? value
-  Str quality
-  Str valueType
+  const DateTime start
+  const DateTime end
+  const Float? value
+  const Str quality
+  const Str valueType
+}
+
+** Private trusted producer carrier; public history DTOs still use Map rows.
+** Boundaries are parsed once and immutable across nested report contexts.
+internal const class FinEnergyClosedIntervals
+{
+  new make(FinEnergyInterval[] input)
+  {
+    ordered:=input.findAll |row| {row.end>row.start}
+    ordered.sort |a,b| {c:=a.start <=> b.start;return c==0 ? a.end <=> b.end : c}
+    rows=ordered.toImmutable
+    DateTime? last:=null
+    rows.each |row| {if(last==null || row.end>last) last=row.end}
+    maxEnd=last
+  }
+  const FinEnergyInterval[] rows
+  private const DateTime? maxEnd
+  FinEnergyClosedIntervals clip(DateTime cutoff)
+  {maxEnd==null || maxEnd<=cutoff ? this : make(rows.findAll |row| {row.end<=cutoff})}
 }
 
 internal class FinEnergyHistoryData
@@ -40,7 +59,8 @@ internal class FinEnergyHistoryData
     if (sources.isEmpty) sources=[id]
     samples = parse(data["samples"])
     rawSamples = data["rawSamples"] == null || data["rawSamples"] === data["samples"] ? samples : parse(data["rawSamples"])
-    intervals = data.containsKey("intervals") ? parseIntervals(data["intervals"]) : null
+    closed:=data["_closedIntervals"] as FinEnergyClosedIntervals
+    intervals = closed!=null ? closed.rows : (data.containsKey("intervals") ? parseIntervals(data["intervals"]) : null)
     sparse=data["_preparedSparse"] as Map
     if(sparse != null)
     {

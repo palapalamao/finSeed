@@ -32,6 +32,8 @@ internal class FinEnergyKnownUsage
         }
       }
       if (h.containsKey("intervals")) out["intervals"]=FinEnergyMath.maps(h["intervals"]).findAll |row| {DateTime.fromIso(row["to"].toStr) <= cutoff}
+      closed:=h["_closedIntervals"] as FinEnergyClosedIntervals
+      if(closed!=null) out["_closedIntervals"]=closed.clip(cutoff)
       return out
     }
   }
