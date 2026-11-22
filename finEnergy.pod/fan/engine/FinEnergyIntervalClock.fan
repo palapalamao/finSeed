@@ -13,13 +13,15 @@ internal class FinEnergyIntervalClock
   }
 
   private DateTime? previousEnd
-  private Str? previousText
+  private DateTime? originalEnd
   FinEnergyInterval interval(DateTime start,DateTime end,Float? value,Str quality,Str valueType)
   {
-    text:=start.toIso
-    left:=previousEnd!=null && previousEnd.ticks==start.ticks && previousText==text ? previousEnd : serialized(start)
+    adjacent:=originalEnd
+    sameBoundary:=adjacent!=null && adjacent.ticks==start.ticks &&
+      ((adjacent.tz==start.tz && adjacent.dst==start.dst) || adjacent.toIso==start.toIso)
+    left:=(sameBoundary ? previousEnd : null) ?: serialized(start)
     right:=serialized(end)
-    previousEnd=right;previousText=end.toIso
+    previousEnd=right;originalEnd=end
     return FinEnergyInterval(left,right,value,quality,valueType)
   }
 }

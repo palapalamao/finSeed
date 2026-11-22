@@ -47,6 +47,8 @@ internal class FinEnergyFullCleaning
   private Int removedNACount := 0
   private Int substitutedCount := 0
   private Bool finished := false
+  private Int cleaningNs := 0
+  private Int projectionNs := 0
   internal Int processingNs := 0
 
   Void push(HisItem item)
@@ -75,14 +77,23 @@ internal class FinEnergyFullCleaning
       if(type=="na") na++
       if(q=="filtered") filtered++
       if(step.substituted) substituted++
-      hour:=FinEnergyMath.floorHour(start)
-      if(hour>=from && hour<to && (hour-from).ticks % 1hr.ticks==0 && end<=hour+1hr && number!=null && !step.substituted && q!="filtered") validTicks+=(end-start).ticks
+      if(number!=null && !step.substituted && q!="filtered")
+      {
+        // Same elapsed-minute floor as FinEnergyMath.floorHour, using integer
+        // instants to preserve both occurrences of repeated DST wall hours.
+        startTicks:=start.ticks
+        hourTicks:=startTicks-start.min*1min.ticks-start.sec*1sec.ticks-start.nanoSec
+        if(hourTicks>=from.ticks && hourTicks<to.ticks && (hourTicks-from.ticks)%1hr.ticks==0 &&
+           end.ticks<=hourTicks+1hr.ticks) validTicks+=end.ticks-startTicks
+      }
     }
     eventActive:=step.emitted && seconds>0f ? (end>from && start<to) : (end>=from && end<to)
-    if(eventActive && !["ok","noPrevious"].contains(step.reason)) event(step,end)
+    if(eventActive && step.reason!="ok" && step.reason!="noPrevious") event(step,end)
     if(timing!=null)
     {
-      ended:=Duration.nowTicks;add("cleanNs",cleaned-started);add("normalizeNs",ended-cleaned)
+      ended:=Duration.nowTicks
+      cleaningNs+=cleaned-started
+      projectionNs+=ended-cleaned
       processingNs+=ended-started
     }
   }
@@ -112,6 +123,8 @@ internal class FinEnergyFullCleaning
   {
     if(finished) throw ArgErr("fullCleaningFinished")
     finished=true;started:=timing==null ? 0 : Duration.nowTicks
+    add("cleanNs",cleaningNs)
+    add("normalizeNs",projectionNs)
     // Keep the bulk summary's original typed-map shape as well as JSON fields.
     Str:Obj? meta:=["inputCount":inputCount,"outputCount":selected,"validCount":valid,"nullCount":nulls,"naCount":na,
       "rolloverCount":rolloverCount,"rejectedCount":rejectedCount,"removedNACount":removedNACount,"substitutedCount":substitutedCount]
