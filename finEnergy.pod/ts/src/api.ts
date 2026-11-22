@@ -52,7 +52,8 @@ export class FinEnergyApi {
  selectAsset=(id:string|null,manifestMod:string|null)=>this.request<CockpitAssetCatalog>('cockpit/assets/select',{id,manifestMod});
  deleteAsset=(asset:Pick<CockpitAsset,'id'|'mod'>,manifestMod:string|null)=>this.request<CockpitAssetCatalog>('cockpit/assets/delete',{id:asset.id,mod:asset.mod,manifestMod});
  assetImageUrl=(asset:Pick<CockpitAsset,'id'|'hash'>)=>this.base+'/cockpit/assets/image?id='+encodeURIComponent(asset.id)+'&hash='+encodeURIComponent(asset.hash);
- points=(q:string,offset=0,limit=100)=>this.request<{items:FinPoint[];total:number;offset:number;limit:number}>(`points?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`);
+ points=(q:string,offset=0,limit=100,equipId?:string,signal?:AbortSignal)=>this.request<{items:FinPoint[];total:number;offset:number;limit:number}>(`points?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}${equipId?'&equipId='+encodeURIComponent(equipId):''}`,undefined,signal);
+ resolvePoints=(ids:string[],signal?:AbortSignal)=>this.request<{items:FinPoint[]}>('points/resolve',{ids},signal);
  save=(record:FinEnergyRecord)=>this.request<FinEnergyRecord>('records',{record});
  remove=(record:FinEnergyRecord)=>this.request<{deleted:string}>('records/delete',{id:record.id,mod:record.mod});
  cleaningPreview=(body:{nodeId:string;from:string;to:string},signal?:AbortSignal)=>this.request<CleaningPreview>('cleaning/preview',body,signal);

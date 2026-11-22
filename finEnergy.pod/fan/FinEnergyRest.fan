@@ -55,7 +55,8 @@ const class FinEnergyRest : WebMod
         case "comparison-scopes": data=repo.comparisonScopes(req.uri.query["nodeIds"] ?: "")
         case "migration/preview": data=repo.migration(["action":"preview"])
         case "migration": data=repo.migration(body)
-        case "points": data=repo.points(req.uri.query["q"] ?: "",Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "200"))
+        case "points": data=repo.points(req.uri.query["q"] ?: "",Int.fromStr(req.uri.query["offset"] ?: "0"),Int.fromStr(req.uri.query["limit"] ?: "200"),req.uri.query["equipId"])
+        case "points/resolve": data=repo.resolvePoints(body)
         case "records": data=repo.save(body["record"] as Map ?: throw ArgErr("缺少记录"))
         case "records/delete": data=repo.remove(str(body,"id"),body["mod"])
         case "tree/manage": data=repo.manage(body)
@@ -167,5 +168,5 @@ const class FinEnergyRest : WebMod
   }
 
   ** Authentication and FIN CSRF still run through the native /api project route.
-  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit"].contains(route) }
+  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve"].contains(route) }
 }

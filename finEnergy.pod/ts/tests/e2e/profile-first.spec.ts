@@ -71,8 +71,8 @@ test('opening detail statistics requests full diagnostics once',async({page})=>{
 test('an obsolete full-read promise cannot block or overwrite a newer chart snapshot',async({page})=>{
  const {control}=await setup(page);let release!:()=>void,seen!:()=>void;
  const hold=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{seen=resolve;});
- await page.route('**/api/testproject/ext/finEnergy/v1/points?**',async route=>{
-  if(new URL(route.request().url()).searchParams.get('q')!=='slow-point'){await route.fallback();return;}
+ await page.route('**/api/testproject/ext/finEnergy/v1/points/resolve',async route=>{
+  if(!(route.request().postDataJSON().ids as string[]).includes('slow-point')){await route.fallback();return;}
   seen();await hold;await route.fulfill({json:{ok:true,data:{items:[{id:'slow-point',name:'Old point names',his:true}],total:1,offset:0,limit:10}}});
  });
  try{

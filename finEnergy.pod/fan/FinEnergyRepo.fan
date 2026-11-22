@@ -405,30 +405,14 @@ class FinEnergyRepo
     return ["records":copies.map |r->[Str:Obj?]| { decode(stored(r["id"].toStr)) }]
   }
 
-  [Str:Obj?] points(Str query := "", Int offset := 0, Int limit := 200)
+  [Str:Obj?] points(Str query := "", Int offset := 0, Int limit := 200, Str? equipId := null)
   {
     mustRead
-    if (offset < 0 || limit < 1 || limit > 500) throw ArgErr("分页范围无效")
-    q := query.lower
-    list := cx.db.readAllList(Filter.has("point")).findAll |r| { cx.canRead(r) && !r.has("finEnergyComputed") && (q.isEmpty || r.dis.lower.contains(q) || r.id.id.lower.contains(q)) }
-    end := (offset+limit).min(list.size)
-    items := [Str:Obj?][,]
-    if (offset < end) list[offset..<end].each |r|
-    {
-      equip:=r["equipRef"] as Ref
-      eq:=equip == null ? null : cx.db.readById(equip,false)
-      if (eq != null && !cx.canRead(eq)) eq=null
-      floor:=(r["floorRef"] as Ref) ?: (eq?.get("floorRef") as Ref)
-      site:=(r["siteRef"] as Ref) ?: (eq?.get("siteRef") as Ref)
-      floorRec:=floor == null ? null : cx.db.readById(floor,false)
-      siteRec:=site == null ? null : cx.db.readById(site,false)
-      if (floorRec != null && !cx.canRead(floorRec)) floorRec=null
-      if (siteRec != null && !cx.canRead(siteRec)) siteRec=null
-      energyTags:=["elec","water","gas","steam","heat","chilledWater","hotWater","fuelOil"].findAll |tag| { r[tag] is Marker || eq?.get(tag) is Marker }
-      items.add(["id":r.id.id,"name":r.dis,"navName":r["navName"] as Str,"unit":r["unit"],"kind":r["kind"],"his":r.has("his"),"hisMode":r["hisMode"],"source":r["connRef"]?.toStr,"hisStart":iso(r["hisStart"]),"hisEnd":iso(r["hisEnd"]),"curStatus":r["curStatus"],"hisStatus":r["hisStatus"],"hisErr":r["hisErr"],"hisLastCollect":iso(r["hisCollectLastTime"]),"equipName":eq?.dis,"equipNavName":eq?.get("navName") as Str,"floorName":floorRec?.dis,"siteName":siteRec?.dis,"energyTags":energyTags,"equipId":eq?.id?.id,"floorId":floorRec?.id?.id,"siteId":siteRec?.id?.id])
-    }
-    return ["items":items,"total":list.size,"offset":offset,"limit":limit]
+    return FinEnergyPointCatalog.page(cx.db,|Dict r->Bool| {cx.canRead(r)},query,offset,limit,equipId)
   }
+
+  [Str:Obj?] resolvePoints(Str:Obj? body)
+  {mustRead;return FinEnergyPointCatalog.resolve(cx.db,|Dict r->Bool| {cx.canRead(r)},body)}
 
   [Str:Obj?] report([Str:Obj?] input)
   {

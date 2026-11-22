@@ -55,9 +55,15 @@ export function buildReportDisplay(records:FinEnergyRecord[],points:FinPoint[]=[
 export function reportSourceIds(result:ReportResult):string[]{
  const ids=new Set<string>();const visit=(value:unknown,key='')=>{if(key==='sourceIds'&&Array.isArray(value)){value.forEach(id=>{if(typeof id==='string')ids.add(id);});}else if(Array.isArray(value))value.forEach(item=>visit(item));else if(value&&typeof value==='object')Object.entries(value).forEach(([k,v])=>visit(v,k));};visit(result);return [...ids];
 }
-export async function reportPointNames(result:ReportResult,_records:FinEnergyRecord[],find:(id:string)=>Promise<{items:FinPoint[]}>):Promise<FinPoint[]>{
- const missing=reportSourceIds(result);const points:FinPoint[]=[];
- for(let offset=0;offset<missing.length;offset+=8)points.push(...(await Promise.all(missing.slice(offset,offset+8).map(async id=>{try{return (await find(id)).items.filter(point=>point.id===id);}catch{return [];}}))).flat());
+export async function reportPointNames(result:ReportResult,_records:FinEnergyRecord[],find:(ids:string[],signal?:AbortSignal)=>Promise<{items:FinPoint[]}>,signal?:AbortSignal):Promise<FinPoint[]>{
+ const missing=reportSourceIds(result),points:FinPoint[]=[];
+ // The transport limit is not a limit on a report's source set. Exhaust every
+ // ID in two bounded lanes, retaining native history metadata even if named.
+ for(let offset=0;offset<missing.length;offset+=400){
+  signal?.throwIfAborted();const batches=[missing.slice(offset,offset+200),missing.slice(offset+200,offset+400)].filter(ids=>ids.length);
+  const loaded=await Promise.all(batches.map(async ids=>{try{const allowed=new Set(ids);return (await find(ids,signal)).items.filter(point=>allowed.has(point.id));}catch(error){if(signal?.aborted||error instanceof Error&&error.name==='AbortError')throw error;return [];}}));
+  signal?.throwIfAborted();points.push(...loaded.flat());
+ }
  return points;
 }
 function referenceName(snapshot:ReportSnapshot,id:string,key:string):string{

@@ -41,7 +41,7 @@ describe('actionable report quality',()=>{
  it('loads history metadata even when a native point name is already known',async()=>{
   const find=vi.fn(async()=>({items:[source]}));
   const loaded=await reportPointNames(result,[{id:'np',kind:'nativePoint',name:'电能',nativeSourceId:'p',nativeDis:'总电表 电能'}],find);
-  expect(find).toHaveBeenCalledWith('p');expect(loaded[0].hisStart).toBe(source.hisStart);
+  expect(find).toHaveBeenCalledWith(['p'],undefined);expect(loaded[0].hisStart).toBe(source.hisStart);
  });
  it('provides the same actionable explanation in English and preserves equipment names',async()=>{
   vi.resetModules();(await import('./i18n')).initializeLocale('en-US');

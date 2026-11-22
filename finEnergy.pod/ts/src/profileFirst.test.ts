@@ -15,7 +15,7 @@ describe('ordinary profile delivery contract',()=>{
  it('replaces the complete snapshot when history has been backfilled despite an unchanged asOf',async()=>{
   const original=chart(),before=structuredClone(original),full={...result(20),warnings:['new warning'],extra:{cleaning:[{pointId:'pa'}],knownUsage:{sourceUsage:[{pointId:'pa'}]}}};
   const report=vi.fn(async()=>full),points=vi.fn(async()=>({items:[{id:'pt',name:'Main',his:true}],total:1,offset:0,limit:10})),controller=new AbortController();
-  const rebuilt=await rebuildFullProfile(original,{report,points} as unknown as FinEnergyApi,[],controller.signal);
+  const rebuilt=await rebuildFullProfile(original,{report,resolvePoints:points} as unknown as FinEnergyApi,[],controller.signal);
   expect(report).toHaveBeenCalledWith({...request,responseMode:'full'},controller.signal);
   expect(rebuilt.result.series[0].points[0].value).toBe(20);expect(rebuilt.result.warnings).toEqual(['new warning']);
   expect(rebuilt.result.extra?.profileDelivery).toBeUndefined();expect(rebuilt.replacesSnapshot?.generatedAt).toBe(original.generatedAt);
@@ -23,7 +23,7 @@ describe('ordinary profile delivery contract',()=>{
   expect(profileChartStage(rebuilt)).toBe(false);
  });
  it('refuses to treat another chart-stage response as a complete export',async()=>{
-  const source=chart(),api={report:async()=>source.result,points:async()=>({items:[],total:0,offset:0,limit:10})} as unknown as FinEnergyApi;
+  const source=chart(),api={report:async()=>source.result,resolvePoints:async()=>({items:[],total:0,offset:0,limit:10})} as unknown as FinEnergyApi;
   await expect(rebuildFullProfile(source,api,[],new AbortController().signal)).rejects.toThrow();
  });
  it('propagates full-read failure without modifying the displayed chart',async()=>{
