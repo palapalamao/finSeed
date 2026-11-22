@@ -83,6 +83,7 @@ class FinEnergyEngine
       records=dimension.records; request=dimension.normalizeRequest(request)
     }
     ctx:=FinEnergyContext(records,histories,tz,dimension)
+    if(metric=="cost" && !request.keys.any |key| {key.startsWith("_cockpit")}) ctx.sealTariffs
     ctx.deadline=request["_cockpitDeadline"] as FinEnergyCockpitDeadline ?: ctx.deadline
     ctx.comparison=request["_comparisonScope"] as FinEnergyComparisonScope
     if (kind == "energyFlow") return FinEnergyEnergyFlow(ctx,request,from,to,histories).report

@@ -7,6 +7,7 @@ internal class FinEnergyContext
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
     preparedBudget=strict.preparedBudget;deadline=strict.deadline
     boundedKnownDetails=strict.boundedKnownDetails
+    sealedTariffs=strict.sealedTariffs;sealedDefaults=strict.sealedDefaults
     inheritOwners(strict,false)
     retain(strict.persistentOwner == null ? 4 : 7,true);if(preparedBudget != null) tariffBaseline.ordered=true
     sharedModel=strict.sharedModel;if(sharedModel!=null) retain(1,true)
@@ -17,6 +18,8 @@ internal class FinEnergyContext
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
     preparedBudget=source.preparedBudget;deadline=source.deadline
     boundedKnownDetails=source.boundedKnownDetails
+    if(record["kind"]!="tariff" && source.sealedTariffs?.containsKey(id)!=true)
+    {sealedTariffs=source.sealedTariffs;sealedDefaults=source.sealedDefaults}
     inheritOwners(source,true)
     retain(4+(persistentOwner == null ? 0 : byId.size+3));if(preparedBudget != null) tariffBaseline.ordered=true
     sharedModel=source.sharedModel;if(sharedModel!=null) retain(1)
@@ -76,6 +79,30 @@ internal class FinEnergyContext
   private Bool ownMemoDisabled := false
   private Str:FinEnergyValue tariffBaseline := [:]
   private Str:Obj? defaultTariffs := [:]
+  internal Int tariffCatalogScans := 0
+  private [Str:[Str:Obj?]]? sealedTariffs
+  private [Str:Obj?]? sealedDefaults
+  private [Str:Date?]? tariffDates
+  private [Str:DateTime?]? tariffDateTimes
+
+  ** An ordinary calculation owns this fee observation. Direct mutable and
+  ** prepared contexts keep their original lookup behavior unless explicitly sealed.
+  internal Void sealTariffs()
+  {
+    if(preparedBudget!=null || sealedTariffs!=null) return
+    tariffCatalogScans++
+    frozen:=Str:[Str:Obj?][:];defaults:=Str:Obj?[:];counts:=Str:Int[:]
+    byId.each |record,id|
+    {
+      if(record["kind"]!="tariff") return
+      snapshot:=(Str:Obj?)record.toImmutable;frozen[id]=snapshot
+      category:=record["categoryId"] as Str
+      if(record["isDefault"]==true && category!=null)
+      {n:=(counts[category] ?: 0)+1;counts[category]=n;defaults[category]=n==1 ? snapshot : null}
+    }
+    sealedTariffs=(Str:[Str:Obj?])frozen.toImmutable
+    sealedDefaults=(Str:Obj?)defaults.toImmutable
+  }
   private Str:FinEnergyTariffCursor tariffCursors := [:]
   private Str:[Str:Obj?] dimensionPlans := [:]
   private FinEnergyContext? strictContext
@@ -848,7 +875,7 @@ internal class FinEnergyContext
       {
         text:=rule[key]?.toStr
         if (text == null) return
-        at:=text.size == 10 ? Date.fromStr(text,false)?.toDateTime(Time.defVal,tz) : DateTime.fromIso(text,false)
+        at:=text.size == 10 ? tariffDate(text)?.toDateTime(Time.defVal,tz) : tariffDateTime(text)
         if (at != null && at > from && at < to) bounds.add(at.toTimeZone(tz))
       }
       ["startHour","endHour"].each |key|
@@ -933,11 +960,28 @@ internal class FinEnergyContext
   {
     if (s.size == 10)
     {
-      date:=Date.fromStr(s,false); if (date == null) return false
+      date:=tariffDate(s); if (date == null) return false
       return lower ? at.date >= date : at.date < date
     }
-    dt:=DateTime.fromIso(s,false); if (dt == null) return false
+    dt:=tariffDateTime(s); if (dt == null) return false
     return lower ? at >= dt : at < dt
+  }
+
+  private Date? tariffDate(Str text)
+  {
+    if(preparedBudget!=null) return Date.fromStr(text,false)
+    dates:=tariffDates
+    if(dates==null) {dates=Str:Date?[:];tariffDates=dates}
+    if(!dates.containsKey(text)) dates[text]=Date.fromStr(text,false)
+    return dates[text]
+  }
+  private DateTime? tariffDateTime(Str text)
+  {
+    if(preparedBudget!=null) return DateTime.fromIso(text,false)
+    dates:=tariffDateTimes
+    if(dates==null) {dates=Str:DateTime?[:];tariffDateTimes=dates}
+    if(!dates.containsKey(text)) dates[text]=DateTime.fromIso(text,false)
+    return dates[text]
   }
 
   Bool working(DateTime at, Bool hours, Obj? overrideHours := null)
@@ -952,9 +996,12 @@ internal class FinEnergyContext
   [Str:Obj?]? tariff(Str:Obj? record)
   {
     id:=record["tariffId"]?.toStr
+    if(id!=null && sealedTariffs?.containsKey(id)==true) return sealedTariffs[id]
     if (id != null) return byId[id]
     category:=record["categoryId"] as Str ?: ""
+    if(sealedTariffs!=null && record["categoryId"] is Str) return sealedDefaults[category] as Map
     if(preparedBudget != null && defaultTariffs.containsKey(category)) return defaultTariffs[category] as Map
+    tariffCatalogScans++
     defaults:=byId.vals.findAll |r| { r["kind"] == "tariff" && r["categoryId"] == record["categoryId"] && r["isDefault"] == true }
     result:=defaults.size == 1 ? defaults.first : null
     if(preparedBudget != null) {retain(2,true);defaultTariffs[category]=result}
