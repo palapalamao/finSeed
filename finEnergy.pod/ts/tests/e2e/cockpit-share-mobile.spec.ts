@@ -31,7 +31,7 @@ for(const language of ['zh-CN','en-US'])for(const variant of ['standard','long-a
   {id:'c',kind:'category',name:'电力原名',unit:'kWh'},
   ...shares.map(row=>({id:String(row.utilityId),kind:'utility' as const,name:String(row.name),categoryId:'c'}))
  ]});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{project:'testproject',version,user:{name:state.username,canWrite:false},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{project:'testproject',version,user:{name:state.username,canWrite:false},records:state.records}}}));
  const requests:CockpitRequest[]=[];
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);

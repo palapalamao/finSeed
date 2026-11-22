@@ -6,7 +6,7 @@ const uiVersion=JSON.parse(readFileSync(new URL('../../package.json',import.meta
 for(const en of [false,true])test(`stale frontend shows its real version and offers reload in ${en?'English':'Chinese'}`,async({page})=>{
 
  const state=await installTransport(page,{userLocale:en?'en-US':'zh-CN'});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{version:'0.12.99',project:'testproject',storageModel:'nativeEquip',user:{name:'Test',canWrite:true},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{version:'0.12.99',project:'testproject',storageModel:'nativeEquip',user:{name:'Test',canWrite:true},records:state.records}}}));
  await page.goto('/#/energyFlow?project=testproject');
  await expect(page.locator('.nav-version').last()).toHaveText('v'+uiVersion);
  const notice=page.getByRole('alert').filter({hasText:en?'The current interface version':'当前界面版本'});

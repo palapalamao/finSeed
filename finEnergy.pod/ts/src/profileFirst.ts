@@ -9,12 +9,6 @@ export function profileChartStage(snapshot:ReportSnapshot):boolean{
  return snapshot.result.kind==='profile'&&delivery?.mode==='chart'&&delivery.diagnostics==='deferred';
 }
 
-// The server independently checks the catalog and uses the full path for any
-// unsupported selection. Do not save a delivery preference in report templates.
-export function chartFirstRequest(request:ReportRequest):ReportRequest{
- return request.kind==='profile'&&request.metric==='energy'&&request.period==='day'&&request.dimension==='space'&&request.spaceSource==='fin'&&!request.perArea&&!request.referenceIds?.length&&!request.otherFrom&&!request.otherTo?{...request,responseMode:'chart'}:request;
-}
-
 export async function rebuildFullProfile(source:ReportSnapshot,api:FinEnergyApi,records:FinEnergyRecord[],signal:AbortSignal):Promise<ReportSnapshot>{
  const request={...source.request,responseMode:'full' as const};
  const result=await api.report(request,signal);

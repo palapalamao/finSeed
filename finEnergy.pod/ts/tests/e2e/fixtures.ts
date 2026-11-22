@@ -37,7 +37,7 @@ export async function installTransport(page:Page,options:Partial<TransportState>
   const request=route.request();const path=new URL(request.url()).pathname.split('/v1/')[1];const body=request.method()==='POST'?request.postDataJSON():{};state.requests.push({path,body});
   const reply=(data:unknown)=>route.fulfill({status:200,json:{ok:true,data}});const fail=(status:number,msg:string)=>route.fulfill({status,json:{ok:false,error:{code:status===401?'unauthorized':'forbidden',msg}}});
   if(state.status!==200)return fail(state.status,state.status===401?'FIN 会话已过期，请在 FIN 中重新登录。':'当前 FIN 用户没有项目管理权限');
-  if(request.method()==='POST'&&!state.canWrite&&path!=='report')return fail(403,'当前 FIN 用户没有项目管理权限');
+  if(request.method()==='POST'&&!state.canWrite&&!['report','points/resolve'].includes(path))return fail(403,'当前 FIN 用户没有项目管理权限');
   if(path==='session')return reply({locale:state.userLocale,username:state.username});
   if(path==='catalog')return reply({version:'0.1-test-transport',project:'testproject',storageModel:state.storageModel,...(state.spaceSource?{spaceSource:state.spaceSource}:{}),user:{name:'测试会话',canWrite:state.canWrite},records:state.records});
   if(path==='migration/preview')return reply(state.migrationPreview||{version:1,revision:JSON.stringify(state.records),sourceRevision:'native1',records:[],suggestions:[],warnings:[],counts:{added:0,updated:0,canonicalAliases:0,spaces:0,suggestions:0,unboundMeters:0}});

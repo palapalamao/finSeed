@@ -13,7 +13,7 @@ for(const language of ['zh-CN','en-US'])test('loads and caches independent cockp
   {id:'out',kind:'meter',name:'Output meter',pointId:'po',categoryId:'heat',spaceId:'plant'},
   {id:'pi',kind:'nativePoint',name:'Input primary',his:true},
   {id:'po',kind:'nativePoint',name:'Output primary',his:true}]});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{project:'testproject',version,edition:'china',licenseMode:'selfManaged',user:{name:state.username,canWrite:false},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{project:'testproject',version,edition:'china',licenseMode:'selfManaged',user:{name:state.username,canWrite:false},records:state.records}}}));
  const requests:CockpitRequest[]=[];let fail=false;
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
   const q=route.request().postDataJSON() as CockpitRequest;requests.push(q);

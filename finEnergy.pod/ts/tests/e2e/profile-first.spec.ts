@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import {installTransport,openView} from './fixtures';
 import type {ReportRequest,ReportResult,FinEnergyRecord} from '../../src/types';
 
-async function setup(page:Page,language='zh-CN'){
+async function setup(page:Page,language='zh-CN',preview=true){
  const request:ReportRequest={kind:'profile',dimension:'space',spaceSource:'fin',nodeIds:['f1','f2'],from:'2026-09-01T00:00:00+08:00',to:'2026-10-01T00:00:00+08:00',period:'day',metric:'energy',perArea:false};
  const records:FinEnergyRecord[]=[{id:'electric',kind:'category',name:'Electricity',unit:'kWh'},{id:'site',kind:'space',name:'Campus',nativeSourceKind:'site'},
   ...[1,2].flatMap(i=>[{id:'f'+i,kind:'space' as const,name:'Floor '+i,parentId:'site',nativeSourceKind:'floor'},{id:'m'+i,kind:'totalMeter' as const,name:'Main '+i,nativeSpaceId:'f'+i,pointId:'point'+i,categoryId:'electric',unit:'kWh'}]),
@@ -19,14 +19,23 @@ async function setup(page:Page,language='zh-CN'){
  };
  await page.route('**/api/testproject/ext/finEnergy/v1/report',async route=>{
   const q=route.request().postDataJSON() as ReportRequest;state.requests.push({path:'report',body:q as unknown as Record<string,unknown>});
-  const full=q.responseMode!=='chart';if(full)control.fullCalls++;else control.chartCalls++;
+  const full=q.responseMode==='full'||!preview;if(full)control.fullCalls++;else control.chartCalls++;
   if(full&&control.failFull){await route.fulfill({status:500,json:{ok:false,error:{code:'HISTORY_READ_ERROR',msg:'Full read failed'}}});return;}
   await route.fulfill({json:{ok:true,data:build(q,full)}});
  });
  await openView(page,'profile');await page.locator('.template-select').getByRole('combobox').click();await page.locator('.ant-select-dropdown:visible').getByText('September daily profile',{exact:true}).click();
- await page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')}).click();await expect(page.locator('.report-profile-first')).toBeVisible();await expect(page.locator('.profile-overview .report-chart canvas')).toHaveCount(1);
+ await page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')}).click();await expect(page.locator(preview?'.report-profile-first':'.cleaning-report-summary')).toBeVisible();await expect(page.locator('.profile-overview .report-chart canvas')).toHaveCount(1);
  return {control,state};
 }
+
+test('a normal profile query returns the complete report in its first request',async({page})=>{
+ const {control,state}=await setup(page,'zh-CN',false);
+ expect(control.fullCalls).toBe(1);expect(control.chartCalls).toBe(0);
+ expect(state.requests.filter(r=>r.path==='report')[0].body.responseMode).toBeUndefined();
+ await expect(page.locator('.report-profile-first')).toHaveCount(0);
+ await expect(page.locator('.report-surface')).toHaveAttribute('data-report-stage','full');
+ await expect.poll(async()=>page.evaluate(()=>performance.getEntriesByName('finenergy.query.operation').some(entry=>entry instanceof PerformanceMeasure&&entry.detail.outcome==='complete'))).toBe(true);
+});
 
 for(const language of ['zh-CN','en-US']){
  test('first chart is on demand and replaces the whole snapshot in '+language,async({page},testInfo)=>{
@@ -82,7 +91,7 @@ test('an obsolete full-read promise cannot block or overwrite a newer chart snap
   await page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')}).click();await expect.poll(()=>control.chartCalls).toBe(2);await expect(page.locator('.report-profile-first')).toBeVisible();
   await page.getByRole('button',{name:'查看完整诊断',exact:true}).click();await expect.poll(()=>control.fullCalls).toBe(2);await expect(page.locator('.report-profile-rebuilt')).toBeVisible();
   await expect(page.locator('.profile-object-summary').first().locator('.metric-readout strong')).toContainText('304');
-  const oldNamesDone=page.waitForResponse(response=>new URL(response.url()).searchParams.get('q')==='slow-point');release();await oldNamesDone;
+  release();
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await expect(page.locator('.profile-object-summary').first().locator('.metric-readout strong')).toContainText('304');expect(control.fullCalls).toBe(2);
  }finally{release();}

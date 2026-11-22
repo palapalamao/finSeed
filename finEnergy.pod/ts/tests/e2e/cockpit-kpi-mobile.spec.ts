@@ -15,7 +15,7 @@ for(const language of ['zh-CN','en-US'])for(const amount of amounts)test('mobile
   ...['a','b'].map(id=>({id,kind:'meter' as const,name:'Meter '+id,nativeEquip:true,nativeTreeParentId:'f',pointId:'p'+id,categoryId:'c'})),
   {id:'c',kind:'category',name:'Electricity 原名',unit:'kWh'}
  ]});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);
   const snapshot=structuredClone(source);snapshot.context.project='testproject';snapshot.requestId=request.requestId;

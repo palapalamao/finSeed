@@ -7,7 +7,7 @@ const version=JSON.parse(readFileSync(new URL('../../package.json',import.meta.u
 
 async function setup(page:Page,language:string){
  const state=await installTransport(page,{userLocale:language,spaceSource:'fin',records:[{id:'s',kind:'space',name:'真实园区',nativeReadonly:true,nativeSourceKind:'site'},{id:'a',kind:'meter',name:'电表原名',pointId:'pa',categoryId:'c',nativeEquip:true,nativeTreeParentId:'s'},{id:'w',kind:'meter',name:'水表原名',pointId:'pw',categoryId:'water',nativeEquip:true,nativeTreeParentId:'s'},{id:'pa',kind:'nativePoint',name:'电能',parentId:'a',his:true,energyTags:['elec']},{id:'pw',kind:'nativePoint',name:'水量',parentId:'w',his:true,energyTags:['water']},{id:'c',kind:'category',name:'电力原名',unit:'kWh'},{id:'water',kind:'category',name:'水原名',unit:'m³'}]});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({status:200,json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({status:200,json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
  const requests:CockpitRequest[]=[],control={mode:'complete',status:200};
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);

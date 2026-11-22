@@ -14,7 +14,7 @@ function response(request:CockpitRequest,value:number|null=40):CockpitSnapshot{
 async function setup(page:Page,options:Partial<TransportState>={}){
  const state=await installTransport(page,options);
  state.records.push({id:'site',kind:'space',name:'真实园区名称',nativeReadonly:true,nativeSourceKind:'site'});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({status:200,json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:'test-user',canWrite:state.canWrite},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({status:200,json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:'test-user',canWrite:state.canWrite},records:state.records}}}));
  const requests:CockpitRequest[]=[];const control={status:200,value:40 as number|null};
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',async route=>{
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);

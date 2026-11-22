@@ -17,7 +17,7 @@ test('prefetch and rendering share a stylesheet failure, without querying an uns
  const state=await installTransport(page,{userLocale:'en-US'});
  let releaseCatalog!:()=>void;const gate=new Promise<void>(resolve=>releaseCatalog=resolve);
  const css=chunk('CockpitPage')!.css![0];let queries=0;
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',async route=>{await gate;await route.fulfill({json:{ok:true,data:{version,project:'testproject',user:{name:state.username,canWrite:false},records:state.records}}});});
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',async route=>{await gate;await route.fulfill({json:{ok:true,data:{version,project:'testproject',user:{name:state.username,canWrite:false},records:state.records}}});});
  await page.route('**/'+css,async route=>{await route.abort('failed');releaseCatalog();});
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{queries++;const request=route.request().postDataJSON() as CockpitRequest;return route.fulfill({json:{ok:true,data:{...raw,requestId:request.requestId}}});});
  await page.goto('/#/cockpit?project=testproject');
@@ -37,7 +37,7 @@ for(const language of ['zh-CN','en-US'])test('homepage starts querying while pag
  ]});
  let releaseCatalog!:()=>void;const catalogGate=new Promise<void>(resolve=>releaseCatalog=resolve);
  let catalogStarted=false;
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',async route=>{catalogStarted=true;await catalogGate;await route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}});});
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',async route=>{catalogStarted=true;await catalogGate;await route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}});});
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);const snapshot=structuredClone(raw);snapshot.context.project='testproject';snapshot.requestId=request.requestId;return route.fulfill({json:{ok:true,data:snapshot}});});
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit/assets',route=>route.fulfill({json:{ok:true,data:{projectId:'testproject',manifestMod:null,selectedId:null,items:[],canWrite:false}}}));
  await page.goto('/#/cockpit?project=testproject');

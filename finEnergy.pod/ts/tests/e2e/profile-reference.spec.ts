@@ -9,7 +9,7 @@ async function prepare(page:import('@playwright/test').Page,language:string,wate
  const records:FinEnergyRecord[]=[{id:'electric',kind:'category',name:'Electricity',unit:'kWh'},{id:'water-category',kind:'category',name:'Water',unit:'m³'},{id:'main',kind:'totalMeter',name:'Main electricity meter',pointId:'main-point',categoryId:'electric',unit:'kWh'},{id:'branch',kind:'meter',name:'Lighting meter',pointId:'branch-point',categoryId:'electric',unit:'kWh'},{id:'water',kind:'meter',name:'Water meter',pointId:'water-point',categoryId:'water-category',unit:'m³'},{id:'temperature',kind:'binding',name:'Outdoor temperature',pointId:'outside',role:'reference'},{id:'weather',kind:'template',name:'Energy and temperature',request}];
  const state=await installTransport(page,{records,userLocale:language});
  const version=JSON.parse(await readFile(new URL('../../package.json',import.meta.url),'utf8')).version;
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',user:{name:'Demonstration',canWrite:false},records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',user:{name:'Demonstration',canWrite:false},records}}}));
  await page.route('**/api/testproject/ext/finEnergy/v1/report',async route=>{
   const current=route.request().postDataJSON() as ReportRequest;
   state.requests.push({path:'report',body:current as unknown as Record<string,unknown>});

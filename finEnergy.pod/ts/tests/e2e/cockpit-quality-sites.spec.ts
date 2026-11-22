@@ -15,7 +15,7 @@ for(const language of ['zh-CN','en-US'])test('visible quality and explicit all-s
   {id:'b',kind:'meter',name:'Meter B',categoryId:'c',spaceId:'f',pointId:'pb'},
   {id:'c',kind:'category',name:'Electricity',unit:'kWh'}
  ]});
- await page.route('**/api/testproject/ext/finEnergy/v1/catalog',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
+ await page.route('**/api/testproject/ext/finEnergy/v1/catalog*',route=>route.fulfill({json:{ok:true,data:{version,project:'testproject',spaceSource:'fin',user:{name:state.username,canWrite:false},records:state.records}}}));
  const requests:CockpitRequest[]=[];
  await page.route('**/api/testproject/ext/finEnergy/v1/cockpit',route=>{
   const request=route.request().postDataJSON() as CockpitRequest;requests.push(request);
