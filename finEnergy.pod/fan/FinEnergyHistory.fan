@@ -201,6 +201,7 @@ class FinEnergyHistory
   {
     plan:=range(request,records)
     from:=(DateTime)plan["from"]; to:=(DateTime)plan["to"]
+    windows:=FinEnergyHistoryWindows.plan(request,records)
     out:=[Str:Obj?][,]
     modeRecords:=FinEnergyDimension.active(request) ? FinEnergyDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
     ids:=frozenPoints == null ? pointIds(request,records) : frozenPoints.keys
@@ -257,18 +258,34 @@ class FinEnergyHistory
           addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
           return
         }
-        reading:=Duration.nowTicks
-        try
-        {
-        cx.rt.his.read(point,span,request["raw"] == true ? Etc.makeDict(["raw":Marker.val]) : readOptions(point)) |HisItem item|
-        {
-          if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
-          if(items.size%2048==0) guard?.check
-          items.add(item)
-        }
-        }
-        finally {addTiming(timing,"nativeReadNs",Duration.nowTicks-reading);addTiming(timing,"rawRows",items.size);addTiming(timing,"nativeReads",1)}
         mode:=outputMode(point,overrides.first,true)
+        HisItem[]? sparse:=null
+        if(!windows.isEmpty && FinEnergyHistoryWindows.eligible(point,mode,request["raw"]==true))
+          sparse=FinEnergyHistoryWindows.read(windows,|DateTime left,DateTime right,|HisItem| sink|
+          {
+            count:=0
+            cx.rt.his.read(point,Span.makeAbs(left.toTimeZone(pointTz),right.toTimeZone(pointTz)),Etc.makeDict(["raw":Marker.val])) |HisItem item|
+            {
+              if(count++%2048==0) guard?.check
+              sink(item)
+            }
+          },timing)
+        guard?.check
+        if(sparse!=null) items=sparse
+        else
+        {
+          reading:=Duration.nowTicks
+          try
+          {
+            cx.rt.his.read(point,span,request["raw"] == true ? Etc.makeDict(["raw":Marker.val]) : readOptions(point)) |HisItem item|
+            {
+              if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
+              if(items.size%2048==0) guard?.check
+              items.add(item)
+            }
+          }
+          finally {addTiming(timing,"nativeReadNs",Duration.nowTicks-reading);addTiming(timing,"rawRows",items.size);addTiming(timing,"nativeReads",1)}
+        }
         normalizing:=Duration.nowTicks
         normalized:=normalize(point,items,from,to,request["kind"] == "trend",mode)
         if(request["_profileFirst"]==true) normalized.remove("rawSamples")
