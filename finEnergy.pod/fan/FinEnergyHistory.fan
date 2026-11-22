@@ -772,6 +772,7 @@ class FinEnergyHistory
     // cursor-based summary behavior if this seam is called with a partial hour.
     if(from!=FinEnergyMath.floorHour(from)) return normalizeClean(point,result,from,to)
     intervals:=FinEnergyInterval[,]
+    clock:=FinEnergyIntervalClock()
     filtered:=0; substituted:=0; na:=0; valid:=0; nulls:=0; validTicks:=0; selected:=0
     result.details.each |d|
     {
@@ -785,7 +786,7 @@ class FinEnergyHistory
       // Match the legacy Map reader's serialization boundary once. In particular
       // native SDK offset-zone parsing is observable for fractional-hour DST;
       // retaining a project-zone DateTime directly would change that behavior.
-      intervals.add(FinEnergyInterval(DateTime.fromIso(start.toIso),DateTime.fromIso(end.toIso),number,q,d["valueType"] as Str ?: (number==null ? "null" : "number")))
+      intervals.add(clock.interval(start,end,number,q,d["valueType"] as Str ?: (number==null ? "null" : "number")))
       selected++
       if(q=="filtered") filtered++
       if(d["substituted"]==true) substituted++

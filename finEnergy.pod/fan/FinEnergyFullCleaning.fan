@@ -29,6 +29,7 @@ internal class FinEnergyFullCleaning
   private HisItem? previous
   private DateTime? last
   private FinEnergyInterval[] intervals := [,]
+  private FinEnergyIntervalClock clock := FinEnergyIntervalClock()
   private [Str:Obj?][] details := [,]
   private DateTime[] detailTimes := [,]
   private Int seen := 0
@@ -61,14 +62,14 @@ internal class FinEnergyFullCleaning
     step:=FinEnergyCleaning.cursorStep(unit,validated,item,previous)
     if(step.reason!="removedNA") previous=item
     cleaned:=timing==null ? 0 : Duration.nowTicks
-    end:=DateTime.fromIso(item.ts.toIso).toTimeZone(from.tz)
+    end:=FinEnergyIntervalClock.serialized(item.ts).toTimeZone(from.tz)
     seconds:=step.intervalSeconds ?: 0f
     start:=end-Duration((seconds*1sec.ticks.toFloat).toInt)
     active:=step.emitted && seconds>0f && end>from && start<to
     if(active)
     {
       selected++;q:=step.quality;number:=step.number;type:=step.valueType
-      intervals.add(FinEnergyInterval(DateTime.fromIso(start.toIso),DateTime.fromIso(end.toIso),number,q,type))
+      intervals.add(clock.interval(start,end,number,q,type))
       if(number!=null) valid++
       if(type=="null") nulls++
       if(type=="na") na++
