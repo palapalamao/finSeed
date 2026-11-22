@@ -686,13 +686,14 @@ internal class FinEnergyEnergyFlow
     if(preparedValue!=null) value=preparedValue(id,known)
     else
     {
-      pieces:=FinEnergyValue[,];cursor:=from
+      values:=known ? FinEnergyValueFold.known : FinEnergyValueFold.strict
+      cursor:=from
       while (cursor < to)
       {
         end:=FinEnergyMath.floorHour(cursor)+1hr;if (end > to) end=to
-        pieces.add((known ? knownCtx : ctx).node(id,category,cursor,end,request["metric"] as Str ?: "energy"));cursor=end
+        values.add((known ? knownCtx : ctx).node(id,category,cursor,end,request["metric"] as Str ?: "energy"));cursor=end
       }
-      value=known ? FinEnergyKnownUsage.combine(pieces) : FinEnergyValue.sum(pieces)
+      value=values.finish
     }
     if (!known && request["flowMode"] == "endUse" && value.value == null && value.quality == "missing" && knownUsage(id).quality == "na") value=FinEnergyValue(null,"na",value.sources)
     if (value.value != null && value.value < 0f) {projectionState?.hold(6);value=FinEnergyValue(value.value,"negative",value.sources)}

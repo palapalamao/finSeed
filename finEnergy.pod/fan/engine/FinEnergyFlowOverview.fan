@@ -104,7 +104,7 @@ internal const class FinEnergyFlowOverview
         if (last != null && last["to"] == start.toIso && last["pointId"] == source) last["to"]=end.toIso
         else windows.add(["from":start.toIso,"to":end.toIso,"pointId":source])
       }
-      values:=FinEnergyValue[,]; completeValues:=FinEnergyValue[,]; periods:=[Str:Obj?][,]
+       values:=FinEnergyValueFold.known; completeValues:=FinEnergyValueFold.strict; periods:=[Str:Obj?][,]
       metric:=request["metric"] as Str ?: "energy"
       category:=meter["categoryId"].toStr; unit:=strict.unit(id,category,metric)
       covered:=0f; lifetime:=0f
@@ -139,8 +139,8 @@ internal const class FinEnergyFlowOverview
         observed.knownReads.vals.findAll |read| {read["pointId"] == source}.each |read| {covered+=FinEnergyMath.num(read["coveredSeconds"]) ?: 0f}
         known.mergeKnown(observed)
       }
-      value:=FinEnergyKnownUsage.combine(values)
-      completeValue:=FinEnergyValue.sum(completeValues)
+       value:=values.finish
+       completeValue:=completeValues.finish
       complete:=value.value != null && completeValue.value != null && completeValue.reliable && covered >= lifetime
       row:=Str:Obj?["id":id,"nodeId":id,"name":meter["name"],"categoryId":category,"unit":unit,"value":value.value,"valueType":value.valueType,"quality":value.quality,"completeValue":completeValue.value,"completeQuality":completeValue.quality,"sourceIds":value.sources,"activeSeconds":lifetime,"topologyActiveSeconds":active[id] ?: 0f,"coveredSeconds":covered,"coverage":lifetime > 0f ? (covered/lifetime).min(1f) : 0f,"complete":complete,"periods":periods,"substituted":value.quality == "substituted","removed":latest == null,"pointId":point,"meterIds":[id]]
       if(capture) row.setAll(["periodsCaptureId":Uuid().toStr,"periodRecordTotalCount":periodCount,"periodsReturnedCount":periods.size,"periodsTruncated":periodCount > periods.size,"periodsTruncationReason":periodCount > periods.size ? "cockpitPeriodCaptureLimit" : null])
