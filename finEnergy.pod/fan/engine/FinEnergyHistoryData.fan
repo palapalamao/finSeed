@@ -94,6 +94,8 @@ internal class FinEnergyHistoryData
   private FinEnergyValue? emptyValue
   private Str:Obj? emptyKnown := [:]
   private FinEnergyKnownUsage? knownReader
+  ** Request-local allocation evidence; never part of a report's public DTO.
+  internal Int knownDiagnosticRows := 0
   private Bool frameExpired := false
   private FinEnergyPreparedFrame? sourceFrame
   private FinEnergyPreparedOwner? ownEmptyOwner
@@ -203,12 +205,15 @@ internal class FinEnergyHistoryData
 
   ** Native window producer only: bound detail construction by capture room,
   ** without clipping numeric, coverage or all-interval rule evaluation.
-  internal Str:Obj? captureKnownUsage(DateTime start,DateTime end,DateTime queryEnd,Bool includeRuleFacts,Int detailLimit)
+  internal Bool directKnownCapture() {frameCheck;return prepared==null && sourceFrame==null}
+  internal Str:Obj? captureKnownUsage(DateTime start,DateTime end,DateTime queryEnd,Bool includeRuleFacts,Int detailLimit,Int[]? originalDetails := null)
   {
     frameCheck
     if(prepared!=null || sourceFrame!=null) throw ArgErr("captureKnownNeedsWindow")
     if(knownReader==null) knownReader=FinEnergyKnownUsage(this)
-    return knownReader.read(start,end,queryEnd,includeRuleFacts,detailLimit)
+    answer:=knownReader.read(start,end,queryEnd,includeRuleFacts,detailLimit,originalDetails)
+    knownDiagnosticRows+=(answer["intervals"] as List)?.size ?: 0
+    return answer
   }
 
   ** The owned context reads this view synchronously without retaining or
@@ -243,7 +248,9 @@ internal class FinEnergyHistoryData
       return out
     }
     if (knownReader == null) knownReader=FinEnergyKnownUsage(this)
-    return knownReader.read(start,end,queryEnd,includeRuleFacts)
+    answer:=knownReader.read(start,end,queryEnd,includeRuleFacts)
+    knownDiagnosticRows+=(answer["intervals"] as List)?.size ?: 0
+    return answer
   }
 
   FinEnergyValue read(DateTime start, DateTime end, Bool raw := false)

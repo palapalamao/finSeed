@@ -6,6 +6,7 @@ internal class FinEnergyContext
     tz=strict.tz; dimension=strict.dimension; comparison=strict.comparison; byId=strict.byId; byPoint=strict.byPoint
     children=strict.children; calendar=strict.calendar; strictContext=strict; knownEnd=queryEnd
     preparedBudget=strict.preparedBudget;deadline=strict.deadline
+    boundedKnownDetails=strict.boundedKnownDetails
     inheritOwners(strict,false)
     retain(strict.persistentOwner == null ? 4 : 7,true);if(preparedBudget != null) tariffBaseline.ordered=true
     sharedModel=strict.sharedModel;if(sharedModel!=null) retain(1,true)
@@ -15,6 +16,7 @@ internal class FinEnergyContext
     tz=source.tz; dimension=source.dimension; comparison=source.comparison; byId=source.byId.dup.set(id,record)
     byPoint=source.byPoint; children=source.children; calendar=source.calendar
     preparedBudget=source.preparedBudget;deadline=source.deadline
+    boundedKnownDetails=source.boundedKnownDetails
     inheritOwners(source,true)
     retain(4+(persistentOwner == null ? 0 : byId.size+3));if(preparedBudget != null) tariffBaseline.ordered=true
     sharedModel=source.sharedModel;if(sharedModel!=null) retain(1)
@@ -83,6 +85,8 @@ internal class FinEnergyContext
   Str:[Str:Obj?] knownReads := [:]
   Str:[Str:Obj?] usedTariffs := [:]
   private Int knownDetailCount := 0
+  ** Internal oracle switch: full-result tests can retain the original capture.
+  internal Bool boundedKnownDetails := true
   private Str:Int knownCharges := [:]
   private Int knownScratch := 0
   FinEnergyPreparedBudget? preparedBudget
@@ -682,7 +686,11 @@ internal class FinEnergyContext
         }
         else
         {
-        data:=frameOwner==null ? his.knownUsage(from,to,knownEnd) : his.borrowedKnownUsage(from,to,knownEnd); raw=(FinEnergyValue)data["value"]
+        // The whole source/hour is still evaluated. Only diagnostic DTOs that
+        // the original global cap would immediately discard are not built.
+        limited:=boundedKnownDetails && frameOwner==null && preparedBudget==null && his.directKnownCapture
+        Int[]? originalDetails:=limited ? [0] : null
+        data:=limited ? his.captureKnownUsage(from,to,knownEnd,false,1000-knownDetailCount,originalDetails) : (frameOwner==null ? his.knownUsage(from,to,knownEnd) : his.borrowedKnownUsage(from,to,knownEnd)); raw=(FinEnergyValue)data["value"]
         durationFactor=(FinEnergyMath.num(data["coveredSeconds"]) ?: 0f)/3600f
         // This is the source's already-proven empty domain. Reading it adds no
         // intervals or diagnostic header, so do not allocate filtered/mapped
@@ -696,6 +704,7 @@ internal class FinEnergyContext
         // Prepared/native readers already return this typed map list. Borrow
         // it read-only; retain the filter path for other legacy input shapes.
         details:=data["intervals"] as [Str:Obj?][] ?: FinEnergyMath.maps(data["intervals"])
+        legacyDetailCount:=originalDetails==null ? details.size : originalDetails.first
         empty:=preparedBudget != null && data["knownValue"] == null && data["knownQuality"] == "missing" && data["coveredSeconds"] == 0f && data["intervalCount"] == 0 && data["intervalStart"] == null && data["intervalEnd"] == null && details.isEmpty
         unprepared:=preparedBudget != null && raw.quality == "streamingReadNotPrepared" && data.size == 1
         if(empty) omittedEmptyEvidence=true
@@ -705,7 +714,7 @@ internal class FinEnergyContext
           remaining:=1000-knownDetailCount
           recordId:=r["id"].toStr
           key:="$recordId|$point|${from.ticks}|${to.ticks}"
-          trim:=details.size>remaining ? 1+remaining : 0
+          trim:=legacyDetailCount>remaining ? 1+remaining : 0
           header:=2+data.size+8+trim
           // Header fields, six source/boundary fields, possible trim flags/list,
           // and the slot index are admitted before copying the borrowed map.
@@ -721,9 +730,9 @@ internal class FinEnergyContext
           if(evidence==null)
           {
             evidence=data.dup; evidence.remove("value")
-            if (details.size > remaining)
+            if (legacyDetailCount > remaining)
             {
-              evidence["intervals"]=remaining == 0 ? [Str:Obj?][,] : details[0..<remaining]
+              evidence["intervals"]=limited ? details : (remaining == 0 ? [Str:Obj?][,] : details[0..<remaining])
               evidence["detailsTruncated"]=true
               evidence["intervalsCaptureId"]=Uuid().toStr
             }
@@ -731,7 +740,7 @@ internal class FinEnergyContext
             evidence.setAll(["nodeId":r["id"],"pointId":point,"sourceIds":his.sources,"unit":his.unit,"from":bounds?.fromIso ?: from.toIso,"to":bounds?.toIso ?: to.toIso])
             if(share) his.rememberKnownEvidence(r,from,to,knownEnd,evidence,key)
           }
-          knownDetailCount+=details.size.min(remaining)
+          knownDetailCount+=legacyDetailCount.min(remaining)
           if(frameOwner == null && !knownReads.containsKey(key)) retain(2)
           knownReads[key]=evidence
         }

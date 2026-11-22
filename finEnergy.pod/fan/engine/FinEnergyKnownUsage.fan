@@ -102,7 +102,7 @@ internal class FinEnergyKnownUsage
   private FinEnergyHistoryData history
   private FinEnergyInterval[] rows := [,]
 
-  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false, Int detailLimit := 1000)
+  Str:Obj? read(DateTime start, DateTime end, DateTime queryEnd, Bool includeRuleFacts := false, Int detailLimit := 1000,Int[]? originalDetails := null)
   {
     if(detailLimit<0 || detailLimit>1000) throw ArgErr("knownDetailLimit")
     values:=FinEnergyValue[,]; details:=[Str:Obj?][,]; cursor:=start; covered:=0f; count:=0
@@ -115,7 +115,11 @@ internal class FinEnergyKnownUsage
       // Keep the original closed interval whole, attributed once by its start.
       // queryEnd is the query/as-of bound, never a fabricated bucket boundary.
       if (row.end > queryEnd) continue
-      if (row.start < cursor) return ["value":FinEnergyValue(null,"invalidConfiguration",history.sources),"intervals":details,"coveredSeconds":covered]
+      if (row.start < cursor)
+      {
+        if(originalDetails!=null) originalDetails[0]=count.min(1000)
+        return ["value":FinEnergyValue(null,"invalidConfiguration",history.sources),"intervals":details,"coveredSeconds":covered]
+      }
       if (row.start > cursor) {values.add(FinEnergyValue(null,"missing",history.sources));if(includeRuleFacts) continuous=false}
       if(includeRuleFacts && row.end>end) continuous=false
       q:=row.valueType == "na" ? "na" : row.quality
@@ -139,6 +143,7 @@ internal class FinEnergyKnownUsage
     // the local or request-wide diagnostic capture can discard interval rows.
     if(includeRuleFacts && closedHour && count > 0 && covered == 3600f && end-start == 1hr) out["_closedOwnPrimaryHour"]=true
     if(includeRuleFacts && (containsSubstitution || (continuous && cursor==end && count>0 && covered==3600f && end-start==1hr))) out["_containsSubstitutedIntervals"]=containsSubstitution
+    if(originalDetails!=null) originalDetails[0]=count.min(1000)
     return out
   }
 
