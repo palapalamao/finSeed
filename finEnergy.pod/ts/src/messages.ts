@@ -2106,3 +2106,12 @@ Object.assign(englishMessages,{'全部可访问站点':'All accessible sites'});
 Object.assign(englishMessages,{'已观察到替代值的小时数':'Hours with observed substituted values','替代情况未完整核实的小时数':'Hours with unverified substitution evidence','此快照未提供':'Not provided by this snapshot','仅使用完整且质量合格的主点小时判断；含替代值的小时不参与触发。替代小时与存在未核实来源的小时可能重叠，不能相加。':'Only complete primary-point hours of eligible quality are assessed. Hours containing substituted values cannot trigger a clue. Hours with observed substitution and hours with unverified sources can overlap and must not be added together.'});
 
 Object.assign(englishMessages,{'预算曲线':'Budget curve','报表标识':'Report ID'});
+
+Object.assign(englishMessages,{
+ '图表已就绪':'Chart ready',
+ '查看完整诊断':'Read full diagnostics',
+ '当前图表与覆盖情况仅使用实际参与统计的主点；完整来源诊断尚未读取。查看诊断或导出时会重新读取并替换整份快照，历史回补可能使结果变化。':'This chart and coverage use only contributing primary points. Full source diagnostics have not been read. Diagnostics or export will reread and replace the whole snapshot; backfilled history may change the result.',
+ '已重新读取完整数据并生成新快照；图表与明细已一起更新。':'Full data was reread into a new snapshot; the chart and details were updated together.',
+ '当前快照尚未生成完整诊断，请在分析工作台重新查询后导出。':'Full diagnostics are not available for this snapshot. Query it again in the analysis workspace before exporting.'
+});
+Object.assign(englishMessages,{'请使用报表工具栏的“打印”按钮；系统会先读取完整数据，再打印新的完整快照。':'Use Print in the report toolbar to read the full data first and print the new complete snapshot.'});
