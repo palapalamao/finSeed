@@ -302,18 +302,15 @@ internal class FinEnergyReport
     horizon:=(FinEnergyMath.num(request["forecastDays"]) ?: 7f).toInt
     lines.each |line| {
       dates:=DateTime[,]; values:=Float?[,]; historyPoints:=[Str:Obj?][,]; sources:=Str[,]
-      cursor:=from
-      while (cursor < to)
+      forecastDailyTotals(line).each |amount,cursor|
       {
-        end:=FinEnergyMath.nextBucket(cursor,"day")
-        value:=line.total(line.ticks.findAll |t| { t.ts >= cursor && t.ts < end })
+        value:=amount
         if (value.value != null && value.value < 0f) value=FinEnergyValue(null,"negative",value.sources)
         dates.add(cursor); values.add(value.reliable ? value.value : null); sources.addAll(value.sources)
         point:=value.point(cursor); historyPoints.add(point)
         rows.add(point.dup.setAll(["id":line.id,"nodeId":line.nodeId,"name":line.name,"categoryId":line.category,"unit":line.unit,"phase":"history"]))
-        cursor=end
       }
-      fit:=FinEnergyForecast.fit(values,horizon)
+      fit:=Str:Obj?[:]
       if (metric == "cost")
       {
         members:=ctx.scopeMeters(line.nodeId,line.category)
@@ -322,19 +319,15 @@ internal class FinEnergyReport
           id:=meter["id"].toStr
           if (!meterFits.containsKey(id))
           {
-            own:=this.line(id,line.category); daily:=Float?[,]; day:=from
-            while (day < to)
-            {
-              end:=FinEnergyMath.nextBucket(day,"day")
-              amount:=own.total(own.ticks.findAll |tick| {tick.ts >= day && tick.ts < end})
-              daily.add(amount.reliable ? amount.value : null);day=end
-            }
+            own:=this.line(id,line.category)
+            daily:=forecastDailyTotals(own).vals.map |amount->Float?| {amount.reliable ? amount.value : null}
             meterFits[id]=FinEnergyForecast.fit(daily,horizon)
           }
           return meterFits[id]
         }
         fit=FinEnergyCostForecast.combine(fits,values,horizon)
       }
+      else fit=FinEnergyForecast.fit(values,horizon)
       simulated:=sources.unique.any |id| { ctx.byPoint[id]?.simulated == true }
       meta:=fit.dup
       ["predictions","backtests","modelScores"].each |key| { meta.remove(key) }
@@ -380,6 +373,27 @@ internal class FinEnergyReport
       extra["forecastBasis"]="historicalMeterCostPatterns";extra["forecastMeterIds"]=ids
     }
     recordLineAreas(lines)
+    return result
+  }
+
+  private DateTime:FinEnergyValue forecastDailyTotals(FinEnergyLine line)
+  {
+    result:=DateTime:FinEnergyValue[:] {ordered=true}
+    ticks:=line.ticks
+    index:=0
+    cursor:=from
+    while(cursor<to)
+    {
+      end:=FinEnergyMath.nextBucket(cursor,"day")
+      fold:=FinEnergyLineFold(line,"value")
+      while(index<ticks.size && ticks[index].ts<end)
+      {
+        tick:=ticks[index++]
+        if(tick.ts>=cursor) fold.add(tick)
+      }
+      result[cursor]=fold.finish
+      cursor=end
+    }
     return result
   }
 
@@ -831,29 +845,46 @@ internal class FinEnergyReport
 
   private Void totals(FinEnergyLine[] lines)
   {
-    order:=lines.dup.sort |a,b| { (available(b).value ?: Float.negInf) <=> (available(a).value ?: Float.negInf) }
-    totals:=Str:FinEnergyValue[][:]
-    lines.each |l|
+    strict:=FinEnergyValue[,]
+    usage:=FinEnergyValue[,]
+    groups:=Str:Int[][:]
+    lines.each |l,index|
     {
+      value:=l.total
+      strict.add(value)
+      usage.add(displaysKnown(l) ? l.knownTotal : value)
       key:="${l.category}|${l.unit}"
-      if (!totals.containsKey(key)) totals[key]=FinEnergyValue[,]
-      totals[key].add(l.total)
+      if(!groups.containsKey(key)) groups[key]=Int[,]
+      groups[key].add(index)
+    }
+    order:=lines.map |l,index->Int| {index}
+    order.sort |a,b| {(usage[b].value ?: Float.negInf) <=> (usage[a].value ?: Float.negInf)}
+    denominators:=Str:FinEnergyValue[:]
+    knownDenominators:=Str:FinEnergyValue[:]
+    bases:=Str:Str[:]
+    groups.each |group,key|
+    {
+      denominators[key]=FinEnergyValue.sum(group.map |index->FinEnergyValue| {strict[index]})
+      if(group.any |index| {displaysKnown(lines[index])})
+      {
+        knownDenominators[key]=FinEnergyKnownUsage.combine(group.map |index->FinEnergyValue| {usage[index]})
+        bases[key]=shareBasis(group.map |index->FinEnergyLine| {lines[index]},knownDenominators[key])
+      }
     }
     ranks:=Str:Int[:]
-    order.each |l|
+    order.each |index|
     {
-      v:=l.total; key:="${l.category}|${l.unit}"
-      denom:=FinEnergyValue.sum(totals[key]); rank:=(ranks[key] ?: 0)+1
-      if (available(l).value != null) ranks[key]=rank
-      row:=baseRow(l,"total",v); row["rank"]=available(l).value == null ? null : rank
-      row["percentage"]=FinEnergyValue.divide(v,denom).scale(100f).value
+      l:=lines[index];v:=strict[index]; key:="${l.category}|${l.unit}"
+      rank:=(ranks[key] ?: 0)+1
+      if (usage[index].value != null) ranks[key]=rank
+      row:=baseRow(l,"total",v); row["rank"]=usage[index].value == null ? null : rank
+      row["percentage"]=FinEnergyValue.divide(v,denominators[key]).scale(100f).value
       point:=v.point(from)
       if (displaysKnown(l))
       {
-        known:=l.knownTotal
-        group:=lines.findAll |member| {member.category == l.category && member.unit == l.unit}
-        denominator:=FinEnergyKnownUsage.combine(group.map |member->FinEnergyValue| {available(member)})
-        basis:=shareBasis(group,denominator)
+        known:=usage[index]
+        denominator:=knownDenominators[key]
+        basis:=bases[key]
         row.setAll(coverage(l)); row.setAll(FinEnergyKnownUsage.fields(known))
         row["knownPercentage"]=basis == "knownUsage" && known.value != null ? known.value/denominator.value*100f : null
         row["percentageBasis"]=basis
@@ -872,20 +903,31 @@ internal class FinEnergyReport
     {
       if(consumedMeters != null) ctx.warningScope(2,i,0)
       frozen:=consumedDaily[l.id]
-      bandOf:=|FinEnergyTick tick->Str| {ctx.timeBand(l.nodeId,l.category,tick.ts,tick.end,l.utility)}
       grouped:=Int:FinEnergyTick[][:]
-      l.ticks.each |t| { if (!grouped.containsKey(t.ts.hour)) grouped[t.ts.hour]=FinEnergyTick[,]; grouped[t.ts.hour].add(t) }
+      hourBands:=Int:Str[][:]
+      bandTicks:=Str:FinEnergyTick[][:] {ordered=true}
+      hours:=FinEnergyMath.maps(frozen?.get("hours"))
+      if(frozen==null) l.ticks.each |tick|
+      {
+        hour:=tick.ts.hour
+        band:=ctx.timeBand(l.nodeId,l.category,tick.ts,tick.end,l.utility)
+        if(!grouped.containsKey(hour)) {grouped[hour]=FinEnergyTick[,];hourBands[hour]=Str[,]}
+        if(!bandTicks.containsKey(band)) bandTicks[band]=FinEnergyTick[,]
+        grouped[hour].add(tick)
+        if(!hourBands[hour].contains(band)) hourBands[hour].add(band)
+        bandTicks[band].add(tick)
+      }
       points:=[Str:Obj?][,]
       (0..23).each |hour|
       {
         ticks:=grouped[hour] ?: FinEnergyTick[,]
-        data:=frozen == null ? null : FinEnergyMath.maps(frozen["hours"])[hour]
+        data:=frozen == null ? null : hours[hour]
         count:=data == null ? ticks.size : (Int)data["samples"]
         v:=data == null ? l.total(ticks) : (FinEnergyValue)data["value"]
         if (!v.reliable) v=FinEnergyValue(null,v.quality,v.sources)
         if (!l.ratio && !l.gauge && count>0) v=v.scale(1f/count.toFloat)
         at:=from.date.toDateTime(Time(hour,0),ctx.tz)
-        distinct:=ticks.map |tick->Str| {bandOf(tick)}.unique
+        distinct:=hourBands[hour] ?: Str[,]
         band:=data != null ? data["band"].toStr : (distinct.size == 1 ? distinct.first : (distinct.isEmpty ? "unknown" : "mixed"))
         point:=v.point(at); point["band"]=band; points.add(point)
         row:=baseRow(l,"hour:$hour",v); row["hour"]=hour; row["ts"]=at.toIso; row["samples"]=count; row["band"]=band
@@ -900,12 +942,12 @@ internal class FinEnergyReport
         rows.add(row)
       }
       series.add(seriesMap(l,points))
-      classified:=frozen == null ? l.ticks.map |tick->Str| {bandOf(tick)}.unique : FinEnergyMath.strings(frozen["classified"])
+      classified:=frozen == null ? bandTicks.keys : FinEnergyMath.strings(frozen["classified"])
       bands:=classified == ["unknown"] ? ["unknown"] : ["sharp","peak","flat","valley","mixed","unknown"]
       if (classified.contains("unknown")) ctx.warn("部分时段未配置尖峰谷平分类，保留为未分类")
       bands.each |band|
       {
-        ticks:=l.ticks.findAll |t| { bandOf(t) == band }
+        ticks:=bandTicks[band] ?: FinEnergyTick[,]
         data:=frozen == null ? null : ((Map)frozen["bands"])[band] as Map
         count:=data == null ? ticks.size : (Int)data["samples"]
         total:=count == 0 ? FinEnergyValue(0f,"ok") : (data == null ? FinEnergyValue.sum(ticks.map |t->FinEnergyValue| { t.value }) : (FinEnergyValue)data["value"])
@@ -931,9 +973,13 @@ internal class FinEnergyReport
     if (!available) ctx.warn("Work calendar is required")
     lines.each |l|
     {
-      work:=l.ticks.findAll |t| { ctx.working(t.ts,kind == "workingHours",request["workHours"]) }
-      off:=l.ticks.findAll |t| { !ctx.working(t.ts,kind == "workingHours",request["workHours"]) }
       frozen:=consumedWorking[l.id]
+      work:=FinEnergyTick[,];off:=FinEnergyTick[,]
+      if(frozen==null) l.ticks.each |tick|
+      {
+        if(ctx.working(tick.ts,kind == "workingHours",request["workHours"])) work.add(tick)
+        else off.add(tick)
+      }
       a:=!available ? FinEnergyValue(null,"missingCalendar") : (frozen == null ? l.total(work) : (FinEnergyValue)frozen[0]["value"])
       b:=!available ? FinEnergyValue(null,"missingCalendar") : (frozen == null ? l.total(off) : (FinEnergyValue)frozen[1]["value"])
       if (available && frozen == null && work.isEmpty) a=FinEnergyValue(0f,"ok")
@@ -983,12 +1029,14 @@ internal class FinEnergyReport
             return
           }
           current:=l.total; previous:=base.total; diff:=FinEnergyValue.sum([current,previous.scale(-1f)])
+          Str:Obj? currentCoverage:=displaysKnown(l) ? coverage(l) : [:]
+          Str:Obj? referenceCoverage:=displaysKnown(l) ? coverage(base) : [:]
           comparable:=current.value != null && previous.value != null && current.reliable && previous.reliable
-          if (displaysKnown(l)) comparable=comparable && coverage(l)["complete"] == true && coverage(base)["complete"] == true
+          if (displaysKnown(l)) comparable=comparable && currentCoverage["complete"] == true && referenceCoverage["complete"] == true
           if (!comparable) diff=FinEnergyValue(null,"incompleteCoverage",diff.sources)
           percentage:=FinEnergyValue.divide(diff,previous).scale(100f)
           row:=Str:Obj?["id":l.id,"name":l.name,"categoryId":l.category,"referenceId":base.nodeId,"referenceName":base.name,"current":current.value,"reference":previous.value,"difference":diff.value,"percentage":percentage.value,"quality":diff.quality,"percentageQuality":percentage.quality,"unit":l.unit,"comparability":comparable ? "complete" : "incompleteCoverage"]
-          if (displaysKnown(l)) row.setAll(["knownCurrent":available(l).value,"knownReference":available(base).value,"currentCoverage":coverage(l)["coverage"],"referenceCoverage":coverage(base)["coverage"]])
+          if (displaysKnown(l)) row.setAll(["knownCurrent":available(l).value,"knownReference":available(base).value,"currentCoverage":currentCoverage["coverage"],"referenceCoverage":referenceCoverage["coverage"]])
           comparisons.add(row)
         }
       }
@@ -1004,11 +1052,14 @@ internal class FinEnergyReport
       base:=line(l.nodeId,l.category,null,start,end)
       current:=l.total; previous:=base.total
       diff:=FinEnergyValue.sum([current,previous.scale(-1f)])
+      Str:Obj? currentCoverage:=displaysKnown(l) ? coverage(l) : [:]
+      Str:Obj? referenceCoverage:=displaysKnown(l) ? coverage(base) : [:]
       comparable:=current.value != null && previous.value != null && current.reliable && previous.reliable
-          if (displaysKnown(l)) comparable=comparable && coverage(l)["complete"] == true && coverage(base)["complete"] == true
-          if (!comparable) diff=FinEnergyValue(null,"incompleteCoverage",diff.sources)
-      row:=Str:Obj?["id":l.id,"name":l.name,"current":current.value,"reference":previous.value,"difference":diff.value,"percentage":FinEnergyValue.divide(diff,previous).scale(100f).value,"percentageQuality":FinEnergyValue.divide(diff,previous).quality,"quality":diff.quality,"unit":l.unit,"comparability":comparable ? "complete" : "incompleteCoverage"]
-      if (displaysKnown(l)) row.setAll(["knownCurrent":available(l).value,"knownReference":available(base).value,"currentCoverage":coverage(l)["coverage"],"referenceCoverage":coverage(base)["coverage"]])
+      if (displaysKnown(l)) comparable=comparable && currentCoverage["complete"] == true && referenceCoverage["complete"] == true
+      if (!comparable) diff=FinEnergyValue(null,"incompleteCoverage",diff.sources)
+      percentage:=FinEnergyValue.divide(diff,previous)
+      row:=Str:Obj?["id":l.id,"name":l.name,"current":current.value,"reference":previous.value,"difference":diff.value,"percentage":percentage.scale(100f).value,"percentageQuality":percentage.quality,"quality":diff.quality,"unit":l.unit,"comparability":comparable ? "complete" : "incompleteCoverage"]
+      if (displaysKnown(l)) row.setAll(["knownCurrent":available(l).value,"knownReference":available(base).value,"currentCoverage":currentCoverage["coverage"],"referenceCoverage":referenceCoverage["coverage"]])
       comparisons.add(row)
       base.id+="|reference"; base.name+=" (reference)"; append(base,period)
     }
