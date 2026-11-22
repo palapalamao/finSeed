@@ -68,6 +68,9 @@ class FinEnergyCockpit
       ids.each |id| {combined.addAll(ctx.scopeMeters(id,auxiliary))}
       if (combined.map |m->Str| {m["id"].toStr}.unique.size > 200) throw ArgErr("cockpitMeterLimit")
     }
+    configurationToken:=FinEnergyCockpitInput.token(ctx,frozen,ownedConfig,project,tz.name,requestScope?.stream?.state)
+    if(input["expectedConfigurationToken"]!=null && input["expectedConfigurationToken"]!=configurationToken)
+      throw FinEnergyHttpErr(409,"COCKPIT_CONFIGURATION_CHANGED","cockpitConfigurationChanged")
     Str:Obj? flow:=[:]
     if (enabled.contains("balance"))
     {
@@ -239,7 +242,7 @@ class FinEnergyCockpit
     refs=refs.unique.sort |[Str:Obj?] a, [Str:Obj?] b->Int| {a["id"].toStr <=> b["id"].toStr}
     appliedCleaning:=proof["appliedCleaning"]
     cutoff:=DateTime.fromIso(request["asOf"].toStr)
-    context:=Str:Obj?["project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
+    context:=Str:Obj?["configurationToken":configurationToken,"project":project,"projectTimeZone":tz.name,"reportScope":scope,"focusCategoryId":category,"auxiliaryCategoryId":auxiliary,"comparison":comparison,"time":["preset":object(input,"time")["preset"],"period":request["period"],"from":request["from"],"to":request["to"]],"asOf":request["asOf"]]
     provenance:=Str:Obj?["configFingerprint":requestScope==null ? FinEnergyCockpitDigest.json(["refs":refs,"configuration":config,"appliedCleaning":appliedCleaning],deadline).sha256 : requestScope.configurationFingerprint(config,canonicalConfig,refs,appliedCleaning),"relationshipBasis":"currentConfiguration","historyBasis":"ownPrimaryPointRaw","historyObservedFrom":observedFrom.toIso,"historyObservedTo":observedTo.toIso,"sourceLastObservedAt":proof["sourceLastObservedAt"],"configRefs":refs,"historyPlan":plan,"stateObservedAt":events["stateObservedAt"],"appliedCleaning":appliedCleaning,"streaming":proof["streaming"],"historyLimitations":proof["historyLimitations"],"historyConfigObservedFrom":proof["historyConfigObservedFrom"],"historyConfigObservedTo":proof["historyConfigObservedTo"]]
     provenance["edition"]=FinEnergyEditionLicense.edition
     provenance["licenseMode"]=FinEnergyEditionLicense.licenseMode
@@ -299,9 +302,10 @@ class FinEnergyCockpit
   ** Client project/timezone and engine implementation fields are never accepted.
   internal static Str:Obj? query(Str:Obj? input, Str project, TimeZone tz, DateTime now)
   {
-    allowed:=["schemaVersion","requestId","reportScope","focusCategoryId","time","asOf","modules","comparison","auxiliaryCategoryId","payloadEncoding"]
+    allowed:=["schemaVersion","requestId","reportScope","focusCategoryId","time","asOf","modules","comparison","auxiliaryCategoryId","payloadEncoding","expectedConfigurationToken"]
     if (input.keys.any |key| {!allowed.contains(key)} || input["schemaVersion"] isnot Int || input["schemaVersion"] != 1) throw ArgErr("cockpitSchema")
     if (input["payloadEncoding"] != null && input["payloadEncoding"] != "compact-v1") throw ArgErr("cockpitPayloadEncoding")
+    if(input["expectedConfigurationToken"]!=null && (input["expectedConfigurationToken"] isnot Str || !Regex<|[0-9a-f]{64}|>.matches(input["expectedConfigurationToken"]))) throw ArgErr("cockpitConfigurationToken")
     requestId:=text(input,"requestId"); if (requestId.size > 200) throw ArgErr("cockpitRequestId")
     scope:=object(input,"reportScope"); time:=object(input,"time")
     dimension:=text(scope,"dimension"); intent:=text(scope,"selectionIntent")

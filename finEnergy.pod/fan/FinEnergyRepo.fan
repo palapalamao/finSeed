@@ -64,7 +64,7 @@ class FinEnergyRepo
   [Str:Obj?][] records()
   { FinEnergyNativeEquipRepo(this).records(rawRecords) }
 
-  [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false)
+  [Str:Obj?][] rawRecords(Bool recovery := false, Bool comparison := false, Bool analysis := false)
   {
     mustRead
     requireConfigurationAccess
@@ -77,7 +77,7 @@ class FinEnergyRepo
       if (!comparison && !cx.canRead(r)) return
       if (!recovery && (r["finEnergyConfig"] as Str ?: "").contains("\"action\":\"nativeEquipSnapshot\"")) return
       cockpitPreparation?.hold(2)
-      data:=cockpitPreparation==null ? decode(r) : decodeOwned(r,cockpitPreparation)
+      data:=analysis ? FinEnergyCockpitInput.decode(r,cockpitPreparation) : (cockpitPreparation==null ? decode(r) : decodeOwned(r,cockpitPreparation))
       if(comparison) data["_comparisonReadable"]=cx.canRead(r)
       out.add(data)
     }
@@ -469,7 +469,7 @@ class FinEnergyRepo
       owned:=ownedSnapshot
       owned["modelComplete"]=true;owned["modelRecords"]=prepared["scopeRecords"]
       all:=([Str:Obj?][])prepared["records"]
-      if (FinEnergyMath.strings(input["modules"]).contains("balance")) all=flowRecords(all)
+      if (FinEnergyMath.strings(input["modules"]).contains("balance")) all=flowRecords(all,([Str:Obj?][])prepared["sourceRecords"])
       normalized:=input.dup
       normalized["reportScope"]=((Map)input["reportScope"]).dup.set("nodeIds",((Map)prepared["request"])["nodeIds"])
       cockpitPreparation=null;cockpitAliases=null
@@ -541,10 +541,10 @@ class FinEnergyRepo
     request.remove("leakSegment")
     request.remove("_comparisonScope")
     if (nativeModel) request=FinEnergyNativeEquip.request(request,FinEnergyNativeEquipRepo(this).mapping)
-    all:=[Str:Obj?][,];scopeRecords:=[Str:Obj?][,]
+    all:=[Str:Obj?][,];scopeRecords:=[Str:Obj?][,];sourceRecords:=[Str:Obj?][,]
     if (cockpit)
     {
-      source:=FinEnergyNativeEquipRepo(this).records(rawRecords(false,true))
+      source:=FinEnergyNativeEquipRepo(this).records(rawRecords(false,true,true));sourceRecords=source
       all=FinEnergyNativeSpace.loadAnalysis(cx,source,cockpitPreparation).project(FinEnergyCockpitEfficiency.visible(source.findAll |r| {r["_comparisonReadable"] != false},source))
       FinEnergyCockpit.guardVisibleScope(request,all,source)
       // Private completeness proof; never serialized. Preserve hidden/unplaced
@@ -564,12 +564,12 @@ class FinEnergyRepo
     if (request["kind"] == "energyFlow") all=flowRecords(all)
     if (FinEnergyComparisonScope.active(request)) request["_comparisonScope"]=comparisonScope(request,all)
     request=FinEnergyEngine.flowScope(request,all)
-    return ["request":request,"records":all,"scopeRecords":scopeRecords]
+    return ["request":request,"records":all,"scopeRecords":scopeRecords,"sourceRecords":sourceRecords]
   }
 
-  private [Str:Obj?][] flowRecords([Str:Obj?][] visible)
+  private [Str:Obj?][] flowRecords([Str:Obj?][] visible,[Str:Obj?][]? captured := null)
   {
-    all:=FinEnergyNativeEquipRepo(this).records(rawRecords(false,true))
+    all:=captured ?: FinEnergyNativeEquipRepo(this).records(rawRecords(false,true))
     out:=FinEnergyEnergyFlow.visible(visible,all)
     out.each |r|
     {
