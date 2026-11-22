@@ -9,6 +9,16 @@ import type {CockpitRequest,CockpitSnapshot} from './cockpitTypes';
 import {decodeCockpitPayload} from './cockpitPayload';
 import type {LicenseStatus} from './license';
 import {readQueryServerTiming,recordQueryPerformance} from './queryPerformance';
+interface CockpitRun {
+ id:string;
+ state:'queued'|'running'|'ready'|'failed'|'cancelled';
+ result?:unknown;
+ error?:{code:string;msg:string};
+}
+function needsBackgroundCockpit(q:CockpitRequest):boolean{
+ const span=Date.parse(q.time.to||'')-Date.parse(q.time.from||'');
+ return q.time.preset==='thisYear'||span>31*24*60*60*1000||q.modules.length>4;
+}
 export class ApiError extends Error {constructor(public code:string,message:string,public sourceMessage?:string){super(message);this.name='ApiError';}}
 export function unwrap<T>(value:unknown,status=200):T {
  if(!value||typeof value!=='object')throw new ApiError('invalid_response',t("FIN 返回了无效的响应。请检查项目和服务状态。"),"FIN 返回了无效的响应。请检查项目和服务状态。");
@@ -20,7 +30,7 @@ export {projectFromLocation} from './projectLocation';
 export class FinEnergyApi {
  readonly base:string;
  private catalogPending=new Map<'analysis'|'full',Promise<Catalog>>();
- constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
+ constructor(project:string,private onSessionExpired?:()=>void,private backgroundCockpit=false){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
  async request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
   const started=performance.now();
   const queryId=signal&&(path==='report'||path==='cockpit')&&globalThis.crypto?.getRandomValues
@@ -76,10 +86,39 @@ export class FinEnergyApi {
  migration=(body:Record<string,unknown>)=>this.request<{job:FinEnergyRecord|null;applied?:number}>('migration',body);
  report=(request:ReportRequest,signal?:AbortSignal)=>this.request<ReportResult>('report',request,signal);
  cockpit=async(request:CockpitRequest,signal?:AbortSignal):Promise<CockpitSnapshot>=>{
-  const data=await this.request<unknown>('cockpit',{...request,payloadEncoding:'compact-v1'},signal);
+  const input={...request,payloadEncoding:'compact-v1'};
+  let data:unknown;
+  if(this.backgroundCockpit&&needsBackgroundCockpit(request)){
+   try{data=await this.cockpitRun(input,signal);}
+   catch(error){
+    if(!(error instanceof ApiError)||error.code!=='QUERY_RUN_UNAVAILABLE')throw error;
+    data=await this.request<unknown>('cockpit',input,signal);
+   }
+  }else data=await this.request<unknown>('cockpit',input,signal);
   try{return decodeCockpitPayload<CockpitSnapshot>(data);}
   catch{throw new ApiError('invalid_response',t('FIN 返回了无效的响应。请检查项目和服务状态。'),'FIN 返回了无效的响应。请检查项目和服务状态。');}
  };
+ private async cockpitRun(request:CockpitRequest,signal?:AbortSignal):Promise<unknown>{
+  if(signal?.aborted)throw new DOMException('Aborted','AbortError');
+  let run=await this.request<CockpitRun>('query/run',{kind:'cockpit',request});
+  const id=run.id;
+  const stop=()=>{void this.request('query/stop',{id}).catch(()=>undefined);};
+  if(signal?.aborted){stop();throw new DOMException('Aborted','AbortError');}
+  signal?.addEventListener('abort',stop,{once:true});
+  try{
+   let interval=200;
+   while(run.state==='queued'||run.state==='running'){
+    await new Promise<void>(resolve=>setTimeout(resolve,interval));
+    if(signal?.aborted)throw new DOMException('Aborted','AbortError');
+    run=await this.request<CockpitRun>('query/status?id='+encodeURIComponent(id),undefined,signal);
+    interval=Math.min(interval+100,700);
+   }
+   if(run.state==='ready')return run.result;
+   if(run.state==='cancelled')throw new DOMException('Aborted','AbortError');
+   const source=run.error?.msg||'queryRunFailed';
+   throw new ApiError(run.error?.code||'QUERY_RUN_FAILED',serverMessage(source),source);
+  }finally{signal?.removeEventListener('abort',stop);}
+ }
  comparisonScopes=(nodeIds:string[],signal?:AbortSignal)=>this.request<{scopes:ComparisonScope[]}>(`comparison-scopes?nodeIds=${encodeURIComponent(nodeIds.join(','))}`,undefined,signal);
  alarms=()=>this.request<FinEnergyRecord[]>('alarms');
  alarmPage=(offset=0,limit=30,state='all',eventId?:string,signal?:AbortSignal)=>this.request<{items:FinEnergyRecord[];total:number;offset:number;limit:number}>(`alarms/page?offset=${offset}&limit=${limit}&state=${encodeURIComponent(state)}${eventId?'&eventId='+encodeURIComponent(eventId):''}`,undefined,signal);

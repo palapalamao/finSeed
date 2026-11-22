@@ -34,7 +34,7 @@ const reportViews:ReportKind[]=['dashboard','regression',...analysisGroups.flatM
 function readTemplate(){return new URLSearchParams(location.hash.split('?')[1]||'').get('template')||undefined;}
 function readView():View{const view=location.hash.slice(1).split('?')[0].replace(/^\//,'');if(view==='alarms')return 'messages';return [...reportViews,'messages',...(cockpitEnabled?['cockpit']:[]),...management].includes(view as View)?view as View:cockpitEnabled?'cockpit':'dashboard';}
 
-export function App(){
+export function App({backgroundCockpit=false}:{backgroundCockpit?:boolean}={}){
  useSyncExternalStore(subscribeLocale,localeSnapshot,localeSnapshot);
  const [exportLocked,setExportLocked]=useState(false);
  const [aboutOpen,setAboutOpen]=useState(false);
@@ -53,7 +53,7 @@ export function App(){
  const [routeNavigation,setRouteNavigation]=useState(()=>new URLSearchParams(location.hash.split('?')[1]||'').get('navigation'));
  const [sessionExpired,setSessionExpired]=useState(false);
  const clearSession=useCallback(()=>{returnStore.current.clear();setSessionExpired(true);},[]);
- const api=useMemo(()=>project?new FinEnergyApi(project,clearSession):null,[project,clearSession]);
+ const api=useMemo(()=>project?new FinEnergyApi(project,clearSession,backgroundCockpit):null,[project,clearSession,backgroundCockpit]);
  const requestSequence=useRef(0);
  const cacheOwner=useRef<string|undefined>(undefined);
  const lastAnalysis=useRef<ReportKind>('profile');

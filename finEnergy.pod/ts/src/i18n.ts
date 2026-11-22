@@ -104,3 +104,19 @@ Object.assign(englishMessages,{
 });
 Object.assign(serverMessages,{queryCancelled:'The query was cancelled.',queryInProgress:'This query is already running.',queryRequestId:'The query identifier is invalid.'});
 Object.assign(chineseServerMessages,{queryCancelled:'查询已取消。',queryInProgress:'此查询正在进行。',queryRequestId:'查询标识无效。'});
+Object.assign(serverMessages,{
+ queryRunUnavailable:'Background queries are unavailable for this FIN session.',
+ queryRunMissing:'The query has expired or is no longer accessible.',
+ queryRunBusy:'Background queries are busy. Try again when a query completes.',
+ queryRunRequest:'The background query request is invalid.',
+ queryRunCutoff:'The query data cutoff is invalid.',
+ queryRunFailed:'The background query could not be completed.',
+});
+Object.assign(chineseServerMessages,{
+ queryRunUnavailable:'当前 FIN 会话无法使用后台查询。',
+ queryRunMissing:'查询已过期或当前无法访问。',
+ queryRunBusy:'后台查询繁忙，请在已有查询完成后重试。',
+ queryRunRequest:'后台查询请求无效。',
+ queryRunCutoff:'查询的数据截止时间无效。',
+ queryRunFailed:'后台查询未能完成。',
+});

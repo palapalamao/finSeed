@@ -15,6 +15,25 @@ it('reads the cockpit with native FIN POST credentials and a cancellable request
 });
 
 const query=():CockpitRequest=>({schemaVersion:1,requestId:'wire',reportScope:{dimension:'space',nodeIds:['site'],selectionIntent:'range'},focusCategoryId:'electricity',time:{preset:'custom',period:'hour',from:'2026-10-30T00:00:00Z',to:'2026-10-30T01:00:00Z'},modules:['kpis','trend']});
+it('uses one background run for an eligible long cockpit selection and decodes its complete result',async()=>{
+ const request={...query(),time:{preset:'thisYear' as const,period:'month' as const}};
+ const api=new FinEnergyApi('test',undefined,true);
+ const reply=(data:unknown)=>new Response(JSON.stringify({ok:true,data}));
+ vi.mocked(finCsrfFetch).mockResolvedValueOnce(reply({id:'run',state:'running'})).mockResolvedValueOnce(reply({
+  id:'run',state:'ready',result:{payloadEncoding:'compact-v1',codecVersion:1,evidence:{},snapshot:{snapshotId:'complete'}},
+ }));
+ expect(await api.cockpit(request)).toEqual({snapshotId:'complete'});
+ expect(finCsrfFetch).toHaveBeenCalledWith('/api/test/ext/finEnergy/v1/query/run',expect.objectContaining({body:JSON.stringify({kind:'cockpit',request:{...request,payloadEncoding:'compact-v1'}})}));
+ expect(finCsrfFetch).toHaveBeenLastCalledWith('/api/test/ext/finEnergy/v1/query/status?id=run',expect.objectContaining({method:'GET'}));
+});
+it('uses the compatible endpoint when the server confirms that background work is unavailable',async()=>{
+ const request={...query(),time:{preset:'thisYear' as const,period:'month' as const}};
+ const api=new FinEnergyApi('test',undefined,true);
+ vi.mocked(finCsrfFetch).mockResolvedValueOnce(new Response(JSON.stringify({ok:false,error:{code:'QUERY_RUN_UNAVAILABLE',msg:'queryRunUnavailable'}}),{status:409}));
+ vi.mocked(finCsrfFetch).mockResolvedValueOnce(new Response(JSON.stringify({ok:true,data:{snapshotId:'sync'}})));
+ expect(await api.cockpit(request)).toEqual({snapshotId:'sync'});
+ expect(finCsrfFetch).toHaveBeenLastCalledWith('/api/test/ext/finEnergy/v1/cockpit',expect.objectContaining({method:'POST'}));
+});
 it('decodes the negotiated snapshot before exposing it to query, report and export consumers',async()=>{
  const api=new FinEnergyApi('test'),request=query(),id='a'.repeat(64);
  const wire={payloadEncoding:'compact-v1',codecVersion:1,snapshot:{schemaVersion:1,snapshotId:'frozen',rows:{$cockpitRef:id}},evidence:{[id]:{$cockpitTable:{columns:['value','quality'],rows:[[0,'ok'],[null,'na'],[-2,'partial']]}}}};

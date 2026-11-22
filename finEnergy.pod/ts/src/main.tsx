@@ -13,7 +13,7 @@ async function bootstrap(){
   const session=await loadFinSession(location);
   initializeLocale(session.locale,session.username);
   const {App}=await import('./App');
-  ReactDOM.createRoot(root).render(<React.StrictMode><App/></React.StrictMode>);
+  ReactDOM.createRoot(root).render(<React.StrictMode><App backgroundCockpit={session.backgroundCockpit}/></React.StrictMode>);
  }catch(error){
   initializeLocale('en');
   const message=document.createElement('p');
