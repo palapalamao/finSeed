@@ -6,7 +6,8 @@ class FinEnergyHistory
 {
   internal static Str:Obj? report(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories)
   {
-    result:=evidence(FinEnergyEngine.report(request,records,histories),histories)
+    result:=FinEnergyEngine.report(request,records,histories)
+    if(request["_profileFirst"]!=true) result=evidence(result,histories)
     if (request["_cockpitCategoryId"] != null)
     {
       // Report arithmetic and coverage already used every source interval.
@@ -236,7 +237,7 @@ class FinEnergyHistory
           config:=frozenConfigs?.get(id)
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
           result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict)
-          out.add(normalizeClean(point,result,from,to,request["kind"] == "trend"))
+          out.add(request["_profileFirst"]==true ? normalizeChartClean(point,result,from,to) : normalizeClean(point,result,from,to,request["kind"] == "trend"))
           return
         }
         cx.rt.his.read(point,span,request["raw"] == true ? Etc.makeDict(["raw":Marker.val]) : readOptions(point)) |HisItem item|
@@ -245,7 +246,9 @@ class FinEnergyHistory
           items.add(item)
         }
         mode:=outputMode(point,overrides.first,true)
-        out.add(normalize(point,items,from,to,request["kind"] == "trend",mode))
+        normalized:=normalize(point,items,from,to,request["kind"] == "trend",mode)
+        if(request["_profileFirst"]==true) normalized.remove("rawSamples")
+        out.add(normalized)
       }
       catch (ArgErr e)
       {
@@ -272,6 +275,7 @@ class FinEnergyHistory
 
   internal static Str[] pointIds(Str:Obj? request, [Str:Obj?][] records)
   {
+    if(request["_profileFirst"]==true) return FinEnergyProfileFirst.pointIds(request,records)
     plan:=dependencies(request,records)
     return ((Str[])plan["points"]).dup.addAll(FinEnergyReferenceCurves.pointIds(request,records)).unique.sort
   }
@@ -716,6 +720,25 @@ class FinEnergyHistory
       return ["from":start.toIso,"to":end.toIso,"value":detail["value"],"valueType":detail["valueType"],"quality":detailQuality(detail)]
     }
     return ["pointId":point.id.id,"unit":point["unit"]?.toStr ?: "","mode":"interval","quality":"cleaned","rawQuality":"ok","samples":samples,"rawSamples":trend ? samples : raw,"intervals":intervals,"sourceIds":result.summary["sourceIds"] ?: [point.id.id],"cleaning":meta]
+  }
+
+  ** The admitted chart has no raw/reference/gauge consumers. Strict and known
+  ** readers use these same authoritative closed intervals, without building
+  ** raw-sample DTOs, synthetic hourly samples or deferred cleaning diagnostics.
+  internal static Str:Obj? normalizeChartClean(Dict point,FinEnergyCleanResult result,DateTime from,DateTime to)
+  {
+    intervals:=[Str:Obj?][,]
+    result.details.each |d|
+    {
+      if(d["emitted"]==false || d["intervalSeconds"]==null) return
+      end:=DateTime.fromIso(d["ts"].toStr).toTimeZone(from.tz)
+      seconds:=FinEnergyMath.num(d["intervalSeconds"]) ?: 0f
+      if(seconds<=0f) return
+      start:=end-Duration((seconds*1sec.ticks.toFloat).toInt)
+      if(end<=from || start>=to) return
+      intervals.add(["from":start.toIso,"to":end.toIso,"value":d["value"],"valueType":d["valueType"],"quality":detailQuality(d)])
+    }
+    return ["pointId":point.id.id,"unit":point["unit"]?.toStr ?: "","mode":"interval","quality":"cleaned","samples":[Str:Obj?][,],"intervals":intervals,"sourceIds":result.summary["sourceIds"] ?: [point.id.id]]
   }
 
   private static Str:Obj? unavailable(Str id, Str quality)

@@ -432,9 +432,22 @@ class FinEnergyRepo
 
   [Str:Obj?] report([Str:Obj?] input)
   {
+    if(input["responseMode"]!=null && !["full","chart"].contains(input["responseMode"])) throw ArgErr("Invalid report response mode")
+    started:=Duration.nowTicks
     prepared:=prepareReport(input)
     request:=(Str:Obj?)prepared["request"]; all:=([Str:Obj?][])prepared["records"]
-    result:=FinEnergyHistory.report(request,all,FinEnergyHistory.load(cx,request,all))
+    request=FinEnergyProfileFirst.activate(request,all)
+    preparedAt:=Duration.nowTicks
+    histories:=FinEnergyHistory.load(cx,request,all)
+    loadedAt:=Duration.nowTicks
+    result:=FinEnergyHistory.report(request,all,histories)
+    if(request["_profileFirst"]==true)
+    {
+      finishedAt:=Duration.nowTicks
+      extra:=(Str:Obj?)result["extra"]
+      extra["profileDelivery"]=["mode":"chart","diagnostics":"deferred","snapshotId":Uuid().toStr,"sourceCount":histories.size,
+        "phaseMs":["prepare":(preparedAt-started)/1ms.ticks,"history":(loadedAt-preparedAt)/1ms.ticks,"calculate":(finishedAt-loadedAt)/1ms.ticks,"total":(finishedAt-started)/1ms.ticks]]
+    }
     if (FinEnergyComparisonScope.active(request) || request["kind"] == "energyFlow")
     {
       readable:=Str:Bool[:]
@@ -529,6 +542,7 @@ class FinEnergyRepo
     mustRead
     requireLicensedCalculation
     request := input.dup
+    request.remove("_profileFirst")
     request.remove("_cockpitDiagnosticCapture")
     if(!cockpit) request.remove("_cockpitExactMeterSet")
     now:=DateTime.now

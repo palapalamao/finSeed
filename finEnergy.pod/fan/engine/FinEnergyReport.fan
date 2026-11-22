@@ -430,12 +430,12 @@ internal class FinEnergyReport
       }
       extra["usageBasis"]="knownUsage"
       extra["usageCoverage"]=lines.findAll |l| {!l.reference && !l.ratio && !l.gauge}.map |l->[Str:Obj?]| {coverage(l)}
-      extra["knownUsage"]=(consumedEvidence ?: knownCtx.knownEvidence).set("asOf",dataCutoff.toIso)
+      if(request["_profileFirst"]!=true) extra["knownUsage"]=(consumedEvidence ?: knownCtx.knownEvidence).set("asOf",dataCutoff.toIso)
     }
     recordLineAreas(lines)
     if (kind == "leak") leakTotals(lines)
     if (kind == "utility") extra["details"]=extra["utilityMembers"]
-    else if (ctx.dimension != null) dimensionDetails(lines)
+    else if (ctx.dimension != null && request["_profileFirst"]!=true) dimensionDetails(lines)
     return result
   }
 
