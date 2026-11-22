@@ -205,6 +205,7 @@ class FinEnergyHistory
     out:=[Str:Obj?][,]
     modeRecords:=FinEnergyDimension.active(request) ? FinEnergyDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
     ids:=frozenPoints == null ? pointIds(request,records) : frozenPoints.keys
+    referenceSources:=FinEnergyReferenceCurves.pointIds(request,records)
     guard:=request["_reportDeadline"] as FinEnergyCockpitDeadline
     addTiming(timing,"plannedPoints",ids.size)
     ids.each |id|
@@ -250,7 +251,7 @@ class FinEnergyHistory
           config:=frozenConfigs?.get(id)
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
           cockpit:=request.keys.any |key| {key.startsWith("_cockpit")}
-          rawView:=request["kind"]=="regression" || !FinEnergyMath.strings(request["referenceIds"]).isEmpty
+          rawView:=request["kind"]=="regression" || referenceSources.contains(id)
           options:=config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val])
           if(request["_profileFirst"]!=true && !cockpit && !rawView)
           {
