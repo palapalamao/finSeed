@@ -847,17 +847,18 @@ internal class FinEnergyReport
   {
     strict:=FinEnergyValue[,]
     usage:=FinEnergyValue[,]
+    order:=Int[,]
     groups:=Str:Int[][:]
     lines.each |l,index|
     {
       value:=l.total
       strict.add(value)
       usage.add(displaysKnown(l) ? l.knownTotal : value)
+      order.add(index)
       key:="${l.category}|${l.unit}"
       if(!groups.containsKey(key)) groups[key]=Int[,]
       groups[key].add(index)
     }
-    order:=lines.map |l,index->Int| {index}
     order.sort |a,b| {(usage[b].value ?: Float.negInf) <=> (usage[a].value ?: Float.negInf)}
     denominators:=Str:FinEnergyValue[:]
     knownDenominators:=Str:FinEnergyValue[:]

@@ -37,6 +37,46 @@ test('a normal profile query returns the complete report in its first request',a
  await expect.poll(async()=>page.evaluate(()=>performance.getEntriesByName('finenergy.query.operation').some(entry=>entry instanceof PerformanceMeasure&&entry.detail.outcome==='complete'))).toBe(true);
 });
 
+test('an over-budget complete query can finish with its result or be cancelled explicitly',async({page})=>{
+ await page.clock.install();
+ const {state}=await setup(page,'zh-CN',false);
+ let unblock!:()=>void;
+ const hold=new Promise<void>(resolve=>{unblock=resolve;});
+ await page.route('**/api/testproject/ext/finEnergy/v1/report',async route=>{
+  await hold;
+  await route.fallback();
+ });
+ const submit=page.locator('.filter-actions button').filter({has:page.locator('.anticon-search')});
+ const request=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/report');
+ await submit.click();await request;
+ await page.clock.runFor(11_600);
+ const slow=page.getByText(/超过 11 秒查询目标/);
+ await expect(slow).toBeVisible();
+ unblock();
+ await expect(slow).toHaveCount(0);
+ await expect.poll(async()=>page.evaluate(()=>performance.getEntriesByName('finenergy.query.operation').some(entry=>entry instanceof PerformanceMeasure&&entry.detail.outcome==='complete'&&entry.detail.missed))).toBe(true);
+ expect(state.requests.filter(r=>r.path==='report')).toHaveLength(2);
+
+ let releaseCancelled!:()=>void;
+ const cancelledHold=new Promise<void>(resolve=>{releaseCancelled=resolve;});
+ await page.route('**/api/testproject/ext/finEnergy/v1/report',async route=>{
+  await cancelledHold;
+  await route.abort().catch(()=>undefined);
+ });
+ await page.route('**/api/testproject/ext/finEnergy/v1/query/cancel',route=>route.fulfill({json:{ok:true,data:{cancelled:true}}}));
+ try{
+  const second=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/report');
+  await submit.click();
+  const pending=await second;
+  await page.clock.runFor(11_600);
+  const cancelled=page.waitForRequest('**/api/testproject/ext/finEnergy/v1/query/cancel');
+  await page.getByRole('button',{name:'取消查询',exact:true}).click();
+  expect((await cancelled).postDataJSON().id).toBe(pending.headers()['x-fin-energy-query-id']);
+  await expect(slow).toHaveCount(0);
+  await expect(page.locator('.cleaning-report-summary')).toBeVisible();
+ }finally{releaseCancelled();}
+});
+
 for(const language of ['zh-CN','en-US']){
  test('first chart is on demand and replaces the whole snapshot in '+language,async({page},testInfo)=>{
   const {control,state}=await setup(page,language);expect(control.chartCalls).toBe(1);expect(control.fullCalls).toBe(0);
