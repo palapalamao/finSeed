@@ -28,9 +28,11 @@ internal const class FinEnergyQueryCancellation
   {
     query:=((Str:Obj?)active.val)[scopeKey(project,user,id)] as FinEnergyQueryCancellation
     if(query==null) return false
-    query.cancelled.val=true
+    query.requestCancel
     return true
   }
+
+  internal Void requestCancel() {cancelled.val=true}
 
   Void check()
   {

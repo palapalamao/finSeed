@@ -37,7 +37,7 @@ class FinEnergyRestTest : Test
   }
   Void testOnlyExplicitReadPostsBypassWritePermission()
   {
-    ["report","cockpit","cleaning/preview"].each |route| { verify(FinEnergyRest.readPost(route)) }
+    ["report","cockpit","cleaning/preview","query/run","query/stop"].each |route| { verify(FinEnergyRest.readPost(route)) }
     ["records","records/delete","tasks","alarms/ack","tree/manage","cockpit/save","cockpit/budgets/save","cockpit/budgets/delete","cockpit/rule-profiles/save","cockpit/rule-profiles/delete"].each |route| { verify(!FinEnergyRest.readPost(route)) }
   }
 }

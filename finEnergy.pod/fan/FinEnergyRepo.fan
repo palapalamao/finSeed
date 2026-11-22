@@ -467,7 +467,6 @@ class FinEnergyRepo
     mustRead
     if(scope==null) FinEnergyCockpitGate.enter(cx.proj.name,cx.user.username)
     else scope.checkContext(cx.proj.name,cx.user.username)
-    started:=Duration.nowTicks
     deadline:=scope?.deadline ?: FinEnergyCockpitDeadline()
     FinEnergyCockpitSourceSession? session;Err? failure
     try
@@ -496,7 +495,7 @@ class FinEnergyRepo
       scope==null ? null : |Str key,Str:Obj? q->Str:Obj?| {session.read(key,q)},
       scope==null ? null : |Str id,Str:Obj? q->Str:Obj?| {session.copData(id,q)},
       scope==null ? null : |Str id,Str:Obj? q->Str:Obj?| {session.ruleData(id,q)},scope)
-      if (Duration.nowTicks-started > 30sec.ticks) throw FinEnergyHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
+      deadline.check
       return result
     }
     catch(Err e) {failure=e;throw e}

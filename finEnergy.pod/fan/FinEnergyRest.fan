@@ -18,7 +18,7 @@ const class FinEnergyRest : WebMod
       path := req.uri.path
       i := path.findIndex |p| { p == "v1" }
       route := i == null || i+1 >= path.size ? "" : path[i+1..-1].join("/")
-      readOnly := ["session","catalog","points","alarms","alarms/page","alarms/detail","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
+      readOnly := ["query/status","session","catalog","points","alarms","alarms/page","alarms/detail","messages/changes","comparison-scopes","tree","migration/preview","cockpit/assets","cockpit/assets/image","cockpit/budgets","cockpit/rule-profiles","cockpit/config-audit","license/status"].contains(route)
       if (!["session","license/status","license/import","license/delete"].contains(route)) repo.requireConfigurationAccess
       if (req.method != (readOnly ? "GET" : "POST")) throw FinEnergyHttpErr(405,"METHOD","请求方法不支持")
       body := Str:Obj?[:]
@@ -49,7 +49,7 @@ const class FinEnergyRest : WebMod
         case "cockpit/assets/image":
           image:=FinEnergyCockpitAssets(repo).image(req.uri.query["id"] ?: "",req.uri.query["hash"] ?: "")
           sendImage(image); return
-        case "session": data=["edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username]
+        case "session": data=["edition":FinEnergyEditionLicense.edition,"licenseMode":FinEnergyEditionLicense.licenseMode,"locale":hx::HxCoreFuncs.context.get("locale"),"username":Context.cur.user.username,"backgroundCockpit":FinEnergyQueryRuns.available(repo.cx)]
         case "license/status": data=repo.licenseStatus
         case "license/import": data=repo.licenseImport(body["license"])
         case "license/delete": data=repo.licenseDelete(body["token"])
@@ -82,6 +82,9 @@ const class FinEnergyRest : WebMod
           })
           logQuery(route,phases,started,wireAt)
           return
+        case "query/run": data=FinEnergyQueryRuns.submit(repo.cx,body)
+        case "query/status": data=FinEnergyQueryRuns.status(repo.cx,req.uri.query["id"] ?: "")
+        case "query/stop": data=FinEnergyQueryRuns.stop(repo.cx,str(body,"id"))
         case "query/cancel": data=["cancelled":FinEnergyQueryCancellation.cancel(repo.cx.proj.name,repo.cx.user.username,str(body,"id"))]
         case "cleaning/preview": data=FinEnergyCleaningRepo(repo).preview(body)
         case "tasks": data=FinEnergyJobs(repo).run(body)
@@ -252,7 +255,7 @@ const class FinEnergyRest : WebMod
   }
 
   ** Authentication and FIN CSRF still run through the native /api project route.
-  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve","query/cancel"].contains(route) }
+  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve","query/cancel","query/run","query/stop"].contains(route) }
 }
 
 ** The response is flushed and completed by the WebMod after gzip is finalized.
