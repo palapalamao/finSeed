@@ -249,10 +249,16 @@ class FinEnergyHistory
         {
           config:=frozenConfigs?.get(id)
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
-          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict,timing,guard)
-          normalizing:=Duration.nowTicks
           cockpit:=request.keys.any |key| {key.startsWith("_cockpit")}
           rawView:=request["kind"]=="regression" || !FinEnergyMath.strings(request["referenceIds"]).isEmpty
+          options:=config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val])
+          if(request["_profileFirst"]!=true && !cockpit && !rawView)
+          {
+            out.add(fullCleanRead(cx,point,span,options,config ?: Etc.emptyDict,from,to,timing,guard))
+            return
+          }
+          result:=cleanRead(cx,point,span,options,config ?: Etc.emptyDict,timing,guard)
+          normalizing:=Duration.nowTicks
           out.add(request["_profileFirst"]==true ? normalizeChartClean(point,result,from,to) :
             (cockpit ? normalizeClean(point,result,from,to) : normalizeFullClean(point,result,from,to,rawView)))
           addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
@@ -448,17 +454,7 @@ class FinEnergyHistory
   private static FinEnergyCleanResult cleanStored(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null,FinEnergyCockpitDeadline? guard := null)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
-    if (!opts.has("finEnergyCleaningPreview") || config.isEmpty)
-    {
-      defaults:=point["hisFuncConfig"] as Dict ?: Etc.emptyDict
-      if (point.has("finEnergyCleaningOwned"))
-      {
-        stored:=cx.db.readById(point.id,false) ?: throw ArgErr("missingSource")
-        defaults=FinEnergyCleaningRepo(FinEnergyRepo(cx)).currentConfig(stored)
-      }
-      config=selectConfig(defaults,config)
-    }
-    if (config.isEmpty) throw ArgErr("missingCleaningProfile")
+    config=cleaningConfig(cx,point,opts,config)
     raw:=storedRaw(cx,point,span,timing,guard)
     started:=Duration.nowTicks
     answer:=FinEnergyCleaning.clean(point,raw,config)
@@ -470,6 +466,60 @@ class FinEnergyHistory
     answer.summary["profileVersion"]=(config["finEnergyProfileVersion"] as Number)?.toInt
     answer.summary["parameters"]=FinEnergyCleaning.jsonConfig(config)
     return answer
+  }
+
+  private static Dict cleaningConfig(Context cx,Dict point,Dict opts,Dict config)
+  {
+    if (!opts.has("finEnergyCleaningPreview") || config.isEmpty)
+    {
+      defaults:=point["hisFuncConfig"] as Dict ?: Etc.emptyDict
+      if (point.has("finEnergyCleaningOwned"))
+      {
+        stored:=cx.db.readById(point.id,false) ?: throw ArgErr("missingSource")
+        defaults=FinEnergyCleaningRepo(FinEnergyRepo(cx)).currentConfig(stored)
+      }
+      config=selectConfig(defaults,config)
+    }
+    if (config.isEmpty) throw ArgErr("missingCleaningProfile")
+    return config
+  }
+
+  private static Str:Obj? fullCleanRead(Context cx,Dict point,Span span,Dict opts,Dict config,DateTime from,DateTime to,[Str:Int]? timing,FinEnergyCockpitDeadline? guard)
+  {
+    if(!cx.canRead(point)) throw ArgErr("forbidden")
+    config=cleaningConfig(cx,point,opts,config)
+    stream:=FinEnergyFullCleaning(point,config,from,to,1000000,timing)
+    started:=Duration.nowTicks;observed:=0
+    try
+    {
+      try
+      {
+        cx.rt.his.read(point,span,Etc.makeDict(["raw":Marker.val])) |HisItem item|
+        {
+          if(observed%2048==0) guard?.check
+          stream.push(item)
+          observed++
+        }
+      }
+      finally
+      {
+        addTiming(timing,"nativeReadNs",Duration.nowTicks-started-stream.processingNs)
+        addTiming(timing,"nativeReads",1);addTiming(timing,"rawRows",observed)
+      }
+      guard?.check
+      return stream.finish
+    }
+    catch(FinEnergyFullCleaningOrderErr e)
+    {
+      // Reuse the same resolved profile. Native order differs from bulk's stable
+      // sort, so discard this observation and build the full original projection.
+      addTiming(timing,"cleaningOrderFallbacks",1)
+      original:=cleanStored(cx,point,span,Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config,timing,guard)
+      normalizing:=Duration.nowTicks
+      projected:=normalizeFullClean(point,original,from,to)
+      addTiming(timing,"normalizeNs",Duration.nowTicks-normalizing)
+      return projected
+    }
   }
 
   private static HisItem[] storedRaw(Context cx, Dict point, Span span,[Str:Int]? timing := null,FinEnergyCockpitDeadline? guard := null)
