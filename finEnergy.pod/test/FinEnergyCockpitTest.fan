@@ -186,6 +186,25 @@ class FinEnergyCockpitTest : Test
     verifyEq(((List)((Map)((Map)result["reports"])["profile-energy"])["series"]).size,1)
   }
 
+  Void testIndependentFaceConfigurationGuardRunsBeforeHistory()
+  {
+    base:=run(request,records,histories)
+    token:=((Map)base["context"])["configurationToken"]
+    verify(Regex<|[0-9a-f]{64}|>.matches(token))
+    q:=request;q["modules"]=["time"];q["expectedConfigurationToken"]=token
+    face:=run(q,records,histories)
+    verifyEq(((Map)face["context"])["configurationToken"],token)
+    verify(!((Map)face["modules"]).containsKey("kpis"));verify(((Map)face["modules"]).containsKey("time"))
+    count:=0;q["expectedConfigurationToken"]="b"*64
+    try
+    {
+      FinEnergyCockpit.execute(q,records,|rq,rs->[Str:Obj?][]| {count++;return histories},"test",TimeZone.utc,now)
+      fail("Expected configuration conflict")
+    }
+    catch(FinEnergyHttpErr e) {verifyEq(e.status,409);verifyEq(e.code,"COCKPIT_CONFIGURATION_CHANGED")}
+    verifyEq(count,0)
+  }
+
   private Str:Obj? run(Str:Obj? q, [Str:Obj?][] rs, [Str:Obj?][] hs)
   { FinEnergyCockpit.execute(q,rs,|rq,recs->[Str:Obj?][]| {hs},"test",TimeZone.utc,now,false,|->DateTime| {now}) }
   private Str:Obj? energy(Str:Obj? r) { ((List)((Map)((Map)((Map)r["modules"])["kpis"])["data"])["values"]).first }

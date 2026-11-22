@@ -1,0 +1,11 @@
+import {memo,useState} from 'react';
+import type {CockpitSnapshot} from './cockpitTypes';
+import type {ReportSnapshot} from './types';
+import {locale,t} from './i18n';
+import {cockpitCompleteValue} from './cockpitReport';
+import {reportQualityText} from './reportQuality';
+const time=(value:string|null|undefined)=>value?value.replace('T',' '):t('暂无数据');
+export const CockpitSourceEvidence=memo(function CockpitSourceEvidence({snapshot,report}:{snapshot:CockpitSnapshot;report:ReportSnapshot}){
+ const [loaded,setLoaded]=useState(false),[cleaningLoaded,setCleaningLoaded]=useState(false);
+ return <details onToggle={e=>{if(e.currentTarget.open)setLoaded(true);}} className="cockpit-details" id="cockpit-source-evidence"><summary>{t('查看趋势明细与数据来源')}</summary>{loaded&&<><div className="cockpit-table-scroll"><table><thead><tr><th>{t('对象')}</th><th>{t('时间')}</th><th>{t('已有用量')}</th><th>{t('完整区间用量')}</th><th>{t('单位')}</th><th>{t('数据质量')}</th></tr></thead><tbody>{report.result.series.flatMap(series=>series.points.map(point=><tr key={series.id+point.ts}><td>{series.name}</td><td>{time(point.ts)}</td><td>{point.knownValueType==='na'||point.knownValueType==null&&point.valueType==='na'?'NA':point.knownValue??point.value??'—'}</td><td>{cockpitCompleteValue(point)??'—'}</td><td>{series.unit}</td><td>{reportQualityText(report,point.quality)}</td></tr>))}</tbody></table></div><dl><dt>{t('主能耗点')}</dt><dd>{snapshot.boundary.sourcePointIds.join('、')||'—'}</dd><dt>{t('配置指纹')}</dt><dd>{snapshot.provenance.configFingerprint}</dd></dl><details onToggle={e=>{if(e.currentTarget.open)setCleaningLoaded(true);}}><summary>{t('查看数据清洗依据')}</summary>{cleaningLoaded&&<><dl><dt>{t('配置冻结观察区间')}</dt><dd>{time(snapshot.provenance.historyConfigObservedFrom)} — {time(snapshot.provenance.historyConfigObservedTo)}</dd><dt>{t('历史读取观察区间')}</dt><dd>{time(snapshot.provenance.historyObservedFrom)} — {time(snapshot.provenance.historyObservedTo)}</dd></dl><pre>{JSON.stringify(snapshot.provenance.appliedCleaning||report.result.extra?.cleaning||[],null,2)}</pre></>}</details><ul>{snapshot.quality.map((q,index)=><li key={String(q.id||index)}>{String(q.name||q.nodeId||q.id||'—')}：{typeof q.coverage==='number'?new Intl.NumberFormat(locale,{style:'percent',maximumFractionDigits:1}).format(q.coverage):'—'}</li>)}</ul></>}</details>;
+});

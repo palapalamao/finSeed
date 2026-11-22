@@ -44,7 +44,7 @@ internal const class FinEnergyCockpitInput
       records.findAll |r| {r["kind"]=="category"}.each |r|
       {units[r["id"].toStr]=ctx.unit("__unit_inference__",r["id"].toStr,"energy")}
       config:=owned.dup;config.remove("modelRecords")
-      return FinEnergyCockpitDigest.encoded(["project":project,"tz":tz,"facts":facts,"owned":config,"units":units],budget?.deadline,budget).sha256
+      return FinEnergyCockpitDigest.encoded(["schemaVersion":1,"edition":FinEnergyEditionLicense.edition,"version":FinEnergyRepo#.pod.version.toStr,"project":project,"tz":tz,"facts":facts,"owned":config,"units":units],budget?.deadline,budget).sha256
     }
     finally {work?.close}
   }

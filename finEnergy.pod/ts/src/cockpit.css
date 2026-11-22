@@ -48,3 +48,5 @@
 .diagnostic-print table{margin:12px 0;font-size:9px}.diagnostic-print th,.diagnostic-print td{white-space:normal;overflow-wrap:anywhere;vertical-align:top}.diagnostic-print th:first-child{width:100px}
 
 .cockpit-brief-spaces>.cockpit-space-schematic{flex-basis:100%;min-width:0;max-width:100%}
+
+.cockpit-view-observation{overflow-wrap:anywhere;font-size:.85rem}

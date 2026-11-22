@@ -84,3 +84,16 @@ function applyLocale(){
   document.title=t('FIN 能源管理 · 楼宇能源分析');
  }
 }
+
+// Cockpit observation-local loading; dictionaries remain open to future locales.
+Object.assign(englishMessages,{
+ '此快照缺少配置版本，请刷新首页。':'This snapshot has no configuration version. Refresh the homepage.',
+ '配置已变化，请刷新首页后重新打开此视角。':'Configuration changed. Refresh the homepage before reopening this view.',
+ '该视角读取失败，可再次选择重试。':'This view could not be loaded. Select it again to retry.',
+ '此视角正在按需读取…':'Loading this view…',
+ '视角独立快照：{0}；历史观察：{1} 至 {2}。':'Independent view snapshot: {0}; history observed from {1} to {2}.',
+ '该视角使用独立快照，核心指标和趋势保留首页快照。':'This view has its own snapshot. Core indicators and the trend retain the homepage snapshot.',
+ '正在生成完整冻结汇报…':'Preparing a complete frozen report…'
+});
+Object.assign(serverMessages,{cockpitConfigurationChanged:'Configuration changed. Refresh the homepage before reopening this view.'});
+Object.assign(chineseServerMessages,{cockpitConfigurationChanged:'配置已变化，请刷新首页后重新打开此视角。'});

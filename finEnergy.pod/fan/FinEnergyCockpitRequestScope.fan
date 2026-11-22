@@ -202,7 +202,11 @@ internal class FinEnergyCockpitRequestScope
         normalizedOwned=owned.dup.set("modelRecords",model);configuration=normalizedOwned
       }
       scratch.hold(4);bundle=["input":input,"owned":configuration,"records":records]
-      inputs=(Str:Obj?)FinEnergyCockpitFreeze.value(bundle,inputOwner);finishPreparation;return inputs
+      started:=Duration.nowTicks
+      inputs=(Str:Obj?)FinEnergyCockpitFreeze.value(bundle,inputOwner);finishPreparation
+      operationalHeaders:=0;records.each |r| {if(FinEnergyCockpitInput.operational(r["kind"])) operationalHeaders++}
+      Log.get("finEnergy").info("Cockpit input frozen records=${records.size} operationalHeaders=$operationalHeaders inputEntries=${inputOwner.entries} peakEntries=${stream.state.peak.val} freezeMs=${(Duration.nowTicks-started)/1ms.ticks}")
+      return inputs
     }
     finally {bundle?.clear;facts?.clear;model?.clear;normalizedOwned?.clear;scratch.close}
   }
