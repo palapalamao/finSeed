@@ -204,12 +204,14 @@ class FinEnergyHistory
     out:=[Str:Obj?][,]
     modeRecords:=FinEnergyDimension.active(request) ? FinEnergyDimension(request["dimension"].toStr,records,request["spaceSource"] == "fin").records : records
     ids:=frozenPoints == null ? pointIds(request,records) : frozenPoints.keys
+    guard:=request["_reportDeadline"] as FinEnergyCockpitDeadline
     addTiming(timing,"plannedPoints",ids.size)
     ids.each |id|
     {
       Dict? point:=null
       try
       {
+        guard?.check
         point=frozenPoints == null ? cx.db.readById(Ref(id),false) : frozenPoints[id]
         if (point == null || !point.has("his")) { out.add(unavailable(id,"missing")); return }
         if (!cx.canRead(point)) { out.add(unavailable(id,"forbidden")); return }
@@ -230,6 +232,7 @@ class FinEnergyHistory
           cx.rt.his.read(point,span,Etc.makeDict(["raw":Marker.val])) |HisItem item|
           {
             if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
+            if(items.size%2048==0) guard?.check
             items.add(item)
           }
           }
@@ -245,7 +248,7 @@ class FinEnergyHistory
         {
           config:=frozenConfigs?.get(id)
           if (frozenConfigs != null && (config == null || config.isEmpty)) throw ArgErr("missingCleaningProfile")
-          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict,timing)
+          result:=cleanRead(cx,point,span,config == null ? Etc.emptyDict : Etc.makeDict(["finEnergyCleaningPreview":Marker.val]),config ?: Etc.emptyDict,timing,guard)
           normalizing:=Duration.nowTicks
           cockpit:=request.keys.any |key| {key.startsWith("_cockpit")}
           rawView:=request["kind"]=="regression" || !FinEnergyMath.strings(request["referenceIds"]).isEmpty
@@ -260,6 +263,7 @@ class FinEnergyHistory
         cx.rt.his.read(point,span,request["raw"] == true ? Etc.makeDict(["raw":Marker.val]) : readOptions(point)) |HisItem item|
         {
           if (items.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
+          if(items.size%2048==0) guard?.check
           items.add(item)
         }
         }
@@ -276,7 +280,7 @@ class FinEnergyHistory
         code:=frozenPoints != null && e.msg.startsWith("History exceeds ") ? "historySampleLimit" : (["missingSource","missingCleaningProfile","duplicateSource","cycle","incompatibleCategory","incompatibleUnit","missingBranches"].contains(e.msg) ? e.msg : "invalidCleaningConfiguration")
         failed:=unavailable(id,code); failed["error"]=e.msg; out.add(failed)
       }
-      catch (Err e) { out.add(unavailable(id,"historyReadError")) }
+      catch (Err e) { guard?.check;out.add(unavailable(id,"historyReadError")) }
     }
     return out
   }
@@ -418,13 +422,13 @@ class FinEnergyHistory
 
   ** Shared entry for FIN hisRead and reports. Every meter cleans its own stored
   ** readings; historical queries never expand its current child relationships.
-  internal static FinEnergyCleanResult cleanRead(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null)
+  internal static FinEnergyCleanResult cleanRead(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null,FinEnergyCockpitDeadline? guard := null)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
-    return cleanStored(cx,point,span,opts,config,timing)
+    return cleanStored(cx,point,span,opts,config,timing,guard)
   }
 
-  private static FinEnergyCleanResult cleanStored(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null)
+  private static FinEnergyCleanResult cleanStored(Context cx, Dict point, Span span, Dict opts, Dict config,[Str:Int]? timing := null,FinEnergyCockpitDeadline? guard := null)
   {
     if (!cx.canRead(point)) throw ArgErr("forbidden")
     if (!opts.has("finEnergyCleaningPreview") || config.isEmpty)
@@ -438,9 +442,10 @@ class FinEnergyHistory
       config=selectConfig(defaults,config)
     }
     if (config.isEmpty) throw ArgErr("missingCleaningProfile")
-    raw:=storedRaw(cx,point,span,timing)
+    raw:=storedRaw(cx,point,span,timing,guard)
     started:=Duration.nowTicks
     answer:=FinEnergyCleaning.clean(point,raw,config)
+    guard?.check
     addTiming(timing,"cleanNs",Duration.nowTicks-started)
     answer.summary["sourceIds"]=[point.id.id]
     answer.summary["pointId"]=point.id.id
@@ -450,7 +455,7 @@ class FinEnergyHistory
     return answer
   }
 
-  private static HisItem[] storedRaw(Context cx, Dict point, Span span,[Str:Int]? timing := null)
+  private static HisItem[] storedRaw(Context cx, Dict point, Span span,[Str:Int]? timing := null,FinEnergyCockpitDeadline? guard := null)
   {
     raw:=HisItem[,]
     started:=Duration.nowTicks
@@ -459,6 +464,7 @@ class FinEnergyHistory
     cx.rt.his.read(point,span,Etc.makeDict(["raw":Marker.val])) |item|
     {
       if (raw.size >= 1000000) throw ArgErr("History exceeds 1000000 raw samples")
+      if(raw.size%2048==0) guard?.check
       raw.add(item)
     }
     }

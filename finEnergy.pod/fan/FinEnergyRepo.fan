@@ -416,11 +416,16 @@ class FinEnergyRepo
   {mustRead;return FinEnergyPointCatalog.resolve(cx.db,|Dict r->Bool| {cx.canRead(r)},body)}
 
   [Str:Obj?] report([Str:Obj?] input,[Str:Int]? timing := null)
+  {reportWithCancellation(input,timing,null)}
+
+  internal [Str:Obj?] reportWithCancellation([Str:Obj?] input,[Str:Int]? timing,FinEnergyQueryCancellation? cancellation)
   {
     started:=Duration.nowTicks
     prepared:=prepareReport(input)
     request:=(Str:Obj?)prepared["request"]; all:=([Str:Obj?][])prepared["records"]
     request=FinEnergyProfileFirst.activate(request,all)
+    if(cancellation!=null) request["_reportDeadline"]=FinEnergyCockpitDeadline(null,|->Int| {Duration.nowTicks},cancellation)
+    cancellation?.check
     preparedAt:=Duration.nowTicks
     histories:=FinEnergyHistory.load(cx,request,all,null,null,timing)
     loadedAt:=Duration.nowTicks
@@ -535,6 +540,7 @@ class FinEnergyRepo
     requireLicensedCalculation
     request := input.dup
     request.remove("_profileFirst")
+    request.remove("_reportDeadline")
     request.remove("_cockpitDiagnosticCapture")
     if(!cockpit) request.remove("_cockpitExactMeterSet")
     now:=DateTime.now

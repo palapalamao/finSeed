@@ -9,6 +9,7 @@ const class FinEnergyRest : WebMod
     started := Duration.nowTicks
     phases := Str:Int[:]
     FinEnergyCockpitRequestScope? cockpitScope
+    FinEnergyQueryCancellation? cancellation
     Err? failure
     try
     {
@@ -63,9 +64,13 @@ const class FinEnergyRest : WebMod
         case "records/delete": data=repo.remove(str(body,"id"),body["mod"])
         case "tree/manage": data=repo.manage(body)
         case "tree/copy": case "tree/move": case "tree/toggle": data=repo.tree(route.split('/').last,str(body,"id"),body["parentId"] as Str,body["mod"])
-        case "report": data=repo.report(body,phases)
+        case "report":
+          cancellation=FinEnergyQueryCancellation.open(repo.cx.proj.name,repo.cx.user.username,req.headers["X-FIN-Energy-Query-Id"])
+          data=repo.reportWithCancellation(body,phases,cancellation)
         case "cockpit":
-          cockpitScope=FinEnergyCockpitRequestScope(repo.cx.proj.name,repo.cx.user.username)
+          cancellation=FinEnergyQueryCancellation.open(repo.cx.proj.name,repo.cx.user.username,req.headers["X-FIN-Energy-Query-Id"])
+          stream:=cancellation==null ? null : FinEnergyStreamBudget(50000,200000,20000000,30sec,FinEnergyCockpitDeadline(30sec,|->Int| {Duration.nowTicks},cancellation))
+          cockpitScope=FinEnergyCockpitRequestScope(repo.cx.proj.name,repo.cx.user.username,stream)
           data=repo.cockpitScoped(body,cockpitScope)
           wireAt := Duration.nowTicks
           cockpitScope.deliver((Str:Obj?)data,|Buf bytes|
@@ -77,6 +82,7 @@ const class FinEnergyRest : WebMod
           })
           logQuery(route,phases,started,wireAt)
           return
+        case "query/cancel": data=["cancelled":FinEnergyQueryCancellation.cancel(repo.cx.proj.name,repo.cx.user.username,str(body,"id"))]
         case "cleaning/preview": data=FinEnergyCleaningRepo(repo).preview(body)
         case "tasks": data=FinEnergyJobs(repo).run(body)
         case "alarms": data=repo.alarms
@@ -93,6 +99,7 @@ const class FinEnergyRest : WebMod
         to := DateTime.fromIso(body["to"] as Str ?: "",false)
         if(from != null && to != null) phases["spanHours"]=(to-from).ticks/1hr.ticks
       }
+      cancellation?.check
       queryMetrics(phases,started)
       send(200,["ok":true,"data":data])
       logQuery(route,phases,started,encodingAt)
@@ -115,6 +122,7 @@ const class FinEnergyRest : WebMod
     }
     finally
     {
+      cancellation?.close
       try {cockpitScope?.close}
       catch(Err cleanup)
       {if(failure==null && cockpitScope?.responseStarted!=true) throw cleanup;Log.get("finEnergy").err("Cockpit request cleanup failed after response processing",cleanup)}
@@ -222,5 +230,5 @@ const class FinEnergyRest : WebMod
   }
 
   ** Authentication and FIN CSRF still run through the native /api project route.
-  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve"].contains(route) }
+  internal static Bool readPost(Str route) { ["report","cleaning/preview","cockpit","points/resolve","query/cancel"].contains(route) }
 }

@@ -15,7 +15,7 @@ class FinEnergyEngine
   private static Str:Obj? run(Str:Obj? request, [Str:Obj?][] records, [Str:Obj?][] histories, Bool section)
   {
     budget:=histories.find |h| {h["_preparedBudget"] is FinEnergyPreparedBudget}?.get("_preparedBudget") as FinEnergyPreparedBudget
-    deadline:=request["_cockpitDeadline"] as FinEnergyCockpitDeadline ?: budget?.deadline
+    deadline:=request["_reportDeadline"] as FinEnergyCockpitDeadline ?: (request["_cockpitDeadline"] as FinEnergyCockpitDeadline ?: budget?.deadline)
     baseline:=budget?.temporary?.val ?: 0
     deadline?.check
     try
@@ -84,7 +84,7 @@ class FinEnergyEngine
     }
     ctx:=FinEnergyContext(records,histories,tz,dimension)
     if(metric=="cost" && !request.keys.any |key| {key.startsWith("_cockpit")}) ctx.sealTariffs
-    ctx.deadline=request["_cockpitDeadline"] as FinEnergyCockpitDeadline ?: ctx.deadline
+    ctx.deadline=request["_reportDeadline"] as FinEnergyCockpitDeadline ?: (request["_cockpitDeadline"] as FinEnergyCockpitDeadline ?: ctx.deadline)
     ctx.comparison=request["_comparisonScope"] as FinEnergyComparisonScope
     if (kind == "energyFlow") return FinEnergyEnergyFlow(ctx,request,from,to,histories).report
     if (dimension?.nativeSpace == true) records.findAll |r| { r["nativeSourceMissing"] == true }.each |r| { label:=r["name"] ?: r["id"]; ctx.warn("$label : nativeSourceMissing") }

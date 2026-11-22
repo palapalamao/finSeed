@@ -23,12 +23,19 @@ export class FinEnergyApi {
  constructor(project:string,private onSessionExpired?:()=>void){if(!project)throw new ApiError('missing_project',t("请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。"),"请在 FIN 项目内打开 FIN 能源管理，或在地址的 #/profile?project=项目名 中指定项目。");this.base=`/api/${encodeURIComponent(project)}/ext/finEnergy/v1`;}
  async request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
   const started=performance.now();
+  const queryId=signal&&(path==='report'||path==='cockpit')&&globalThis.crypto?.getRandomValues
+   ? [...globalThis.crypto.getRandomValues(new Uint8Array(16))].map(value=>value.toString(16).padStart(2,'0')).join('') : undefined;
+  const notifyCancel=()=>{
+   void finCsrfFetch(`${this.base}/query/cancel`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:queryId}),credentials:'same-origin'}).catch(()=>undefined);
+  };
+  if(queryId) signal?.addEventListener('abort',notifyCancel,{once:true});
   let response:Response;
-  try{response=await finCsrfFetch(`${this.base}/${path}`,{method:body===undefined?'GET':'POST',headers:{Accept:'application/json',...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});}
-  catch(error){if(error instanceof Error&&error.name==='AbortError')throw error;if(error&&typeof error==='object'&&'status'in error){if(error.status===401){this.onSessionExpired?.();throw new ApiError('unauthorized',t("FIN 会话已过期，请在 FIN 中重新登录。"),"FIN 会话已过期，请在 FIN 中重新登录。");}if(error.status===403)throw new ApiError('forbidden',t("当前 FIN 会话无权访问此项目。"),"当前 FIN 会话无权访问此项目。");if('_isCsrfError'in error&&error._isCsrfError){this.onSessionExpired?.();throw new ApiError('session_expired',t("FIN 会话已失效，请在 FIN 中重新登录。"),"FIN 会话已失效，请在 FIN 中重新登录。");}}throw new ApiError('network',t("无法连接 FIN，请检查网络与当前会话。"),"无法连接 FIN，请检查网络与当前会话。");}
+  try{response=await finCsrfFetch(`${this.base}/${path}`,{method:body===undefined?'GET':'POST',headers:{Accept:'application/json',...(body===undefined?{}:{'Content-Type':'application/json'}),...(queryId?{'X-FIN-Energy-Query-Id':queryId}:{})},body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});}
+  catch(error){signal?.removeEventListener('abort',notifyCancel);if(error instanceof Error&&error.name==='AbortError')throw error;if(error&&typeof error==='object'&&'status'in error){if(error.status===401){this.onSessionExpired?.();throw new ApiError('unauthorized',t("FIN 会话已过期，请在 FIN 中重新登录。"),"FIN 会话已过期，请在 FIN 中重新登录。");}if(error.status===403)throw new ApiError('forbidden',t("当前 FIN 会话无权访问此项目。"),"当前 FIN 会话无权访问此项目。");if('_isCsrfError'in error&&error._isCsrfError){this.onSessionExpired?.();throw new ApiError('session_expired',t("FIN 会话已失效，请在 FIN 中重新登录。"),"FIN 会话已失效，请在 FIN 中重新登录。");}}throw new ApiError('network',t("无法连接 FIN，请检查网络与当前会话。"),"无法连接 FIN，请检查网络与当前会话。");}
   const headersAt=performance.now();
   let value:unknown;try{value=await response.json();}catch{const login=response.status===401||response.redirected||(response.headers.get('content-type')||'').includes('text/html');if(login)this.onSessionExpired?.();throw new ApiError(login?'session_expired':'invalid_response',login?t("FIN 会话已失效，请在 FIN 中重新登录。"):t("FIN 未返回 JSON，请检查项目名称及 FIN 能源管理扩展是否已启用。"),login?"FIN 会话已失效，请在 FIN 中重新登录。":"FIN 未返回 JSON，请检查项目名称及 FIN 能源管理扩展是否已启用。");}
   finally {
+   signal?.removeEventListener('abort',notifyCancel);
    const end=performance.now();
    const resource=performance.getEntriesByName(response.url,'resource').at(-1) as PerformanceResourceTiming|undefined;
    recordQueryPerformance('transport',started,end,{

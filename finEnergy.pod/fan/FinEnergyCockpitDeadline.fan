@@ -4,12 +4,18 @@ using concurrent
 ** Atomic counters allow the same bounded state to survive immutable history capture.
 internal const class FinEnergyCockpitDeadline
 {
-  new make(Duration timeout := 30sec, |->Int| clock := |->Int| {Duration.nowTicks})
-  {this.timeout=timeout;this.clock=clock;started=clock()}
-  const Duration timeout
+  new make(Duration? timeout := 30sec, |->Int| clock := |->Int| {Duration.nowTicks}, FinEnergyQueryCancellation? query := null)
+  {this.timeout=timeout;this.clock=clock;this.query=query;started=clock()}
+  const Duration? timeout
+  private const FinEnergyQueryCancellation? query
   private const |->Int| clock
   private const Int started
-  Void check() {if(clock()-started > timeout.ticks) throw FinEnergyHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")}
+  Void check()
+  {
+    query?.check
+    limit:=timeout
+    if(limit!=null && clock()-started > limit.ticks) throw FinEnergyHttpErr(504,"QUERY_TIMEOUT","cockpitQueryTimeout")
+  }
 }
 
 internal const class FinEnergyPreparedBudget

@@ -102,3 +102,5 @@ Object.assign(englishMessages,{
  '正在读取报表的数据来源。':'Reading report source information.',
  '取消查询':'Cancel query',
 });
+Object.assign(serverMessages,{queryCancelled:'The query was cancelled.',queryInProgress:'This query is already running.',queryRequestId:'The query identifier is invalid.'});
+Object.assign(chineseServerMessages,{queryCancelled:'查询已取消。',queryInProgress:'此查询正在进行。',queryRequestId:'查询标识无效。'});
