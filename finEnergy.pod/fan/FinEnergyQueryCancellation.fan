@@ -19,8 +19,9 @@ internal const class FinEnergyQueryCancellation
       before:=(Str:Obj?)active.val
       if(before.containsKey(key)) throw FinEnergyHttpErr(409,"QUERY_IN_PROGRESS","queryInProgress")
       after:=before.dup.set(key,query).toImmutable
-      if(active.compareAndSet(before,after)) return query
+      if(active.compareAndSet(before,after)) break
     }
+    return query
   }
 
   static Bool cancel(Str project,Str user,Str id)
