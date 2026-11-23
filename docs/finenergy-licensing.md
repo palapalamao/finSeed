@@ -1,6 +1,6 @@
 # FIN 能源管理 原生授权说明
 
-FIN 能源管理 0.16.0 候选版将激活、到期与功能授权交由 FIN 原生授权系统管理。本说明适用于 FIN 5.3.0.2761 开发基线。正式交付前，必须取得总部确认的功能标识和含该功能的开发／测试许可证，完成运行验收。
+FIN 能源管理总部版将激活、到期与功能授权交由 FIN 原生授权系统管理。本说明适用于 FIN 5.3.0.2761 开发基线。0.16.12 总部候选版使用总部确认的功能标识 `finenergy`。正式交付前须使用包含该功能的 FIN 测试许可证完成运行验收。
 
 ## 中文
 
@@ -11,7 +11,7 @@ FIN 能源管理 0.16.0 候选版将激活、到期与功能授权交由 FIN 原
 3. 管理员使用 FIN 原生授权界面安装或更新许可证，按 FIN 要求停止／重启服务后，再启用 `finEnergy` 扩展。
 4. 扩展正常运行后，项目管理员可在 **设置 → 授权管理** 查看功能状态、功能标识与 FIN 机器码。授权更新、删除和恢复均在 FIN 原生界面操作；FIN 能源管理 不提供删除整个 FIN 许可证的按钮。
 
-候选代码声明 `@FinExtMeta { licFeature="fin energy" }`，扩展继承 `fin::FinExt`。`fin energy` 目前是总部邮件中的建议标识，尚待授权团队确认。功能名必须与原生许可证精确匹配，包含大小写；修改标识须同步修改扩展元数据和状态服务并重新构建。
+扩展继承 `fin::FinExt` 并声明 `@FinExtMeta { licFeature="finenergy" }`。许可证中的功能标识须精确匹配，使用全小写且无空格的 `finenergy`。
 
 ### 不可访问时如何处理
 
@@ -27,7 +27,7 @@ FIN 能源管理 0.16.0 候选版将激活、到期与功能授权交由 FIN 原
 
 ## English
 
-FIN Energy 0.16.0 delegates activation, expiry and feature validation to FIN's native licensing system. The development baseline is FIN 5.3.0.2761. Customer release requires HQ confirmation of the exact feature identifier, a genuine development/test license and native runtime acceptance.
+The FIN Energy HQ edition delegates activation, expiry and feature validation to FIN's native licensing system. The development baseline is FIN 5.3.0.2761. The 0.16.12 HQ candidate uses the feature ID confirmed by HQ, `finenergy`. Customer release requires native runtime acceptance with a genuine FIN test license containing that feature.
 
 ### Activation workflow
 
@@ -36,7 +36,7 @@ FIN Energy 0.16.0 delegates activation, expiry and feature validation to FIN's n
 3. The administrator installs or updates that license through FIN's native interface restarts FIN as required by its licensing workflow, and enables the `finEnergy` extension.
 4. Once the extension is running, project administrators can inspect the native feature state and machine identity in **Settings → License management**. License replacement, deletion and recovery remain FIN administration operations.
 
-The candidate extends `fin::FinExt` and declares `@FinExtMeta { licFeature="fin energy" }`. The proposed token `fin energy` comes from HQ's email and still requires confirmation. The token is case-sensitive and must exactly match the native license. Any change requires updating both the facet and status service and rebuilding the Pod.
+The extension extends `fin::FinExt` and declares `@FinExtMeta { licFeature="finenergy" }`. The native license must contain the exact lowercase feature ID `finenergy`, with no spaces.
 
 ### When the extension is unavailable
 
@@ -52,6 +52,6 @@ The ten-meter free allowance and host-independent training license remain propos
 
 ## 实现与依据 Implementation and evidence
 
-- [Extension facet](../finEnergy.pod/fan/FinEnergyExt.fan) and [native status service](../finEnergy.pod/fan/FinEnergyNativeLicense.fan).
+- [Extension facet](../finEnergy.pod/editions/hq/fan/FinEnergyExt.fan) and [native status service](../finEnergy.pod/editions/hq/fan/FinEnergyNativeLicense.fan).
 - [Giovanni Casagrande — OEM Custom Pod License Feature Gating](https://finproducts.atlassian.net/wiki/spaces/FINFramework/pages/34410561552/OEM%2BCustom%2BPod%2B-%2BLicense%2BFeature%2BGating).
 - SDK compilation and unit tests establish a candidate; they do not establish licensed native runtime acceptance. See the [delivery plan](../specs/fin-energy-hq-20261120/plan.md).

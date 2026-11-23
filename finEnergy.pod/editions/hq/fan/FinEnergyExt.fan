@@ -5,7 +5,7 @@ using concurrent
 using fin
 
 @ExtMeta { name="finEnergy"; depends=["haystack","finstack"] }
-@FinExtMeta { licFeature="fin energy" }
+@FinExtMeta { licFeature="finenergy" }
 const class FinEnergyExt : FinExt, Weblet
 {
   const FinEnergyRest rest := FinEnergyRest()

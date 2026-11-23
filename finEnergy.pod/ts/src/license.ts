@@ -3,7 +3,7 @@ export type LicenseState='active'|'missingFeature'|'invalid'|'inactive';
 export interface LicenseStatus {
  source:'fin';
  status:LicenseState;
- feature:'fin energy';
+ feature:'finenergy';
  canManageFinLicense:boolean;
  hostId?:string;
  reason?:string;

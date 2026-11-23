@@ -3,11 +3,11 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {initializeLocale,serverMessage} from './i18n';
 import type {LicenseStatus} from './license';
 import {LicenseDetails} from './LicenseSettings';
-const active:LicenseStatus={source:'fin',status:'active',feature:'fin energy',canManageFinLicense:true,hostId:'HID-example'};
+const active:LicenseStatus={source:'fin',status:'active',feature:'finenergy',canManageFinLicense:true,hostId:'HID-example'};
 afterEach(()=>initializeLocale('en-US'));
 it.each([['zh-CN','FIN 原生授权','功能已授权'],['en-US','Native FIN license','Feature licensed']])('shows native ownership and verified status in %s',(language,source,status)=>{
  initializeLocale(language);const html=renderToStaticMarkup(<LicenseDetails status={active}/>);
- expect(html).toContain(source);expect(html).toContain(status);expect(html).toContain('fin energy');expect(html).toContain('HID-example');
+ expect(html).toContain(source);expect(html).toContain(status);expect(html).toContain('finenergy');expect(html).toContain('HID-example');
  expect(html).not.toMatch(/type="file"|10 \/|Training license|Free allowance/);
 });
 it.each(['missingFeature','invalid','inactive'] as const)('keeps recovery navigation available for %s without exposing an unavailable Host ID',status=>{

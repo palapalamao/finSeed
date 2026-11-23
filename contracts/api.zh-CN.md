@@ -4,7 +4,7 @@
 
 当前技术命名为 `finEnergy`：安装包 `finEnergy.pod`、类型 `FinEnergy*`、Axon 函数 `finEnergy*`、API `/api/{project}/ext/finEnergy/v1`。产品自有标签统一为 `finEnergy*`，FIN 标准标签保留。下文0.14.37引用属于历史证据，不代表新版本已通过实机验收。
 
-`GET license/status` 返回只读状态：`source:"fin"`、`status:"active"|"missingFeature"|"invalid"|"inactive"`、`feature`、`canManageFinLicense`、管理员可见的可选 `hostId` 及可选原因。拟定功能键 `fin energy` 尚待总部确认。授权更新与删除在 FIN 原生 Host 中操作，候选没有旧应用授权导入／删除／申请接口或表计免费额度。原生缺功能可停用整个扩展，此接口本身也不保证可用。
+`GET license/status` 返回只读状态：`source:"fin"`、`status:"active"|"missingFeature"|"invalid"|"inactive"`、`feature:"finenergy"`、`canManageFinLicense`、管理员可见的可选 `hostId` 及可选原因。实机验收需要包含该精确功能标识的 FIN 许可证。授权更新与删除在 FIN 原生 Host 中操作，候选没有旧应用授权导入／删除／申请接口或表计免费额度。原生缺功能可停用整个扩展，此接口本身也不保证可用。
 
 管理员迁移函数为 `finEnergyRenameNamespace("enerCubix","finEnergy",false)` 预览，携带返回的准确修订并传 `true` 明确应用，以及按原备份编号调用 `finEnergyResumeNamespace(backup)` 或 `finEnergyRollbackNamespace(backup)`。Folio、原生报警和自有图片分别备份、记录阶段；原 ID 与主点历史保留。预览指纹绑定迁移差异，独立摘要绑定完整恢复快照。普通采集值、确认状态及无关编辑保留。维护期间持续暂停能源任务及配置编辑，直到原日志完成或恢复，具体顺序见升级说明。
 

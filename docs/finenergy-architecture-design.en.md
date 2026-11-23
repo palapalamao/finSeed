@@ -148,9 +148,9 @@ The backend enforces permissions. Disabled buttons communicate these restriction
 
 ![Figure 6 Native Feature Licensing](finenergy-architecture-assets/en/06-native-licensing.png)
 
-`FinEnergyExt` extends `fin::FinExt` and declares `@FinExtMeta.licFeature`. The candidate proposes the exact token `fin energy`. Native FIN is responsible for the license, activation and expiry. The application exposes a read-only status and machine identity where project permissions allow. It does not import private RSA grants, apply a ten-meter fallback or issue FIN licenses.
+`FinEnergyExt` extends `fin::FinExt` and declares the HQ-confirmed feature ID `finenergy` in `@FinExtMeta.licFeature`. Native FIN is responsible for the license, activation and expiry. The application exposes a read-only status and machine identity where project permissions allow. It does not import private RSA grants, apply a ten-meter fallback or issue FIN licenses.
 
-The native gate runs before application-specific work. Without the feature, FIN can deactivate the entire extension and its entry points. This includes possible loss of Axon library or cleaning callback availability. Preservation of the raw native history does not establish availability of every cleaned `hisRead` after deactivation. Native tests require HQ's real license and cover active, missing, expired, restarted and multi-project conditions. The exact feature token and the Belgian customer's full platform remain pending.
+The native gate runs before application-specific work. Without the feature, FIN can deactivate the entire extension and its entry points. This includes possible loss of Axon library or cleaning callback availability. Preservation of the raw native history does not establish availability of every cleaned `hisRead` after deactivation. Native tests require HQ's real license and cover active, missing, expired, restarted and multi-project conditions. The Belgian customer's full platform remains pending.
 
 ## 10 Reversible Namespace Upgrade
 

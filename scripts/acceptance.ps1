@@ -58,8 +58,8 @@ try {
         requiredEntries = $finEnergyRequired
         resourceEntries = @($finEnergyEntries | Where-Object { $_ -match '^(lib/|locale/|res/)' })
         runtimeVerified = $false
-        nativeFeature = if ($Edition -eq 'HQ') { 'fin energy' } else { $null }
-        nativeFeatureConfirmedByHq = $false
+        nativeFeature = if ($Edition -eq 'HQ') { 'finenergy' } else { $null }
+        nativeFeatureConfirmedByHq = ($Edition -eq 'HQ')
         licensedRuntimeVerified = $false
     }
     $finEnergyJson = $finEnergyResult | ConvertTo-Json -Depth 6

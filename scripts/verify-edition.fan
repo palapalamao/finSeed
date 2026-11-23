@@ -16,7 +16,7 @@ class VerifyFinEnergyEdition
 
     if (edition == "hq")
     {
-      if (!ext.fits(FinExt#) || feature?.licFeature != "fin energy")
+      if (!ext.fits(FinExt#) || feature?.licFeature != "finenergy")
         throw Err("HQ must use the exact FIN native feature gate")
     }
     else if (feature != null)

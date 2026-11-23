@@ -34,7 +34,7 @@ UI 使用 J2 Deep Blue、Blue、Aqua 与品牌辅助色，随包提供 Manrope�
 
 技术名统一为 `finEnergy`：Pod、`FinEnergy*` 类型、`finEnergy*` Axon、业务标签及 `/api/{project}/ext/finEnergy/v1`。新项目直接使用新名，既有项目通过管理员预览、冲突检查、备份、明确应用、原日志续作及保护回滚迁移。保留原对象 ID、主点历史和报警确认；维护期间停用旧任务及配置写入，结束后只运行一套任务。
 
-总部版继承 `fin::FinExt`，由 `@FinExtMeta.licFeature` 声明 `fin energy`。匹配的正式标识和真实 FIN 测试许可证仍需总部确认。中国版使用实例级自有授权，兼容现有签名文件，支持导入、删除、机器绑定、限时培训和每项目 10 表免费额度。发行版在构建时确定，安装后的授权页显示当前模式。
+总部版继承 `fin::FinExt`，由 `@FinExtMeta.licFeature` 声明总部确认的功能标识 `finenergy`。实机验收需要包含该功能的 FIN 测试许可证。中国版使用实例级自有授权，兼容现有签名文件，支持导入、删除、机器绑定、限时培训和每项目 10 表免费额度。发行版在构建时确定，安装后的授权页显示当前模式。
 
 ## 本地构建
 
@@ -60,4 +60,4 @@ node scripts/check-versions.mjs
 
 FIN Energy reuses FIN's native equipment, designated primary histories, identity and alarms. The operations cockpit and analysis workspace cover trends, reference curves, shares, end uses, energy flow, meter differences, tariffs, intensity and data-quality diagnostics. Queries use current relationships and preserve missing data.
 
-The 0.16.0 candidate introduces the `finEnergy` namespace, J2 branding and native FIN feature gating, with explicit recoverable migration. HQ's exact feature token, genuine test grant and the Belgian customer's full environment remain release prerequisites. SDK, controlled browser, package and native runtime evidence are kept distinct. See the English documents above for deployment and operational details.
+FIN Energy 0.16 introduces the `finEnergy` namespace, J2 branding and native FIN feature gating, with explicit recoverable migration. The HQ edition requires the exact native feature ID `finenergy`. A genuine test grant and the Belgian customer's full environment remain release prerequisites. SDK, controlled browser, package and native runtime evidence are kept distinct. See the English documents above for deployment and operational details.

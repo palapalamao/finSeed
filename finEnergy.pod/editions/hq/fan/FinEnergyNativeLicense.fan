@@ -5,9 +5,8 @@ using skyarcd
 ** license file, local trial override or fallback to a legacy RSA grant.
 internal class FinEnergyNativeLicense
 {
-  ** Proposed HQ token: release requires confirmation and a real FIN grant.
-  ** Keep this equal to the FinExtMeta facet; changing it requires a new build.
-  static const Str feature := "fin energy"
+  ** Keep the HQ feature ID equal to the FinExtMeta facet.
+  static const Str feature := "finenergy"
 
   static Bool allowed(Context cx)
   {

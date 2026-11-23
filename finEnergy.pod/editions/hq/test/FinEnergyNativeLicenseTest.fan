@@ -6,7 +6,7 @@ class FinEnergyNativeLicenseTest : Test
   {
     FinExtMeta meta:=FinEnergyExt#.facet(FinExtMeta#)
     verifyEq(meta.licFeature,FinEnergyNativeLicense.feature)
-    verifyEq(meta.licFeature,"fin energy")
+    verifyEq(meta.licFeature,"finenergy")
     verify(FinEnergyExt#.fits(FinExt#))
     verifyNotNull(FinLicenseChecker.check(meta,FinLicense[,],0))
   }
