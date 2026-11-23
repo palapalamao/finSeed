@@ -14,7 +14,7 @@ class Build : BuildFinPod
     if (edition != "china" && edition != "hq") throw ArgErr("Set an explicit FIN Energy build edition: china or hq")
     podName = "finEnergy"
     summary = "FIN Energy - Building Energy Analytics"
-    version = Version("0.16.10")
+    version = Version("0.16.11")
     meta = ["proj.name":podName, "org.name":"FinEnergy", "license.name":"Commercial",
             "finEnergy.edition":edition, "finEnergy.licenseMode":edition == "china" ? "selfManaged" : "finNative"]
     commit := Env.cur.vars["FINENERGY_BUILD_COMMIT"]
