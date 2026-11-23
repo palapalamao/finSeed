@@ -14,6 +14,6 @@
 
 Brochure、Onepage、图文操作手册、逐项驾驶舱需求原型及视频的成品和可编辑文件，按交付目录下对应分类查阅。中文品牌为 FIN 能源管理；英文为 FIN Energy。所有演示数据、历史实拍和保存响应回放均有来源说明。
 
-The candidate is not a customer deployment. HQ must confirm the exact native feature and provide a genuine test license. The Belgian customer's full FIN build and OS must be accepted before platform compatibility is claimed. The ten-meter free allowance and training grant remain proposals, not enabled features.
+The 0.16.12 HQ candidate uses the confirmed FIN feature ID `finenergy`. HQ still needs to provide a genuine test license for native runtime acceptance. The Belgian customer's full FIN build and OS must be verified before claiming compatibility. The ten-meter allowance and training grant are available in the China edition.
 
 候选交付记录：[中英文交接与验收边界](releases/0.16.0-candidate.md)。现行PDF共18份/401页，另附DOCX、PPTX、两支180秒视频、Pod与源码ZIP。完整浏览入口为交付目录的 START_HERE_ZH.html / START_HERE_EN.html。

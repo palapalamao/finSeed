@@ -2,7 +2,7 @@
 
 FIN Energy is a native FIN Framework Pod for building energy analysis in new projects and retrofits. 中文品牌为 **FIN 能源管理**，英文为 **FIN Energy**。它复用 FIN 的设备、主点历史、身份和报警服务，提供经营驾驶舱、分析工作台、数据清洗、费用、面积强度及事件核查。
 
-当前为 **FIN 能源管理双发行**，中国版采用自有授权，总部版采用 FIN 原生授权。`developer` 是唯一开发与集成基线，`main` 用于稳定发布。总部原生能源功能标识与测试许可证、比利时客户完整 FIN 构建号及操作系统尚待确认；候选构建、受控界面验证与实际 FIN 发布分别记录。运行状态以各发行的验收记录为准。
+当前为 **FIN 能源管理双发行**，中国版采用自有授权，总部版采用 FIN 原生授权。`developer` 是唯一开发与集成基线，`main` 用于稳定发布。总部已确认原生功能标识 `finenergy`。FIN 测试许可证及比利时客户完整 FIN 构建号和操作系统尚待提供。候选构建、受控界面验证与实际 FIN 发布分别记录。
 
 ## 现行文档 Current documentation
 

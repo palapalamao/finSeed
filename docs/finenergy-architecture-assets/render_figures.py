@@ -204,12 +204,33 @@ def energy_flow(regular, bold):
     d.save("05-energy-flow.png")
 
 
+def native_licensing(regular, bold):
+    d = Diagram(572, "06", "FIN 原生功能授权",
+                "总部已确认功能标识 finenergy，实机验收使用正式签发的测试许可证。", regular, bold)
+    d.card(32, 124, 224, 111, "总部签发",
+           ("FIN 原生许可系统", "许可证含 finenergy"), BLUE)
+    d.card(298, 124, 224, 111, "FIN 原生校验",
+           ("精确匹配功能标识", "检查许可有效期"), BLUE)
+    d.card(564, 124, 224, 111, "FIN 能源管理扩展",
+           ("FinExt 原生功能门控", "只读授权状态"), BLUE)
+    d.arrow((256, 179), (298, 179), color=BLUE)
+    d.arrow((522, 179), (564, 179), color=BLUE)
+    d.arrow((410, 235), (410, 270), (214, 270), (214, 300))
+    d.arrow((410, 270), (607, 270), (607, 300))
+    d.card(32, 300, 365, 110, "功能授权有效", ("扩展启动并提供报表", "核对授权状态和访问权限"))
+    d.card(423, 300, 365, 110, "缺少功能、无效或过期",
+           ("扩展可能保持停用", "在 FIN 原生授权界面处理"), AMBER)
+    d.label(34, 441, "原始历史由 FIN 保管，普通读取、原始读取和清洗回调纳入实机验收。", 17, MUTED, width=752)
+    d.banner(495, "总部版功能标识为 finenergy，全小写且无空格。")
+    d.save("06-native-licensing.png")
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--font", type=Path, default=Path("C:/Windows/Fonts/msyh.ttc"))
     parser.add_argument("--bold-font", type=Path, default=Path("C:/Windows/Fonts/msyhbd.ttc"))
     args = parser.parse_args()
-    for render in (overview, device_views, query_pipeline, cockpit_snapshot, energy_flow):
+    for render in (overview, device_views, query_pipeline, cockpit_snapshot, energy_flow, native_licensing):
         render(args.font, args.bold_font)
 
 

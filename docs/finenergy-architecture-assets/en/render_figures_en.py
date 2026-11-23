@@ -147,12 +147,37 @@ def energy_flow(regular, bold):
     d.save("05-energy-flow.png")
 
 
+def native_licensing(regular, bold):
+    d = EnglishDiagram(
+        572, "06", "Native FIN Feature Activation",
+        "HQ confirmed finenergy. Native runtime acceptance needs a genuine test license.", regular, bold
+    )
+    d.card(32, 124, 224, 111, "HQ Licensing",
+           ("Native licensing service", "Issues a finenergy license"), BLUE)
+    d.card(298, 124, 224, 111, "FIN Native Check",
+           ("Exact feature match", "License validity"), BLUE)
+    d.card(564, 124, 224, 111, "FIN Energy Extension",
+           ("FinExt feature gate", "Read-only native status"), BLUE)
+    d.arrow((256, 179), (298, 179), color=BLUE)
+    d.arrow((522, 179), (564, 179), color=BLUE)
+    d.arrow((410, 235), (410, 270), (214, 270), (214, 300))
+    d.arrow((410, 270), (607, 270), (607, 300))
+    d.card(32, 300, 365, 110, "Valid Feature",
+           ("The extension starts", "Verify license state and access"))
+    d.card(423, 300, 365, 110, "Missing, Invalid, or Expired",
+           ("The extension can be inactive", "Use native FIN Host licensing"), AMBER)
+    d.label(34, 441, "FIN retains raw history. Runtime acceptance checks raw reads, normal reads, and cleaning.",
+            17, MUTED, width=752)
+    d.banner(495, "The exact feature ID is finenergy, in lowercase with no spaces.")
+    d.save("06-native-licensing.png")
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--font", type=Path, default=Path("C:/Windows/Fonts/arial.ttf"))
     parser.add_argument("--bold-font", type=Path, default=Path("C:/Windows/Fonts/arialbd.ttf"))
     args = parser.parse_args()
-    for render in (overview, device_views, query_pipeline, cockpit_snapshot, energy_flow):
+    for render in (overview, device_views, query_pipeline, cockpit_snapshot, energy_flow, native_licensing):
         render(args.font, args.bold_font)
 
 

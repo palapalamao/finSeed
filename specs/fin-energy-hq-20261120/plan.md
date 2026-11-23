@@ -9,3 +9,5 @@ Approved scope is the user's FIN Energy rename and J2 brand integration plan, in
 - Refresh brochure, Onepage, manuals, architecture, requirements, deployment/system guidance and two three-minute neural-voice films from the updated UI. Preserve HQ template assets and attribution.
 
 Pending external inputs are HQ's exact feature identifier, native test license and Belgium customer's FIN build/OS. These gate native licensed runtime acceptance and customer release. Other work continues independently.
+
+Update on 2026-11-24. HQ confirmed `finenergy` as the exact feature ID for the 0.16.12 HQ candidate. The genuine test license and customer platform details are still pending.
